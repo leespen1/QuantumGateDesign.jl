@@ -10,9 +10,9 @@ dMda(t) = [0.0 -sin(t)
 E = 1 # 1 essential energy level
 
 a = 1.0 # Current value of control parameter
-Q0 = [1.0; 0.0] # ψ₀ = 1, initial condition
+Q0 = [1.0; 0.0] # ψ₀ = 1+0im, initial condition
 fT = 4 # Final time
-N = 5 # Number of points in time / mesh size
+N = 10 # Number of points in time / mesh size
 
 Δt = fT/(N-1) # Timestep size
 Qs = zeros(2,N) # For storing state vector evolution (in larger problems wouldn't store them all)
