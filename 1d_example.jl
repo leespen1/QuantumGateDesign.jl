@@ -1,21 +1,22 @@
 # Testing on 1D Problem
-# dpsidt = i*sint*a*psi
+# dpsidt = i*cost*a*psi
 using Plots
 using LinearAlgebra
 using LaTeXStrings
 
 function compute_gradient(N, fT)
     S(t, a) = 0.0
-    K(t, a) = sin(t)*a
+    K(t, a) = cos(t)*a
     M(t, a) = [S(t, a) -K(t,a)
                K(t, a) S(t,a)]
-    dMda(t) = [0.0 -sin(t)
-               sin(t) 0.0]
+    dMda(t) = [0.0 -cos(t)
+               cos(t) 0.0]
     E = 1 # 1 essential energy level
 
     a = 1.0 # Current value of control parameter
     #Q0 = [1.0; 0.0] # psi_0= 1+0im, initial condition
-    psi0 = exp(-1im*cos(0)*a)
+    #psi0 = exp(1im*sin(0)*a)
+    psi0 = 1
     Q0 = [real(psi0), imag(psi0)]
 
     dt = fT/N # Timestep size
@@ -65,7 +66,7 @@ function compute_gradient(N, fT)
     return gradient, QN
 end
 
-function graph(Ns, fT)
+function graph(Ns, fT, psi0=1.0)
     gradients = zeros(length(Ns))
     QNs = zeros(2,length(Ns))
     for i in 1:length(Ns)
@@ -73,12 +74,12 @@ function graph(Ns, fT)
         gradients[i], QNs[:,i] = compute_gradient(N, fT)
     end
 
-    psifT = exp(-im*cos(fT))
+    psifT = exp(im*sin(fT))*psi0
     QN_true = [real(psifT), imag(psifT)]
 
     accuracies = [norm(QN - QN_true) for QN in eachcol(QNs)]*(1/norm(QN_true))
     pl_acc = plot(Ns, accuracies, xlabel="N", ylabel="Relative Error", scale=:log10,
-                  title=L"\dot{\psi} = i \sin(t) \alpha \psi(t),\quad \alpha = 1")
+                  title=L"\dot{\psi} = i \cos(t) \alpha \psi(t),\quad \alpha = 1")
     pl_grad = plot(Ns, gradients, xlabel="N", ylabel=L"||\nabla_\alpha \mathcal{J}_h||")
     return [pl_acc, pl_grad]
 end
