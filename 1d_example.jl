@@ -52,11 +52,11 @@ function compute_gradient(N)
     # Calculate gradient
     gradient = 0.0
     for n in 1:N-1
-        tn = (n-1)*Δt
-        tnp1 = n*Δt
-        global gradient += (dMda(tn)*Qs[:,n] + dMda(tnp1)*Qs[:,n+1])'*lambdas[:,n+1]
+        tn = (n-1)*dt
+        tnp1 = n*dt
+        gradient += (dMda(tn)*Qs[:,n] + dMda(tnp1)*Qs[:,n+1])'*lambdas[:,n+1]
     end
-    gradient *= -0.5*Δt
+    gradient *= -0.5*dt
     println("Gradient: $gradient")
     return gradient, QN
 end
