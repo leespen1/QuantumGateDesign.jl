@@ -32,8 +32,8 @@ function compute_gradient(N, fT, psi0=1.0)
         Qs[:,1+n+1] = (I - 0.5*dt*M(tnp1, a)) \ ((I + 0.5*dt*M(tn, a))*Qs[:,1+n])
         #println("$tn, $tnp1")
     end
-    #println("Qs")
-    #display(Qs)
+    println("Qs")
+    display(Qs)
 
     # Set target gate (to QN, in order to test the method; gradient should be zero)
     QN = Qs[:,1+N]
@@ -50,8 +50,8 @@ function compute_gradient(N, fT, psi0=1.0)
         tn = n*dt
         lambdas[:,1+n] = (I - 0.5*dt*M(tn, a)') \ (I + 0.5*dt*M(tn, a)')*lambdas[:,1+n+1] # No guard-level forcing term because we are in 1D
     end
-    #println("Λs:")
-    #display(lambdas)
+    println("Λs:")
+    display(lambdas)
 
     # Calculate gradient
     gradient = 0.0
@@ -83,6 +83,7 @@ function graph(Ns, fT, psi0=1.0)
     return [pl_acc, pl_grad]
 end
 
+# An even simpler example
 function compute_gradient_simpler(N, fT, psi0=1.0)
     S(t, a) = 0.0
     K(t, a) = a
@@ -154,4 +155,44 @@ function compute_gradient_simpler(N, fT, psi0=1.0)
     gradient *= -0.5*dt
     #println("Gradient: $gradient")
     return gradient, QN
+end
+
+# Using quantities computed by hand
+function analytic_test()
+    cos0p5 = cos(1/2)
+    cos1 = cos(1)
+
+    Q1 = (1/(1+(1/16)*cos0p5^2))*[1-(1/16)*cos0p5, (1/4)*(1+cos0p5)]
+
+    Q2 = begin
+        Q2_1 = 1-(1/8)*cos0p5 -(1/16)*cos1 - (1/16)*cos0p5^2 - (1/8)*cos0p5*cos1 + (1/256)*cos0p5^2*cos1
+        Q2_2 = (1/4)+(1/2)*cos0p5 + (1/4)*cos(1) - (1/64)cos0p5^2 - (1/32)*cos0p5*cos1 - (1/64)*cos0p5^2*cos1
+        Q2_const_factor = (1/(1+(1/16)*cos1^2))*(1/(1+(1/16)*cos0p5^2))
+        Q2_const_factor * [Q2_1, Q2_2]
+    end
+    println("Q1: $Q1")
+    println("Q2: $Q2")
+
+    R = [Q2[1], Q2[2]]
+    T = [Q2[2], -Q2[1]]
+
+    Λ2 = begin
+        LHS_inv = (1/(1+(1/16)*cos1^2))*[1.0  (1/4)*cos1; -(1/4)*cos1 1.0]
+        RHS = 2*((Q2'*R)*R + (Q2'*T)*T)
+        LHS_inv * RHS
+    end
+    println("Λ2: $Λ2")
+
+    Λ1 = (1/(1+(1/16)*cos0p5^2))*[1-(1/16)cos0p5^2  (1/2)*cos0p5; -(1/2)*cos0p5 1-(1/16)*cos0p5^2]*Λ2
+    println("Λ1: $Λ1")
+    # Everything up to this point agrees with computation, but the gradient does not (but neither is giving me zero)
+
+    gradient = begin
+        n1_term_1 = -cos0p5*Q1[2]*((1-(1/16)*cos0p5^2)*Λ2[1] + (1/2)*cos(1/2)*Λ2[2])
+        n1_term_2 = (1+cos0p5*Q1[1])*(-(1/2)*cos0p5*Λ2[1] + (1 - (1/16)*cos0p5^2)*Λ2[2])
+        n2_term_1 = -(cos0p5*Q1[2] + cos1*Q2[2])*Λ2[1]
+        n2_term_2 = (cos0p5*Q1[1] + cos1*Q2[1])*Λ2[2]
+        -(1/4) * (n1_term_1 + n1_term_2 + n2_term_1 + n2_term_2)
+    end
+    return gradient
 end
