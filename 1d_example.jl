@@ -86,22 +86,30 @@ function compute_gradient(N, fT, psi0=1.0; use_IMR=false)
     return gradient, QN
 end
 
-function graph(Ns, fT, psi0=1.0)
+function graph(Ns, fT, psi0=1.0; use_IMR=false)
     gradients = zeros(length(Ns))
     QNs = zeros(2,length(Ns))
+    QN_lengths = zeros(length(Ns))
     for i in 1:length(Ns)
         N = Ns[i]
-        gradients[i], QNs[:,i] = compute_gradient(N, fT, psi0)
+        gradients[i], QNs[:,i] = compute_gradient(N, fT, psi0, use_IMR=use_IMR)
+        QN_lengths[i] = QNs[:,i]'*QNs[:,i]
     end
 
     psifT = exp(im*sin(fT))*psi0
     QN_true = [real(psifT), imag(psifT)]
 
     accuracies = [norm(QN - QN_true) for QN in eachcol(QNs)]*(1/norm(QN_true))
-    pl_acc = plot(Ns, accuracies, xlabel="N", ylabel="Relative Error", scale=:log10,
-                  title=L"\dot{\psi} = i \cos(t) \alpha \psi(t),\quad \alpha = 1")
-    pl_grad = plot(Ns, gradients, xlabel="N", ylabel=L"||\nabla_\alpha \mathcal{J}_h||")
-    return [pl_acc, pl_grad]
+    pl_acc = plot(Ns, accuracies, xlabel="N", scale=:log10,
+                  title=L"d\psi/dt = i \cos(t) \alpha \psi,\quad \psi_0=1, \alpha = 1", markershape=:+, label="Relative Error")
+    plot!(pl_acc, Ns, (fT ./ Ns) .^ 2, linestyle=:dash, label="Δt ^ 2")
+    #pl_grad = plot(Ns, abs.(gradients), xlabel="N", ylabel="|Gradient|", scale=:log10, marker=:+)
+    pl_grad = plot(Ns, abs.(gradients), xlabel="N", ylabel="|Gradient|", markershape=:+, label="|Gradient|", scale=:log10)
+    pl_length = plot(Ns, abs.(1 .- QN_lengths), markershape=:+, ylabel=L"|1-\psi_N_n^T\psi_N|", xlabel="N", label=L"|1-\psi_N^T\psi_N|")
+    pl_combined_grad_lengths = plot(Ns, abs.(gradients), xlabel="N", markershape=:+, label="|Gradient|", scale=:log10)
+    plot!(pl_combined_grad_lengths, Ns, abs.(1 .- QN_lengths), label=L"|1-\psi_N^T\psi_N|", markershape=:+)
+
+    return [pl_acc, pl_grad, pl_length, pl_combined_grad_lengths], [accuracies, gradients, QN_lengths]
 end
 
 # An even simpler example
