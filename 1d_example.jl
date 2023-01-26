@@ -4,7 +4,7 @@ using Plots
 using LinearAlgebra
 using LaTeXStrings
 
-function compute_gradient(N, fT, psi0=1.0)
+function compute_gradient(N, fT, psi0=1.0; use_IMR=false)
     S(t, a) = 0.0
     K(t, a) = cos(t)*a
     M(t, a) = [S(t, a) -K(t,a)
@@ -29,6 +29,11 @@ function compute_gradient(N, fT, psi0=1.0)
     for n in 0:N-1
         tn = n*dt
         tnp1 = (n+1)*dt
+
+        if use_IMR
+            tn = 0.5*(tn+tnp1)
+            tnp1 = tn
+        end
         Qs[:,1+n+1] = (I - 0.5*dt*M(tnp1, a)) \ ((I + 0.5*dt*M(tn, a))*Qs[:,1+n])
         #println("$tn, $tnp1")
     end
@@ -40,15 +45,27 @@ function compute_gradient(N, fT, psi0=1.0)
     R = QN[:] # copy
     T = [R[2], -R[1]]
 
-
+    println("TRACE INFIDELITY : ", abs(1-(abs2(QN'*R)+abs2(QN'*T))/E^2))
     lambdas = zeros(2,N+1) # For storing adjoint state vector solutions
+
+    # Adjust evaluation time depending on chosen scheme
+    t_adj = fT
+    if use_IMR
+        t_adj = fT-0.5*dt
+    end
+
     # Terminal condition
-    lambdas[:,1+N] = (I - 0.5*dt*M(fT, a)') \ ((2/E^2)*((QN'*R)*R + (QN'*T)*T)) # guard-level term is 0 in 1D
+    lambdas[:,1+N] = (I - 0.5*dt*M(t_adj, a)') \ ((2/E^2)*((QN'*R)*R + (QN'*T)*T)) # guard-level term is 0 in 1D
 
     # Backward/Adjoint Evolve
     for n in N-1:-1:1
         tn = n*dt
-        lambdas[:,1+n] = (I - 0.5*dt*M(tn, a)') \ (I + 0.5*dt*M(tn, a)')*lambdas[:,1+n+1] # No guard-level forcing term because we are in 1D
+        tnp1 = n*dt
+        if use_IMR
+            tnp1 =  n*dt + 0.5*dt
+            tn = n*dt-0.5*dt
+        end
+        lambdas[:,1+n] = (I - 0.5*dt*M(tn, a)') \ (I + 0.5*dt*M(tnp1, a)')*lambdas[:,1+n+1] # No guard-level forcing term because we are in 1D
     end
     println("Λs:")
     display(lambdas)
@@ -58,6 +75,10 @@ function compute_gradient(N, fT, psi0=1.0)
     for n in 0:N-1
         tn = n*dt
         tnp1 = (n+1)*dt
+        if use_IMR
+            tn = 0.5*(tn+tnp1)
+            tnp1 = tn
+        end
         gradient += (dMda(tn)*Qs[:,1+n] + dMda(tnp1)*Qs[:,1+n+1])'*lambdas[:,1+n+1]
     end
     gradient *= -0.5*dt
@@ -65,26 +86,34 @@ function compute_gradient(N, fT, psi0=1.0)
     return gradient, QN
 end
 
-function graph(Ns, fT, psi0=1.0)
+function graph(Ns, fT, psi0=1.0; use_IMR=false)
     gradients = zeros(length(Ns))
     QNs = zeros(2,length(Ns))
+    QN_lengths = zeros(length(Ns))
     for i in 1:length(Ns)
         N = Ns[i]
-        gradients[i], QNs[:,i] = compute_gradient(N, fT, psi0)
+        gradients[i], QNs[:,i] = compute_gradient(N, fT, psi0, use_IMR=use_IMR)
+        QN_lengths[i] = QNs[:,i]'*QNs[:,i]
     end
 
     psifT = exp(im*sin(fT))*psi0
     QN_true = [real(psifT), imag(psifT)]
 
     accuracies = [norm(QN - QN_true) for QN in eachcol(QNs)]*(1/norm(QN_true))
-    pl_acc = plot(Ns, accuracies, xlabel="N", ylabel="Relative Error", scale=:log10,
-                  title=L"\dot{\psi} = i \cos(t) \alpha \psi(t),\quad \alpha = 1")
-    pl_grad = plot(Ns, gradients, xlabel="N", ylabel=L"||\nabla_\alpha \mathcal{J}_h||")
-    return [pl_acc, pl_grad]
+    pl_acc = plot(Ns, accuracies, xlabel="N", scale=:log10,
+                  title=L"d\psi/dt = i \cos(t) \alpha \psi,\quad \psi_0=1, \alpha = 1", markershape=:+, label="Relative Error")
+    plot!(pl_acc, Ns, (fT ./ Ns) .^ 2, linestyle=:dash, label="Δt ^ 2")
+    #pl_grad = plot(Ns, abs.(gradients), xlabel="N", ylabel="|Gradient|", scale=:log10, marker=:+)
+    pl_grad = plot(Ns, abs.(gradients), xlabel="N", ylabel="|Gradient|", markershape=:+, label="|Gradient|", scale=:log10)
+    pl_length = plot(Ns, abs.(1 .- QN_lengths), markershape=:+, ylabel=L"|1-\psi_N_n^T\psi_N|", xlabel="N", label=L"|1-\psi_N^T\psi_N|")
+    pl_combined_grad_lengths = plot(Ns, abs.(gradients), xlabel="N", markershape=:+, label="|Gradient|", scale=:log10)
+    plot!(pl_combined_grad_lengths, Ns, abs.(1 .- QN_lengths), label=L"|1-\psi_N^T\psi_N|", markershape=:+)
+
+    return [pl_acc, pl_grad, pl_length, pl_combined_grad_lengths], [accuracies, gradients, QN_lengths]
 end
 
 # An even simpler example
-function compute_gradient_simpler(N, fT, psi0=1.0)
+function compute_gradient_simpler(N, fT, psi0=1.0; use_IMR=false)
     S(t, a) = 0.0
     K(t, a) = a
     M(t, a) = [S(t, a) -K(t,a)
@@ -109,6 +138,10 @@ function compute_gradient_simpler(N, fT, psi0=1.0)
     for n in 0:N-1
         tn = n*dt
         tnp1 = (n+1)*dt
+        if use_IMR
+            tn = 0.5*(tn+tnp1)
+            tnp1 = tn
+        end
         Qs[:,1+n+1] = (I - 0.5*dt*M(tnp1, a)) \ ((I + 0.5*dt*M(tn, a))*Qs[:,1+n])
         #println("$tn, $tnp1")
     end
@@ -119,6 +152,8 @@ function compute_gradient_simpler(N, fT, psi0=1.0)
     QN = Qs[:,1+N]
     R = QN[:] # copy
     T = [R[2], -R[1]]
+    println("TRACE INFIDELITY : ", abs(1-(abs2(QN'*R)+abs2(QN'*T))/E^2))
+
     println("Qs:")
     display(Qs)
     println("Qₙ:")
@@ -130,15 +165,26 @@ function compute_gradient_simpler(N, fT, psi0=1.0)
 
 
     lambdas = zeros(2,N+1) # For storing adjoint state vector solutions
+
+    t_adj = fT
+    if use_IMR
+        t_adj = fT-0.5*dt
+    end
+
     # Terminal condition
-    lambdas[:,1+N] = (I - 0.5*dt*M(fT, a)') \ ((2/E^2)*((QN'*R)*R + (QN'*T)*T)) # guard-level term is 0 in 1D
+    lambdas[:,1+N] = (I - 0.5*dt*M(t_adj, a)') \ ((2/E^2)*((QN'*R)*R + (QN'*T)*T)) # guard-level term is 0 in 1D
     println("Λₙ:")
     display(lambdas[:,1+N])
 
     # Backward/Adjoint Evolve
     for n in N-1:-1:1
         tn = n*dt
-        lambdas[:,1+n] = (I - 0.5*dt*M(tn, a)') \ (I + 0.5*dt*M(tn, a)')*lambdas[:,1+n+1] # No guard-level forcing term because we are in 1D
+        tnp1 = tn
+        if use_IMR
+            tnp1 =  n*dt + 0.5*dt
+            tn = (n)*dt-0.5*dt
+        end
+        lambdas[:,1+n] = (I - 0.5*dt*M(tn, a)') \ (I + 0.5*dt*M(tnp1, a)')*lambdas[:,1+n+1] # No guard-level forcing term because we are in 1D
     end
     #println("Λs:")
     #display(lambdas)
@@ -148,6 +194,10 @@ function compute_gradient_simpler(N, fT, psi0=1.0)
     for n in 0:N-1
         tn = n*dt
         tnp1 = (n+1)*dt
+        if use_IMR
+            tn = 0.5*(tn+tnp1)
+            tnp1 = tn
+        end
         gradient += (dMda(tn)*Qs[:,1+n] + dMda(tnp1)*Qs[:,1+n+1])'*lambdas[:,1+n+1]
         display(lambdas[:,1+n+1])
         println("gradient = $gradient")
