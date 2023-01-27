@@ -97,7 +97,7 @@ function finite_diff_gradient(a, Q0_complex, target_complex, N; da=1e-5)
     return fin_dif_grad
 end
 
-function graph(N, fT=1.0)
+function graph(N; fT=1.0, return_data=false)
     Q0_complex = [1.0, 1.0]
     target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
     grads_fin_dif = zeros(1001)
@@ -108,7 +108,15 @@ function graph(N, fT=1.0)
         grads_fin_dif[i] = finite_diff_gradient(as[i], Q0_complex, target_complex, N)
         grads_dis_adj[i] = disc_adj(as[i], Q0_complex, target_complex, N)
     end
-    return as, grads_fin_dif, grads_dis_adj
+    if return_data
+        return as, grads_fin_dif, grads_dis_adj
+    end
+    pl = plot(as, grads_fin_dif, label="Fin Dif")
+    plot!(pl, as, grads_dis_adj, label="Dis Adj")
+    plot!(title="Gradients: Disc Adj vs Fin Diff", xlabel=L"\alpha",
+          ylabel=L"\nabla(\alpha)")
+    return pl
+
 end
 
 function graph2(N; fT=1.0, a=1, return_data=false)
@@ -130,7 +138,7 @@ function graph2(N; fT=1.0, a=1, return_data=false)
         return eps_vec, grads_fin_dif, rel_errors
     end
     return plot(eps_vec, rel_errors, xlabel=L"\epsilon",
-                ylabel=L"\left|\frac{∇_{FD}(\epsilon) - ∇_{DA}}{∇_{DA}}\right|",
-                title="Fin Diff Convergence to Disc Adj",
+                ylabel=L"\left|\frac{∇_{FD,\epsilon}(\alpha) - ∇_{DA}(\alpha)}{∇_{DA}(\alpha)}\right|",
+                title="Fin Diff Convergence to Disc Adj, α=$a",
                 label="", scale=:log10)
 end
