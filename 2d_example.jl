@@ -101,7 +101,10 @@ end
 
 function graph(N; fT=1.0, return_data=false)
     Q0_complex = [1.0, 1.0]
+    Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
     target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
+    target_complex = target_complex ./ norm(target_complex) # Normalize
+
     grads_fin_dif = zeros(1001)
     grads_dis_adj = zeros(1001)
     i = 1
@@ -127,7 +130,7 @@ function graph2(N; fT=1.0, a=1, return_data=false)
     target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
     target_complex = target_complex ./ norm(target_complex) # Normalize
 
-    eps_vec = (0.5).^(0:10);
+    eps_vec = (0.5).^(-10:10);
     grads_fin_dif = zeros(length(eps_vec))
     for i = 1:length(eps_vec)
         grads_fin_dif[i] = finite_diff_gradient(a, Q0_complex, target_complex, N; da=eps_vec[i])
