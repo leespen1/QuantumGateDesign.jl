@@ -61,10 +61,11 @@ function disc_adj(a, Q0_complex, target_complex, N; fT=1.0,)
         tn = n*dt
         tnp1 = (n+1)*dt
         grad_disc_adj += (dMda(tn, a)*Qs[:,1+n] + dMda(tnp1, a)*Qs[:,1+n+1])'*lambdas[:,1+n+1]
-        display((dMda(tn, a)*Qs[:,1+n] + dMda(tnp1, a)*Qs[:,1+n+1])'*lambdas[:,1+n+1])
     end
     grad_disc_adj *= -0.5*dt
-    return Qs, lambdas, grad_disc_adj
+
+    return grad_disc_adj
+    #return Qs, lambdas, grad_disc_adj
 end
 
 
@@ -87,7 +88,7 @@ println("α = $a\nFinite Difference Gradient = $fin_dif_grad\nDiscrete Adjoint G
 display(Qs)
 =#
 
-function finite_diff_gradient(a, Q0_complex, target_complex, N, da=1e-5)
+function finite_diff_gradient(a, Q0_complex, target_complex, N; da=1e-5)
     Q_r = eval_forward(a+da, Q0_complex, N)
     Q_l = eval_forward(a-da, Q0_complex, N)
     infidelity_r = infidelity(Q_r, target_complex)
@@ -108,4 +109,28 @@ function graph(N, fT=1.0)
         grads_dis_adj[i] = disc_adj(as[i], Q0_complex, target_complex, N)
     end
     return as, grads_fin_dif, grads_dis_adj
+end
+
+function graph2(N; fT=1.0, a=1, return_data=false)
+    Q0_complex = [1.0, 1.0]
+    Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
+    target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
+    target_complex = target_complex ./ norm(target_complex) # Normalize
+
+    eps_vec = (0.5).^(0:10);
+    grads_fin_dif = zeros(length(eps_vec))
+    for i = 1:length(eps_vec)
+        gp = disc_adj(a + eps_vec[i], Q0_complex, target_complex, N)
+        gm = disc_adj(a - eps_vec[i], Q0_complex, target_complex, N)
+        grads_fin_dif[i] = 0.5*(gp-gm)/eps_vec[i]
+    end
+    grad_dis_adj = disc_adj(a, Q0_complex, target_complex, N)
+    rel_errors = abs.((grads_fin_dif .- grad_dis_adj) ./ grad_dis_adj)
+    if return_data
+        return eps_vec, grads_fin_dif, rel_errors
+    end
+    return plot(eps_vec, rel_errors, xlabel=L"\epsilon",
+                ylabel=L"\left|\frac{∇_{FD}(\epsilon) - ∇_{DA}}{∇_{DA}}\right|",
+                title="Fin Diff Convergence to Disc Adj",
+                label="", scale=:log10)
 end
