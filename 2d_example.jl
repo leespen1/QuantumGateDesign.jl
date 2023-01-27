@@ -1,4 +1,6 @@
 using LinearAlgebra
+using Plots
+using LaTeXStrings
 
 E = 2 # Number of essential energy levels
 S(t, a) = [0.0 0.0; 0.0 0.0]
@@ -17,7 +19,7 @@ target_complex = [0.4711924454937202 + 0.52723588667193im, 0.4711924454937202 + 
 function infidelity(Q, target_complex)
     R = vcat(real(target_complex), imag(target_complex))
     T = vcat(imag(target_complex), -real(target_complex))
-    infidelity = 1 - (1/E^2)*(tr(Q'*R)^2 + tr(Q'*R)^2)
+    infidelity = 1 - (1/E^2)*(tr(Q'*R)^2 + tr(Q'*T)^2)
     return infidelity
 end
 
@@ -128,14 +130,12 @@ function graph2(N; fT=1.0, a=1, return_data=false)
     eps_vec = (0.5).^(0:10);
     grads_fin_dif = zeros(length(eps_vec))
     for i = 1:length(eps_vec)
-        gp = disc_adj(a + eps_vec[i], Q0_complex, target_complex, N)
-        gm = disc_adj(a - eps_vec[i], Q0_complex, target_complex, N)
-        grads_fin_dif[i] = 0.5*(gp-gm)/eps_vec[i]
+        grads_fin_dif[i] = finite_diff_gradient(a, Q0_complex, target_complex, N; da=eps_vec[i])
     end
     grad_dis_adj = disc_adj(a, Q0_complex, target_complex, N)
     rel_errors = abs.((grads_fin_dif .- grad_dis_adj) ./ grad_dis_adj)
     if return_data
-        return eps_vec, grads_fin_dif, rel_errors
+        return eps_vec, grads_fin_dif, grad_dis_adj,rel_errors
     end
     return plot(eps_vec, rel_errors, xlabel=L"\epsilon",
                 ylabel=L"\left|\frac{∇_{FD,\epsilon}(\alpha) - ∇_{DA}(\alpha)}{∇_{DA}(\alpha)}\right|",
