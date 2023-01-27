@@ -11,10 +11,6 @@ M(t, a) = [S(t, a) -K(t,a)
            K(t, a) S(t,a)]
 dMda(t, a) = [dSda(t, a) -dKda(t,a)
               dKda(t, a) dSda(t,a)]
-# Initial condition
-Q0_complex = [1.0, 1.0] ./ sqrt(2) # Q0 = 1/sqrt(2)(1, 1) in C^2 complex values
-# Target Gate (using the value obtained when evaluating [1.0,1.0]/sqrt(2) forward with a=1.0, N=10000)
-target_complex = [0.4711924454937202 + 0.52723588667193im, 0.4711924454937202 + 0.52723588667193im]
 
 function infidelity(Q, target_complex)
     R = vcat(real(target_complex), imag(target_complex))
@@ -101,9 +97,9 @@ end
 
 function graph(N; fT=1.0, return_data=false)
     Q0_complex = [1.0, 1.0]
-    Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
+    #Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
     target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
-    target_complex = target_complex ./ norm(target_complex) # Normalize
+    #target_complex = target_complex ./ norm(target_complex) # Normalize
 
     grads_fin_dif = zeros(1001)
     grads_dis_adj = zeros(1001)
