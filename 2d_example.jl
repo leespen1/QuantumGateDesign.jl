@@ -12,10 +12,13 @@ M(t, a) = [S(t, a) -K(t,a)
 dMda(t, a) = [dSda(t, a) -dKda(t,a)
               dKda(t, a) dSda(t,a)]
 
-function infidelity(Q, target_complex)
+function infidelity(Q, target_complex;tracking=false)
     R = vcat(real(target_complex), imag(target_complex))
     T = vcat(imag(target_complex), -real(target_complex))
     infidelity = 1 - (1/E^2)*(tr(Q'*R)^2 + tr(Q'*T)^2)
+    if tracking
+        infidelity = 0.5*norm(R-Q)^2
+    end
     return infidelity
 end
 
@@ -33,7 +36,7 @@ function eval_forward(a, Q0_complex, N; fT=1.0)
     return Q
 end
 
-function disc_adj(a, Q0_complex, target_complex, N; fT=1.0,)
+function disc_adj(a, Q0_complex, target_complex, N; fT=1.0, tracking=false)
     dt = fT/N # Timestep size
 
     # Forward eval saving all points
@@ -50,6 +53,11 @@ function disc_adj(a, Q0_complex, target_complex, N; fT=1.0,)
     R = vcat(real(target_complex), imag(target_complex))
     T = vcat(imag(target_complex), -real(target_complex))
     lambdas[:,1+N] = (I - 0.5*dt*M(fT, a)') \ ((2/(E^2))*(tr(Qs[:,1+N]'*R)*R + tr(Qs[:,1+N]'*T)*T)) # guard-level term is 0 in 1D
+    
+    if tracking
+        lambdas[:,1+N] = (I - 0.5*dt*M(fT, a)') \ (R-Qs[:,1+N]) # tracking type objective
+    end
+
     for n in N-1:-1:1
         tn = n*dt
         lambdas[:,1+n] = (I - 0.5*dt*M(tn, a)') \ ((I + 0.5*dt*M(tn, a)')*lambdas[:,1+n+1]) # No guard-level forcing term because we are in 1D
@@ -86,28 +94,31 @@ println("α = $a\nFinite Difference Gradient = $fin_dif_grad\nDiscrete Adjoint G
 display(Qs)
 =#
 
-function finite_diff_gradient(a, Q0_complex, target_complex, N; da=1e-5)
+function finite_diff_gradient(a, Q0_complex, target_complex, N; da=1e-5, tracking=false)
     Q_r = eval_forward(a+da, Q0_complex, N)
     Q_l = eval_forward(a-da, Q0_complex, N)
-    infidelity_r = infidelity(Q_r, target_complex)
-    infidelity_l = infidelity(Q_l, target_complex)
+    infidelity_r = infidelity(Q_r, target_complex; tracking=tracking)
+    infidelity_l = infidelity(Q_l, target_complex; tracking=tracking)
     fin_dif_grad = (infidelity_r - infidelity_l)/(2*da)
     return fin_dif_grad
 end
 
-function graph(N; fT=1.0, return_data=false)
+function graph(N; fT=1.0, return_data=false, tracking=false)
+    # Q0_complex = [1.0, 1.0]./sqrt(2.0)
     Q0_complex = [1.0, 1.0]
-    #Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
-    target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
-    #target_complex = target_complex ./ norm(target_complex) # Normalize
+    # target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
+    target_complex = [0.6663705256153477+ 0.7456237308736332im,0.6663705256153477 + 0.7456237308736332im]
 
-    grads_fin_dif = zeros(1001)
-    grads_dis_adj = zeros(1001)
+    Nsamples = 1001
+    grads_fin_dif = zeros(Nsamples)
+    grads_dis_adj = zeros(Nsamples)
     i = 1
-    as = LinRange(0,2,1001)
-    for i in 1:1001
-        grads_fin_dif[i] = finite_diff_gradient(as[i], Q0_complex, target_complex, N)
-        grads_dis_adj[i] = disc_adj(as[i], Q0_complex, target_complex, N)
+    as = LinRange(-2,2,Nsamples)
+    for i in 1:Nsamples
+        Q_r = eval_forward(as[i], Q0_complex, N)
+        # grads_fin_dif[i] = infidelity(Q_r, target_complex; tracking=tracking)
+        grads_fin_dif[i] = finite_diff_gradient(as[i], Q0_complex, target_complex, N; tracking=tracking)
+        grads_dis_adj[i] = disc_adj(as[i], Q0_complex, target_complex, N; tracking=tracking)
     end
     if return_data
         return as, grads_fin_dif, grads_dis_adj
@@ -120,18 +131,18 @@ function graph(N; fT=1.0, return_data=false)
 
 end
 
-function graph2(N; fT=1.0, a=1, return_data=false)
+function graph2(N; fT=1.0, a=1, return_data=false, tracking=false)
     Q0_complex = [1.0, 1.0]
-    Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
-    target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
-    target_complex = target_complex ./ norm(target_complex) # Normalize
+    # Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
+    # target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
+    target_complex = [0.6663705256153477+ 0.7456237308736332im,0.6663705256153477 + 0.7456237308736332im]
 
     eps_vec = (0.5).^(-10:10);
     grads_fin_dif = zeros(length(eps_vec))
     for i = 1:length(eps_vec)
-        grads_fin_dif[i] = finite_diff_gradient(a, Q0_complex, target_complex, N; da=eps_vec[i])
+        grads_fin_dif[i] = finite_diff_gradient(a, Q0_complex, target_complex, N; da=eps_vec[i], tracking=tracking)
     end
-    grad_dis_adj = disc_adj(a, Q0_complex, target_complex, N)
+    grad_dis_adj = disc_adj(a, Q0_complex, target_complex, N, tracking=tracking)
     rel_errors = abs.((grads_fin_dif .- grad_dis_adj) ./ grad_dis_adj)
     if return_data
         return eps_vec, grads_fin_dif, grad_dis_adj,rel_errors
