@@ -103,11 +103,13 @@ function finite_diff_gradient(a, Q0_complex, target_complex, N; da=1e-5, trackin
     return fin_dif_grad
 end
 
-function graph(N; fT=1.0, return_data=false, tracking=false)
+function graph1(N; fT=1.0, return_data=false, tracking=false)
     # Q0_complex = [1.0, 1.0]./sqrt(2.0)
     Q0_complex = [1.0, 1.0]
-    # target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
-    target_complex = [0.6663705256153477+ 0.7456237308736332im,0.6663705256153477 + 0.7456237308736332im]
+    Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
+    target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
+    #target_complex = [0.6663705256153477+ 0.7456237308736332im,0.6663705256153477 + 0.7456237308736332im]
+    target_complex = target_complex ./ norm(target_complex) # Normalize
 
     Nsamples = 1001
     grads_fin_dif = zeros(Nsamples)
@@ -133,9 +135,10 @@ end
 
 function graph2(N; fT=1.0, a=1, return_data=false, tracking=false)
     Q0_complex = [1.0, 1.0]
-    # Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
-    # target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
-    target_complex = [0.6663705256153477+ 0.7456237308736332im,0.6663705256153477 + 0.7456237308736332im]
+    Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
+    target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
+    #target_complex = [0.6663705256153477+ 0.7456237308736332im,0.6663705256153477 + 0.7456237308736332im]
+    target_complex = target_complex ./ norm(target_complex) # Normalize
 
     eps_vec = (0.5).^(-10:10);
     grads_fin_dif = zeros(length(eps_vec))
@@ -151,4 +154,28 @@ function graph2(N; fT=1.0, a=1, return_data=false, tracking=false)
                 ylabel=L"\left|\frac{∇_{FD,\epsilon}(\alpha) - ∇_{DA}(\alpha)}{∇_{DA}(\alpha)}\right|",
                 title="Fin Diff Convergence to Disc Adj, α=$a",
                 label="", scale=:log10)
+end
+
+function graph3(N; fT=1.0, return_data=false, tracking=false)
+    # Q0_complex = [1.0, 1.0]./sqrt(2.0)
+    Q0_complex = [1.0, 1.0]
+    Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
+    target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
+    #target_complex = [0.6663705256153477+ 0.7456237308736332im,0.6663705256153477 + 0.7456237308736332im]
+    target_complex = target_complex ./ norm(target_complex) # Normalize
+
+    Nsamples = 1001
+    infidelities = zeros(Nsamples)
+    i = 1
+    as = LinRange(-2,2,Nsamples)
+    for i in 1:Nsamples
+        Q_r = eval_forward(as[i], Q0_complex, N)
+        infidelities[i] = infidelity(Q_r, target_complex; tracking=tracking)
+    end
+    if return_data
+        return as, infidelities
+    end
+    pl = plot(as, infidelities)
+    plot!(title="Infidelity vs α", xlabel=L"\alpha", ylabel="Infidelity")
+    return pl
 end
