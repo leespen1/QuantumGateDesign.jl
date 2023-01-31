@@ -5,8 +5,8 @@ using LaTeXStrings
 E = 2 # Number of essential energy levels
 S(t, a) = [0.0 0.0; 0.0 0.0]
 dSda(t, a) = [0.0 0.0; 0.0 0.0]
-K(t, a) = a*cos(t).*[1.0 0.0; 0.0 1.0]
-dKda(t, a) = cos(t).*[1.0 0.0; 0.0 1.0]
+K(t, a) = [0.0 a*cos(t); a*cos(t) 1.0]
+dKda(t, a) = [0.0 cos(t); cos(t) 1.0]
 M(t, a) = [S(t, a) -K(t,a)
            K(t, a) S(t,a)]
 dMda(t, a) = [dSda(t, a) -dKda(t,a)
@@ -40,33 +40,33 @@ function disc_adj(a, Q0_complex, target_complex, N; fT=1.0, tracking=false)
     dt = fT/N # Timestep size
 
     # Forward eval saving all points
-    Qs = zeros(4,N+1)
-    Qs[:,1+0] = vcat(real(Q0_complex), imag(Q0_complex)) 
+    Qs = zeros(4,2,N+1)
+    Qs[:,:,1+0] = vcat(real(Q0_complex), imag(Q0_complex)) 
     for n in 0:N-1
         tn = n*dt
         tnp1 = (n+1)*dt
-        Qs[:,1+n+1] = (I - 0.5*dt*M(tnp1, a)) \ ((I + 0.5*dt*M(tn, a))*Qs[:,1+n])
+        Qs[:,:,1+n+1] = (I - 0.5*dt*M(tnp1, a)) \ ((I + 0.5*dt*M(tn, a))*Qs[:,:,1+n])
         #println("$tn, $tnp1")
     end
     # Get Λ_N using terminal condition
-    lambdas = zeros(4,N+1)
+    lambdas = zeros(4,2,N+1)
     R = vcat(real(target_complex), imag(target_complex))
     T = vcat(imag(target_complex), -real(target_complex))
-    lambdas[:,1+N] = (I - 0.5*dt*M(fT, a)') \ ((2/(E^2))*(tr(Qs[:,1+N]'*R)*R + tr(Qs[:,1+N]'*T)*T)) # guard-level term is 0 in 1D
+    lambdas[:,:,1+N] = (I - 0.5*dt*M(fT, a)') \ ((2/(E^2))*(tr(Qs[:,:,1+N]'*R)*R + tr(Qs[:,:,1+N]'*T)*T)) # guard-level term is 0 in 1D
     
     if tracking
-        lambdas[:,1+N] = (I - 0.5*dt*M(fT, a)') \ (R-Qs[:,1+N]) # tracking type objective
+        lambdas[:,:,1+N] = (I - 0.5*dt*M(fT, a)') \ (R-Qs[:,:,1+N]) # tracking type objective
     end
 
     for n in N-1:-1:1
         tn = n*dt
-        lambdas[:,1+n] = (I - 0.5*dt*M(tn, a)') \ ((I + 0.5*dt*M(tn, a)')*lambdas[:,1+n+1]) # No guard-level forcing term because we are in 1D
+        lambdas[:,:,1+n] = (I - 0.5*dt*M(tn, a)') \ ((I + 0.5*dt*M(tn, a)')*lambdas[:,:,1+n+1]) # No guard-level forcing term because we are in 1D
     end
     grad_disc_adj = 0.0
     for n in 0:N-1
         tn = n*dt
         tnp1 = (n+1)*dt
-        grad_disc_adj += (dMda(tn, a)*Qs[:,1+n] + dMda(tnp1, a)*Qs[:,1+n+1])'*lambdas[:,1+n+1]
+        grad_disc_adj += tr((dMda(tn, a)*Qs[:,:,1+n] + dMda(tnp1, a)*Qs[:,:,1+n+1])'*lambdas[:,:,1+n+1])
     end
     grad_disc_adj *= -0.5*dt
 
@@ -104,12 +104,10 @@ function finite_diff_gradient(a, Q0_complex, target_complex, N; da=1e-5, trackin
 end
 
 function graph1(N; fT=1.0, return_data=false, tracking=false)
-    # Q0_complex = [1.0, 1.0]./sqrt(2.0)
-    Q0_complex = [1.0, 1.0]
-    Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
-    target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
-    #target_complex = [0.6663705256153477+ 0.7456237308736332im,0.6663705256153477 + 0.7456237308736332im]
-    target_complex = target_complex ./ norm(target_complex) # Normalize
+    a = 1.0
+    Q0_complex = [1.0 0.0; 0.0 1.0]
+    target = eval_forward(a, Q0_complex, N)
+    target_complex = target[1:end÷2,:] + (im .* target[1+end÷2:end,:])
 
     Nsamples = 1001
     grads_fin_dif = zeros(Nsamples)
@@ -134,11 +132,9 @@ function graph1(N; fT=1.0, return_data=false, tracking=false)
 end
 
 function graph2(N; fT=1.0, a=1, return_data=false, tracking=false)
-    Q0_complex = [1.0, 1.0]
-    Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
-    target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
-    #target_complex = [0.6663705256153477+ 0.7456237308736332im,0.6663705256153477 + 0.7456237308736332im]
-    target_complex = target_complex ./ norm(target_complex) # Normalize
+    Q0_complex = [1.0 0.0; 0.0 1.0]
+    target = eval_forward(a, Q0_complex, 100)
+    target_complex = target[1:end÷2,:] + (im .* target[1+end÷2:end,:])
 
     eps_vec = (0.5).^(-10:10);
     grads_fin_dif = zeros(length(eps_vec))
@@ -158,19 +154,20 @@ end
 
 function graph3(N; fT=1.0, return_data=false, tracking=false)
     # Q0_complex = [1.0, 1.0]./sqrt(2.0)
-    Q0_complex = [1.0, 1.0]
-    Q0_complex = Q0_complex ./ norm(Q0_complex) # Normalize
-    target_complex = [0.47119255134555293+0.5272358751693975im,0.47119255134555293+0.5272358751693975im]
+    Q0_complex = [1.0 0.0; 0.0 1.0]
+    target = eval_forward(1.0, Q0_complex, 100)
+    target_complex = target[1:end÷2,:] + (im .* target[1+end÷2:end,:])
+
     #target_complex = [0.6663705256153477+ 0.7456237308736332im,0.6663705256153477 + 0.7456237308736332im]
-    target_complex = target_complex ./ norm(target_complex) # Normalize
+    #target_complex = target_complex ./ norm(target_complex) # Normalize
 
     Nsamples = 1001
     infidelities = zeros(Nsamples)
     i = 1
     as = LinRange(-2,2,Nsamples)
     for i in 1:Nsamples
-        Q_r = eval_forward(as[i], Q0_complex, N)
-        infidelities[i] = infidelity(Q_r, target_complex; tracking=tracking)
+        Q_N = eval_forward(as[i], Q0_complex, N)
+        infidelities[i] = infidelity(Q_N, target_complex; tracking=tracking)
     end
     if return_data
         return as, infidelities
