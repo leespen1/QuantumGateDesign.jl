@@ -27,8 +27,8 @@ Overlap Function / Complex Inner Product
 """
 function overlap(A, B)
     target_complex = target[1:end÷2,:] + (im .* target[1+end÷2:end,:])
-    B_alt = vcat(B[1+end÷2:end,:], -B[1:end÷2,:])
-    return tr(A'*B) + im*tr(A'*B_alt)
+    B_vu = vcat(B[1+end÷2:end,:], -B[1:end÷2,:])
+    return tr(A'*B) + im*tr(A'*B_vu)
 end
 
 function complex_to_real(A)
@@ -91,7 +91,8 @@ function disc_adj(a, Q0_complex, target_complex, N; fT=1.0, tracking=false)
     #return Qs, lambdas, grad_disc_adj
 end
 
-function grad_derivative_method(a, Q0_complex, target_complex, N; fT=1.0, tracking=false)
+function grad_derivative_method(a, Q0_complex, N; fT=1.0, tracking=false)
+    target_real = eval_forward(1.0, Q0_complex, 100)
     dt = fT/N # Timestep size
 
     # Forward eval saving all points
@@ -115,10 +116,9 @@ function grad_derivative_method(a, Q0_complex, target_complex, N; fT=1.0, tracki
         )
     end
 
-    target_real = complex_to_real(target_complex)
     S = overlap(target_real, Q_save[:,:,1+N])
     dSda = overlap(target_real, dQda_save[:,:,1+N])
-    gradient = -2*real(S'*dSda)
+    gradient = -2*real(S'*dSda)/E^2
     return gradient
     #return Qs, lambdas, grad_disc_adj
 end
