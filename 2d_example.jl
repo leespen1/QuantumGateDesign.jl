@@ -22,6 +22,23 @@ function infidelity(Q, target_complex;tracking=false)
     return infidelity
 end
 
+"""
+Overlap Function / Complex Inner Product
+"""
+function overlap(A, B)
+    target_complex = target[1:end÷2,:] + (im .* target[1+end÷2:end,:])
+    B_alt = vcat(B[1+end÷2:end,:], -B[1:end÷2,:])
+    return tr(A'*B) + im*tr(A'*B_alt)
+end
+
+function complex_to_real(A)
+    return vcat(real(A), imag(A))
+end
+
+function real_to_complex(A)
+    return A[1:end÷2,:] + im*A[1+end÷2:end,:]
+end
+
 function eval_forward(a, Q0_complex, N; fT=1.0)
     dt = fT/N # Timestep size
     Q = vcat(real(Q0_complex), imag(Q0_complex)) 
@@ -74,6 +91,37 @@ function disc_adj(a, Q0_complex, target_complex, N; fT=1.0, tracking=false)
     #return Qs, lambdas, grad_disc_adj
 end
 
+function grad_derivative_method(a, Q0_complex, target_complex, N; fT=1.0, tracking=false)
+    dt = fT/N # Timestep size
+
+    # Forward eval saving all points
+    Q_save = zeros(4,2,N+1)
+    Q_save[:,:,1+0] = vcat(real(Q0_complex), imag(Q0_complex)) 
+    for n in 0:N-1
+        tn = n*dt
+        tnp1 = (n+1)*dt
+        Q_save[:,:,1+n+1] = (I - 0.5*dt*M(tnp1, a)) \ ((I + 0.5*dt*M(tn, a))*Q_save[:,:,1+n])
+    end
+    
+    # Derivative of each Qn with respect to a
+    dQda_save = zeros(4,2,N+1)
+    dQda_save[:,:,1+0] = vcat(real(Q0_complex), imag(Q0_complex)) 
+    for n in 0:N-1
+        tn = n*dt
+        tnp1 = (n+1)*dt
+        dQda_save[:,:,1+n+1] = (I - 0.5*dt*M(tnp1, a)) \ (
+            (I + 0.5*dt*M(tn, a))*dQda_save[:,:,1+n] 
+            + 0.5*dt*(dMda(tn, a)*Q_save[:,:,1+n] + dMda(tnp1, a)*Q_save[:,:,1+n+1]) # Forcing terms
+        )
+    end
+
+    target_real = complex_to_real(target_complex)
+    S = overlap(target_real, Q_save[:,:,1+N])
+    dSda = overlap(target_real, dQda_save[:,:,1+N])
+    gradient = -2*real(S'*dSda)
+    return gradient
+    #return Qs, lambdas, grad_disc_adj
+end
 
 
 # Target gate
@@ -108,14 +156,13 @@ function graph1(N; fT=1.0, return_data=false, tracking=false)
     Q0_complex = [1.0 0.0; 0.0 1.0]
     target = eval_forward(a, Q0_complex, N)
     target_complex = target[1:end÷2,:] + (im .* target[1+end÷2:end,:])
-
     Nsamples = 1001
     grads_fin_dif = zeros(Nsamples)
     grads_dis_adj = zeros(Nsamples)
     i = 1
     as = LinRange(-2,2,Nsamples)
     for i in 1:Nsamples
-        Q_r = eval_forward(as[i], Q0_complex, N)
+        #Q_r = eval_forward(as[i], Q0_complex, N)
         # grads_fin_dif[i] = infidelity(Q_r, target_complex; tracking=tracking)
         grads_fin_dif[i] = finite_diff_gradient(as[i], Q0_complex, target_complex, N; tracking=tracking)
         grads_dis_adj[i] = disc_adj(as[i], Q0_complex, target_complex, N; tracking=tracking)
@@ -136,7 +183,7 @@ function graph2(N; fT=1.0, a=1, return_data=false, tracking=false)
     target = eval_forward(a, Q0_complex, 100)
     target_complex = target[1:end÷2,:] + (im .* target[1+end÷2:end,:])
 
-    eps_vec = (0.5).^(-10:10);
+    eps_vec = (0.5).^(-10:16);
     grads_fin_dif = zeros(length(eps_vec))
     for i = 1:length(eps_vec)
         grads_fin_dif[i] = finite_diff_gradient(a, Q0_complex, target_complex, N; da=eps_vec[i], tracking=tracking)
@@ -176,3 +223,4 @@ function graph3(N; fT=1.0, return_data=false, tracking=false)
     plot!(title="Infidelity vs α", xlabel=L"\alpha", ylabel="Infidelity")
     return pl
 end
+
