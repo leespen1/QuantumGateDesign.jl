@@ -26,7 +26,6 @@ end
 Overlap Function / Complex Inner Product
 """
 function overlap(A, B)
-    target_complex = target[1:end÷2,:] + (im .* target[1+end÷2:end,:])
     B_vu = vcat(B[1+end÷2:end,:], -B[1:end÷2,:])
     return tr(A'*B) + im*tr(A'*B_vu)
 end
@@ -111,7 +110,7 @@ function grad_derivative_method(a, Q0_complex, N; fT=1.0, tracking=false)
         tn = n*dt
         tnp1 = (n+1)*dt
         dQda_save[:,:,1+n+1] = (I - 0.5*dt*M(tnp1, a)) \ (
-            (I + 0.5*dt*M(tn, a))*dQda_save[:,:,1+n] 
+            ((I + 0.5*dt*M(tn, a))*dQda_save[:,:,1+n])
             + 0.5*dt*(dMda(tn, a)*Q_save[:,:,1+n] + dMda(tnp1, a)*Q_save[:,:,1+n+1]) # Forcing terms
         )
     end
