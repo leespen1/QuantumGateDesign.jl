@@ -44,7 +44,7 @@ The parameter used to calculate the target Q is hard-coded (1.5)
 """
 function loss_func(u0, newp)
     # Simulation Interval
-    tspan::Tuple{Float64, Float64} = (0.0, 1.0)
+    tspan = (0.0, 1.0)
     # Set Parameters
     # (we will pretend we don't know these and then try to optimize parameters to match these)
     p::Float64 = 1.5
@@ -147,25 +147,27 @@ function main()
 
 
     N = 100
-    a = LinRange(1, 2, N)
+    a = LinRange(1.0, 2.0, N)
     L0 = zeros(N)
     grads = zeros(N)
     grads_garg = zeros(N)
     for i = 1:N
-        loss = loss_func(Q0, a[i])
+        loss = loss_func(Q0[:], a[i])
         L0[i] = loss
-        grad = ForwardDiff.derivative(p -> loss_func(Q0, p), a[i])
+        grad = ForwardDiff.derivative(p -> loss_func(Q0[:], p), a[i])
         grads[i] = grad
-        grads_garg[i] = grad_gargamel(a[i], Q0)
+        grads_garg[i] = grad_gargamel(a[i], Q0[:])
     end
     pl = plot(a, L0, label="Losses")
     plot!(pl, a, grads, label="Gradients (ForwardDiff)")
-    plot!(pl, a, grads_garg, label="Gradients (Gargamel)")
+    plot!(pl, a, grads_garg, label="Gradients (Gargamel)", linestyle=:dash)
     display(pl)
 
-    println("Loss: ", loss_func(Q0, 1.5))
-    println("Gradient ForwardDiff: ", ForwardDiff.derivative(p -> loss_func(Q0, p), 1.5))
-    println("Gradient Gargamel: ", grad_gargamel(1.5, Q0))
+    println("Loss: ", loss_func(Q0[:], 1.5))
+    println("Gradient ForwardDiff: ", ForwardDiff.derivative(p -> loss_func(Q0[:], p), 1.5))
+    println("Gradient Gargamel: ", grad_gargamel(1.5, Q0[:]))
+
+    return pl
 end
 
 pl = main()
