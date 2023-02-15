@@ -6,6 +6,7 @@ using DifferentialEquations
 using Plots
 using Zygote
 using LinearAlgebra
+include("2d_example.jl")
 
 """
 Evolve state vector according to schrodinger's equation
@@ -42,25 +43,12 @@ Loss function
 Calculate loss (infidelity, or whatever function chose)
 The parameter used to calculate the target Q is hard-coded (1.5)
 """
-function loss_func(u0, newp)
-    # Simulation Interval
-    tspan = (0.0, 1.0)
-    # Set Parameters
-    # (we will pretend we don't know these and then try to optimize parameters to match these)
-    p::Float64 = 1.5
-    ## Generate solution data
-    # Set up ODE Problem (using DifferentialEquations package)
-    prob = ODEProblem(schrodinger!, u0, tspan, p)
-    # Solve ODE Problem (saving solution at 0.0, 1.0, 2.0, etc)
-    data_solution = solve(prob, saveat=1, abstol=1e-10, reltol=1e-10)
-    # Convert solution to array (is currently type ODE Solution which also contains
-    # a bunch more info)
-    data = Array(data_solution)
-    R = data[:,end]
+function loss_func(prob, target, newparam)
+    R = target[:]
     T = vcat(R[3:4], -R[1:2])
 
     # Remake the original ODE problem, but with new parameters
-    newprob = remake(prob, p=newp)
+    newprob = remake(prob, p=newparam)
     sol = solve(newprob, saveat=1, abstol=1e-10, reltol=1e-10)
     sol = Array(sol)
     Q = sol[:,end]
@@ -70,6 +58,24 @@ function loss_func(u0, newp)
     loss = 1 - 0.25*((Q'*R)^2 + (Q'*T)^2) # Infidelity
     return loss
 end
+
+
+function grad_gargamel(prob, target, newparam)
+    u0 = vcat(prob.u0, zeros(4)) # Make space for dQda
+    R = target[:]
+    T = vcat(R[3:4], -R[1:2])
+
+    newprob = remake(prob, f=gargamel!, u0=u0, p=newparam)
+    sol = solve(newprob, saveat=1, abstol=1e-10, reltol=1e-10)
+    sol = Array(sol)
+    Q = sol[1:4,end]
+    dQda = sol[5:8,end]
+
+    #grad_gargamel = 2*sum(Q .* dQda)
+    grad_gargamel = -0.5*((Q'*R)*(dQda'*R) + (Q'*T)*(dQda'*T))
+    return grad_gargamel
+end
+
 
 """
 To be done after every iteration of the optimization process
@@ -86,91 +92,64 @@ function callback(p, loss, sol)
     return false
 end
 
-function grad_gargamel(a, Q0_real)
-    u0 = vcat(Q0_real, zeros(4)) # Make space for dQda
-
-    tspan = (0.0, 1.0)
-
-    # Evolve with default parameter, to get target gate
-    p = 1.5
-    prob = ODEProblem(schrodinger!, Q0_real, tspan, p)
-    data_solution = solve(prob, saveat=1, abstol=1e-10, reltol=1e-10)
-    data = Array(data_solution)
-    R = data[:,end]
-    T = vcat(R[3:4], -R[1:2])
-
-    p = a
-    prob = ODEProblem(gargamel!, u0, tspan, p)
-
-    data_solution = solve(prob, saveat=1, abstol=1e-10, reltol=1e-10)
-    data = Array(data_solution)
-    Q = data[1:4,end]
-    dQda = data[5:8,end]
-    #grad_gargamel = 2*sum(data[1:4,end] .* data[5:8,end])
-    grad_gargamel = -0.5*((Q'*R)*(dQda'*R) + (Q'*T)*(dQda'*T))
-    return grad_gargamel
-end
-
-function grad_forward_diff(a, Q0_real)
-    #u0 = complex_to_real(Q0_complex)
-    tspan = (0.0, 1.0)
-    p = a
-    prob = ODEProblem(schrodinger!, Q0_real, tspan, p)
-    data_solution = solve(prob, saveat=1, abstol=1e-10, reltol=1e-10)
-    data = Array(data_solution)
-
-    grad = ForwardDiff.derivative(p -> loss_func(u0, p), p)
-
-    return grad
-end
-
 
 function main()
     # Initial condition
-    Q0 = [1.0, 1.0, 1.0, 1.0]
-    Q0 = Q0 / norm(Q0)
+    Q0_complex = [1.0+1.0im, 1.0+1.0im]
+    Q0_complex = Q0_complex / norm(Q0_complex)
+    Q0_real = complex_to_real(Q0_complex)
     # Simulation Interval
-    tspan = (0.0, 1.0)
+    tspan = (0.0, 10.0)
     # Set  Parameters
     # (we will pretend we don't know these and then try to optimize parameters to match these)
     p = 1.5
-    #======
-    ## Generate solution data
     # Set up ODE Problem (using DifferentialEquations package)
-    prob = ODEProblem(gargamel!, u0, tspan, p)
+    prob = ODEProblem(schrodinger!, Q0_real, tspan, p)
     # Solve ODE Problem (saving solution at 0.0, 1.0, 2.0, etc)
     data_solution = solve(prob, saveat=1, abstol=1e-10, reltol=1e-10)
     # Convert solution to array (is currently type ODE Solution which also contains
     # a bunch more info)
     data = Array(data_solution)
-    ======#
+    Q_target = data[:,end]
+    Q_target_complex = real_to_complex(Q_target)
 
 
     N = 100
     a = LinRange(1.0, 2.0, N)
-    L0 = zeros(N)
-    grads = zeros(N)
+    losses = zeros(N)
+    grads_fwd_dif = zeros(N)
     grads_garg = zeros(N)
+    grads_dis_adj = zeros(N)
+    grads_fin_dif = zeros(N)
     for i = 1:N
-        loss = loss_func(Q0[:], a[i])
-        L0[i] = loss
-        grad = ForwardDiff.derivative(p -> loss_func(Q0[:], p), a[i])
-        grads[i] = grad
-        grads_garg[i] = grad_gargamel(a[i], Q0[:])
+        losses[i] = loss_func(prob, Q_target, a[i])
+        grads_fwd_dif[i] = ForwardDiff.derivative(p -> loss_func(prob, Q_target, p), a[i])
+        grads_garg[i] = grad_gargamel(prob, Q_target, a[i])
+        grads_dis_adj[i] = disc_adj(a[i], Q0_complex, Q_target_complex, fT=tspan[end], N=1000)
+        grads_fin_dif[i] = finite_diff_gradient(a[i], Q0_complex, Q_target_complex, fT=tspan[end])
     end
-    pl = plot(a, L0, label="Losses")
-    plot!(pl, a, grads, label="Gradients (ForwardDiff)")
-    plot!(pl, a, grads_garg, label="Gradients (Gargamel)", linestyle=:dash)
+    pl = plot(a, losses, label="Loss")
+    plot!(pl, a, grads_fwd_dif, label="Gradient (ForwardDiff)")
+    plot!(pl, a, grads_garg, label="Gradient (Gargamel)", linestyle=:dash)
+    plot!(pl, a, grads_dis_adj, label="Gradient (Discrete Adjoint)")
+    plot!(pl, a, grads_fin_dif, label="Gradient (Finite Diff)", linestyle=:dash)
+    plot!(xlabel="α")
+    plot!(title="Target using α=$p, T=$(tspan[end])")
     display(pl)
 
-    println("Loss: ", loss_func(Q0[:], 1.5))
-    println("Gradient ForwardDiff: ", ForwardDiff.derivative(p -> loss_func(Q0[:], p), 1.5))
-    println("Gradient Gargamel: ", grad_gargamel(1.5, Q0[:]))
+    #println("Loss: ", loss_func(Q0[:], 1.5))
+    #println("Gradient ForwardDiff: ", ForwardDiff.derivative(p -> loss_func(Q0[:], p), 1.5))
+    #println("Gradient Gargamel: ", grad_gargamel(1.5, Q0[:]))
+    println("Loss: ", loss_func(prob, Q_target, 1.5))
+    println("Gradient ForwardDiff: ", ForwardDiff.derivative(p -> loss_func(prob, Q_target, p), 1.5))
+    println("Gradient Gargamel: ", grad_gargamel(prob, Q_target, 1.5))
+
 
     return pl
 end
 
-pl = main()
+
+#pl = main()
 #=
 
 ## Set up optimization problem
