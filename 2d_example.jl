@@ -9,7 +9,7 @@ E = 2 # Number of essential energy levels
 S(t, a) = [0.0 0.0; 0.0 0.0]
 dSda(t, a) = [0.0 0.0; 0.0 0.0]
 K(t, a) = [0.0 a*cos(t); a*cos(t) 1.0]
-dKda(t, a) = [0.0 cos(t); cos(t) 1.0]
+dKda(t, a) = [0.0 cos(t); cos(t) 0.0]
 M(t, a) = [S(t, a) -K(t,a)
            K(t, a) S(t,a)]
 dMda(t, a) = [dSda(t, a) -dKda(t,a)
@@ -104,6 +104,42 @@ function disc_adj(a, Q0_complex, target_complex; N=100, fT=1.0, obj_type=0)
     end
     grad_disc_adj *= -0.5*dt
 
+    lagrangian = 1 - 0.25*((tr(Qs[:,:,1+N]'*R))^2 - (tr(Qs[:,:,1+N]'*T))^2) # infidelity
+    for n in 0:N-1 # lambda sum contributions
+        tn = n*dt
+        tnp1 = (n+1)*dt
+        Qn = Qs[:,:,1+n]
+        Qnp1 = Qs[:,:,1+n+1]
+        lambda_np1 = lambdas[:,:,1+n+1]
+        #lagrangian += tr(( (I-0.5*dt*M(tnp1, a))*Qnp1 - (I+0.5*dt*M(tn,a))*Qn)'*(lambda_np1))
+    end
+
+    #= Attempting to clear up legrangian/gradient difference
+    # Non-J part (finite diff)
+    da = 1e-5
+
+    R_sum = 0.0
+    for n in 0:N-1
+        tn = n*dt
+        tnp1 = (n+1)*dt
+        Qn = Qs[:,:,1+n]
+        Qnp1 = Qs[:,:,1+n+1]
+        R_sum += ( ((I - 0.5*dt*M(tnp1, a+da))*Qnp1) - ((I + 0.5*dt*M(tn, a+da))*Qn) )'*lambdas[:,:,1+n+1]
+    end
+
+    L_sum = 0.0
+    for n in 0:N-1
+        tn = n*dt
+        tnp1 = (n+1)*dt
+        Qn = Qs[:,:,1+n]
+        Qnp1 = Qs[:,:,1+n+1]
+        L_sum += ( ((I - 0.5*dt*M(tnp1, a-da))*Qnp1) - ((I + 0.5*dt*M(tn, a-da))*Qn) )'*lambdas[:,:,1+n+1]
+    end
+
+    (R_sum - L_sum)/(2*da)
+    =#
+
+    #return grad_disc_adj, lagrangian
     return grad_disc_adj
     #return Qs, lambdas, grad_disc_adj
 end
