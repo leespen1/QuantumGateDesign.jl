@@ -6,7 +6,6 @@ using DifferentialEquations
 using Plots
 using Zygote
 using LinearAlgebra
-include("2d_example.jl")
 
 
 """
@@ -26,7 +25,6 @@ Evolve state vector and its gradient wrt control parameter
 """
 function gargamel!(du, u, p, t)
    a = p
-
 
    du[1] = -a*cos(t)*u[4]
    du[2] = -a*cos(t)*u[3] - u[4]
@@ -94,7 +92,7 @@ function grad_gargamel_trap(prob, target, newparam; N=100)
     du = zeros(8)
 
     # Need to write out LHS matrix to do implicit solve, or else use
-    # abstract arrays and interative solvers
+    # abstract arrays and iterative solvers
     LHS(t, a) = [
     0.0 0.0 0.0 -a*cos(t)  0.0 0.0 0.0 0.0
     0.0 0.0 -a*cos(t) -1.0 0.0 0.0 0.0 0.0
@@ -148,7 +146,7 @@ function main(;n_timesteps=100)
     # (we will pretend we don't know these and then try to optimize parameters to match these)
     p = 1.0
     # Set up ODE Problem (using DifferentialEquations package)
-    prob = ODEProblem(schrodinger!, Q0_real, tspan, p)
+    prob = ODEProblem{true, SciMLBase.FullSpecialize}(schrodinger!, Q0_real, tspan, p)
     # Solve ODE Problem (saving solution at 0.0, 1.0, 2.0, etc)
     data_solution = solve(prob, saveat=1, abstol=1e-10, reltol=1e-10)
     # Convert solution to array (is currently type ODE Solution which also contains
