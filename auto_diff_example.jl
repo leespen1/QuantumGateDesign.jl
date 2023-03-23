@@ -4,7 +4,7 @@ using ForwardDiff
 using SciMLSensitivity
 using DifferentialEquations
 using Plots
-using Zygote
+#using Zygote
 using LinearAlgebra
 
 
@@ -135,6 +135,7 @@ function callback(p, loss, sol)
 end
 
 
+#=
 function main(;n_timesteps=100)
     # Initial condition
     Q0_complex = [1.0+1.0im, 1.0+1.0im]
@@ -191,6 +192,7 @@ function main(;n_timesteps=100)
 
     return pl
 end
+=#
 
 
 #pl = main()
