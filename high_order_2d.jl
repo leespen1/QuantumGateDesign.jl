@@ -4,11 +4,11 @@ using LinearMaps
 using Infiltrator
 include("./auto_diff_example.jl")
 
+const E = 2 # Hardcoding number of essential energy levels for now
 
-struct SchrodingerProb
+mutable struct SchrodingerProb
     tspan::Tuple{Float64, Float64}
     n_timesteps::Int64
-    dt::Float64
     u0::Matrix{Float64}
     a::Float64
     S::Function
@@ -39,11 +39,10 @@ function SchrodingerProb(
     Ka::Function,
     )
 
-    dt = (tspan[2]-tspan[1])/n_timesteps
     M(t,a) = [S(t,a) -K(t,a); K(t,a) S(t,a)]
     Mt(t,a) = [St(t,a) -Kt(t,a); Kt(t,a) St(t,a)]
     Ma(t,a) = [Sa(t,a) -Ka(t,a); Ka(t,a) Sa(t,a)]
-    return SchrodingerProb(tspan, n_timesteps, dt, u0, a, S, K, St, Kt, Sa, Ka, M, Mt, Ma)
+    return SchrodingerProb(tspan, n_timesteps, u0, a, S, K, St, Kt, Sa, Ka, M, Mt, Ma)
 end
 
 function complex_to_real(A)
@@ -72,24 +71,21 @@ function compute_uttvtt(S::AbstractMatrix{Float64},K::AbstractMatrix{Float64},
 end
 
 
-function calc_infidelity(prob::SchrodingerProb, target::Matrix{Float64}, newparam::Float64)::Float64
-    E = 2
-    QN = eval_forward(prob, newparam)[:,:,end] # Get state vector at the end
-
+function calc_infidelity(QN::Matrix{Float64}, target::Matrix{Float64})::Float64
     R = copy(target)
     T = vcat(target[3:4,:], -target[1:2,:])
-    return 1 - (1/E^2)*(tr(QN'*R)^2 + tr(QN'*T)^2) # Could minus term be off by 4? EDIT: It should be 1/4 when evolving the *entire* basis
+    return 1 - (1/E^2)*(tr(QN'*R)^2 + tr(QN'*T)^2)^2
 end
 
 
 function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3}
     t0 = prob.tspan[1]
     tf = prob.tspan[2]
-    dt = prob.dt
     N = prob.n_timesteps
+    dt = (tf-t0)/N
     a = newparam
 
-    E = 2
+    nrows, ncols = size(prob.u0)
 
     tn = NaN
     tnp1 = NaN # Initialize variable
@@ -97,9 +93,8 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
     # Weights for fourth order Hermite-Rule
     wnp1 = [1,-0.5*dt*1/3] # Fourth Order
     #wnp1 = [1,0] # Second Order
+    # Is S_mat = prob.S(tnp1,a) allocating memory every time? If so, I need to put a stop to that
     function lhs_action(prob::SchrodingerProb, Q::AbstractVector{Float64}, a::Float64)::Vector{Float64}
-        dt = prob.dt
-
         S_mat  = prob.S(tnp1,a)
         St_mat = prob.St(tnp1,a)
         K_mat  = prob.K(tnp1,a)
@@ -122,8 +117,6 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
     wn = [1,0.5*dt*1/3] # Fourth Order
     #wn = [1,0] # Second Order
     function rhs_action(prob::SchrodingerProb, Q::Vector{Float64}, a::Float64)::Vector{Float64}
-        dt = prob.dt
-
         S_mat  = prob.S(tn,a)
         St_mat = prob.St(tn,a)
         K_mat  = prob.K(tn,a)
@@ -140,11 +133,11 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
         return vcat(u, v)
     end
 
-    Qs = zeros(size(prob.u0)..., N+1)
+    Qs = zeros(nrows, ncols, N+1)
     Qs[:,:,1+0] .= prob.u0
-    Q_col = zeros(size(prob.u0,1))
-    RHS_col = zeros(size(prob.u0,1))
-    num_RHS = size(prob.u0, 2)
+    Q_col = zeros(nrows)
+    RHS_col = zeros(nrows)
+    num_RHS = ncols
 
     # Forward eval, saving all points
     for n in 0:N-1
@@ -166,11 +159,9 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target)
 
     t0 = prob.tspan[1]
     tf = prob.tspan[2]
-    dt = prob.dt
     N = prob.n_timesteps
+    dt = (tf-t0)/N
     a = newparam
-
-    E = 2
 
     tn = NaN
 
@@ -178,8 +169,6 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target)
     wnp1 = [1,-0.5*dt*1/3] # Fourth Order
     #wnp1 = [1,0] # Second Order
     function lhs_action(prob::SchrodingerProb, Q::AbstractVector{Float64}, a::Float64)::Vector{Float64}
-        dt = prob.dt
-
         S_mat  = prob.S(tn,a)'
         St_mat = prob.St(tn,a)'
         K_mat  = -prob.K(tn,a)'
@@ -202,8 +191,6 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target)
     wn = [1,0.5*dt*1/3] # Fourth Order
     #wn = [1,0] # Second Order
     function rhs_action(prob::SchrodingerProb, Q::Vector{Float64}, a::Float64)::Vector{Float64}
-        dt = prob.dt
-
         S_mat  = prob.S(tn,a)'
         St_mat = prob.St(tn,a)'
         K_mat  = -prob.K(tn,a)'
@@ -223,18 +210,18 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target)
 
     tn = t0 + N*dt
     QN = Qs[:,:,1+N]
-    R = zeros(size(prob.u0)...)
+    R = zeros(nrows, ncols)
     R .= target
-    T = zeros(size(prob.u0)...)
+    T = zeros(nrows, ncols)
     T[1:2,:] .= target[3:4,:]
     T[3:4,:] .= -target[1:2,:]
-    Λs = zeros(size(prob.u0)..., N+1)
+    Λs = zeros(nrows, ncols, N+1)
 
     terminal_RHS = (2/E^2)*( tr(QN'*R)*R + tr(QN'*T)*T )
 
-    num_RHS = size(prob.u0, 2)
-    Λ_col = zeros(size(prob.u0,1))
-    RHS_col = zeros(size(prob.u0,1))
+    num_RHS = ncols
+    Λ_col = zeros(nrows)
+    RHS_col = zeros(nrows)
     for i in 1:num_RHS
         Λ_col .= QN[:,i]
         RHS_col .= terminal_RHS[:,i]
@@ -355,8 +342,8 @@ Testing convergence of state vector history
 """
 function test1()
     tspan = (0.0, 1.0)
-    n_steps = 10
-    dt_save = (tspan[2] - tspan[1])/n_steps
+    n_steps_ODEProblem = 10
+    dt_save = (tspan[2] - tspan[1])/n_steps_ODEProblem
 
     Q0 = [1.0 0.0 0.0 0.0;
           0.0 1.0 0.0 0.0;
@@ -368,7 +355,7 @@ function test1()
 
     p = 1.0
 
-    true_sol_ary = zeros(4,num_RHS,n_steps+1)
+    true_sol_ary = zeros(4,num_RHS,n_steps_ODEProblem+1)
     for i in 1:num_RHS
         Q0_col = Q0[:,i]
         ODE_prob = ODEProblem{true, SciMLBase.FullSpecialize}(schrodinger!, Q0_col, tspan, p) # Need this option for debug to work
@@ -390,6 +377,48 @@ function test1()
     Ka(t,a) = [0.0 cos(t);
                cos(t) 0.0]
 
+
+    N = 5
+    nsteps = n_steps_ODEProblem .* (2 .^ (0:N)) # Double the number of steps each time
+    max_ratios = zeros(N)
+    min_ratios = zeros(N)
+    max_errors = zeros(N+1)
+
+    schroprob = SchrodingerProb(tspan, nsteps[1], Q0, p, S, K, St, Kt, Sa, Ka)
+    println(schroprob.n_timesteps)
+    Qs_prev = eval_forward(schroprob, p)[:,:,1:nsteps[1]÷n_steps_ODEProblem:end]
+    Q_diffs_prev = Qs_prev - true_sol_ary
+    Q_diffs_prev = (Qs_prev - true_sol_ary)[:,:,2:end] # Remove first entry, initial condition
+    max_errors[1] = max(Q_diffs_prev...)
+
+    for i in 2:N+1
+        schroprob.n_timesteps = nsteps[i]
+        println(schroprob.n_timesteps)
+        Qs_next = eval_forward(schroprob, p)[:,:,1:nsteps[i]÷n_steps_ODEProblem:end]
+        Q_diffs_next = (Qs_next - true_sol_ary)[:,:,2:end]
+        Q_diffs_next = (Qs_next - true_sol_ary)[:,:,2:end] # Remove first entry, initial condition
+        ratios = log2.(Q_diffs_prev ./ Q_diffs_next)
+        max_ratios[i-1] = max(ratios...)
+        min_ratios[i-1] = min(ratios...)
+        max_errors[i] = max(Q_diffs_next...)
+        
+        Qs_prev .= Qs_next
+        Q_diffs_prev .= Q_diffs_next
+    end
+
+    pl1 = plot(nsteps[2:end], max_ratios, label="Max")
+    plot!(pl1, nsteps[2:end], min_ratios, label="Min")
+    plot!(pl1, xlabel="# Timesteps", ylabel="Log2 E(2*Δt)/E(Δt)")
+    plot!(pl1, xscale=:log10)
+    plot!(pl1, title="Convergence")
+    pl2 = plot(nsteps, max_errors)
+    plot!(pl2, xlabel="# Timesteps", ylabel="Max E(Δt) (per entry)")
+    plot!(pl2, scale=:log10)
+    plot!(pl2, title="Error")
+    pl = plot(pl1, pl2, layout=(1,2))
+    plot!(pl, plot_title="Error and Convergence (Per Entry)")
+    return pl
+    #=
     schroprob_10 = SchrodingerProb(tspan, 10, Q0, p, S, K, St, Kt, Sa, Ka)
     schroprob_20 = SchrodingerProb(tspan, 20, Q0, p, S, K, St, Kt, Sa, Ka)
     Qs_10 = eval_forward(schroprob_10, p)
@@ -397,28 +426,29 @@ function test1()
     diff_10 = Qs_10[:,:,:] - true_sol_ary
     diff_20 = Qs_20[:,:,1:2:end] - true_sol_ary
     println("Ratio of Q_20-Q* to Q_10-Q*")
-    display(diff_10 ./ diff_20)
-    #@infiltrate
+    ratio = (diff_10 ./ diff_20)
+    display(ratio)
+    return ratio
+    =#
 end
 
-#=
 """
 Testing convergence of infidelity
 """
 function test2()
     tspan = (0.0, 1.0)
-    n_steps = 10
-    dt_save = (tspan[2] - tspan[1])/n_steps
+    n_steps_ODEProblem = 10
+    dt_save = (tspan[2] - tspan[1])/n_steps_ODEProblem
 
-    Q0 = [1.0 0.0 0.0 0.0;
-          0.0 1.0 0.0 0.0;
-          0.0 0.0 1.0 0.0;
-          0.0 0.0 0.0 1.0]
+    Q0 = [1.0 0.0;
+          0.0 1.0;
+          0.0 0.0;
+          0.0 0.0]
     num_RHS = size(Q0, 2)
 
     p = 1.0
 
-    true_sol_ary = zeros(4,num_RHS,n_steps+1)
+    true_sol_ary = zeros(4,num_RHS,n_steps_ODEProblem+1)
     for i in 1:num_RHS
         Q0_col = Q0[:,i]
         ODE_prob = ODEProblem{true, SciMLBase.FullSpecialize}(schrodinger!, Q0_col, tspan, p) # Need this option for debug to work
@@ -440,10 +470,19 @@ function test2()
                0.0 0.0]
     Ka(t,a) = [0.0 cos(t);
                cos(t) 0.0]
+    schroprob = SchrodingerProb(tspan, 10, Q0, p, S, K, St, Kt, Sa, Ka)
 
-    schroprob_10 = SchrodingerProb(tspan, 10, Q0, p, S, K, St, Kt, Sa, Ka)
-    schroprob_20 = SchrodingerProb(tspan, 20, Q0, p, S, K, St, Kt, Sa, Ka)
-    infidelity_10 = calc_infidelity(schroprob_10, Q_target, p)
-    infidelity_20 = calc_infidelity(schroprob_20, Q_target, p)
+    N = 10
+    infidelity_ary = zeros(N)
+    nsteps = 2 .^ (1:N)
+    for i in 1:N
+        schroprob.n_timesteps = nsteps[i]
+        Q_disc = eval_forward(schroprob, p)
+        Q_final_disc = Q_disc[:,:,end]
+        infidelity_ary[i] = calc_infidelity(Q_final_disc, Q_target)
+    end
+    pl = plot(nsteps, infidelity_ary)
+    plot!(pl, xlabel="# Timesteps", ylabel="Infidelity")
+    #plot!(scale=:log10)
+    return pl
 end
-=#
