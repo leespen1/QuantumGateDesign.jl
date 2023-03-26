@@ -154,7 +154,7 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
     return Qs
 end
 
-function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target)
+function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target::Matrix{Float64})
     Qs = eval_forward(prob, newparam)
 
     t0 = prob.tspan[1]
@@ -162,6 +162,8 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target)
     N = prob.n_timesteps
     dt = (tf-t0)/N
     a = newparam
+
+    nrows, ncols = size(prob.u0)
 
     tn = NaN
 
@@ -484,5 +486,100 @@ function test2()
     pl = plot(nsteps, infidelity_ary)
     plot!(pl, xlabel="# Timesteps", ylabel="Infidelity")
     #plot!(scale=:log10)
+    return pl
+end
+
+"""
+Testing correctness of discrete adjoint gradient using discrete evolution as target
+"""
+function test3()
+    tspan = (0.0, 1.0)
+    Q0 = [1.0 0.0;
+          0.0 1.0;
+          0.0 0.0;
+          0.0 0.0]
+    num_RHS = size(Q0, 2)
+
+    S(t,a) = [0.0 0.0;
+               0.0 0.0]
+    K(t,a) = [0.0 a*cos(t);
+               a*cos(t) 1.0]
+    St(t,a) = [0.0 0.0;
+                 0.0 0.0]
+    Kt(t,a) = [0.0 -a*sin(t);
+               -a*sin(t) 0.0]
+    Sa(t,a) = [0.0 0.0;
+               0.0 0.0]
+    Ka(t,a) = [0.0 cos(t);
+               cos(t) 0.0]
+    p = 1.0
+    schroprob = SchrodingerProb(tspan, 10, Q0, p, S, K, St, Kt, Sa, Ka)
+    Qs = eval_forward(schroprob, p)
+    QN = Qs[:,:,end]
+
+    grad = discrete_adjoint(schroprob, p, QN)
+    println("Gradient (should be 0): $grad")
+end
+
+"""
+Testing correctness of discrete adjoint gradient by convergence of finite diffrence
+"""
+function test4()
+    tspan = (0.0, 1.0)
+    Q0 = [1.0 0.0;
+          0.0 1.0;
+          0.0 0.0;
+          0.0 0.0]
+    num_RHS = size(Q0, 2)
+
+    S(t,a) = [0.0 0.0;
+               0.0 0.0]
+    K(t,a) = [0.0 a*cos(t);
+               a*cos(t) 1.0]
+    St(t,a) = [0.0 0.0;
+                 0.0 0.0]
+    Kt(t,a) = [0.0 -a*sin(t);
+               -a*sin(t) 0.0]
+    Sa(t,a) = [0.0 0.0;
+               0.0 0.0]
+    Ka(t,a) = [0.0 cos(t);
+               cos(t) 0.0]
+    p = 1.0
+    schroprob = SchrodingerProb(tspan, 10, Q0, p, S, K, St, Kt, Sa, Ka)
+    Q_target = eval_forward(schroprob, p)[:,:,end]
+
+    grad_dis_adj = discrete_adjoint(schroprob, p, Q_target)
+
+    # Calculate gradient using finite difference method
+    da = 1e-5
+    QN_r = eval_forward(schroprob, p+da)[:,:,end]
+    QN_l = eval_forward(schroprob, p-da)[:,:,end]
+    infidelity_r = calc_infidelity(QN_r, Q_target)
+    infidelity_l = calc_infidelity(QN_l, Q_target)
+    grad_fin_dif = (infidelity_r - infidelity_l)/(2*da)
+
+    println("Gradients")
+    println("Finite Difference: $grad_fin_dif")
+    println("Discrete Adjoint:  $grad_dis_adj")
+
+    Nsamples = 7
+    grad_fin_dif_ary = zeros(Nsamples)
+    da_ary = zeros(Nsamples)
+    for i in 1:Nsamples
+        da = 10.0 ^ (-i)
+        da_ary[i] = da
+
+        QN_r = eval_forward(schroprob, p+da)[:,:,end]
+        QN_l = eval_forward(schroprob, p-da)[:,:,end]
+        infidelity_r = calc_infidelity(QN_r, Q_target)
+        infidelity_l = calc_infidelity(QN_l, Q_target)
+
+        grad_fin_dif = (infidelity_r - infidelity_l)/(2*da)
+        grad_fin_dif_ary[i] = abs((grad_fin_dif - grad_dis_adj)/grad_dis_adj)
+    end
+
+    pl = plot(da_ary, grad_fin_dif_ary)
+    plot!(pl, scale=:log10)
+
     return pl
 end
