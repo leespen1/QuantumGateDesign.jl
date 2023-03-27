@@ -277,90 +277,92 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target::Matr
 end
 
 
-function main(n_timesteps=100)
-    tspan = (0.0, 1.0)
-    Q0 = complex_to_real([1.0+1.0im, 1.0+1.0im])
-    Q0 = Q0 / norm(Q0)
+"""
+Modifying eval_forward for fair comparison
+"""
+function eval_forward_filon(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3}
+    t0 = prob.tspan[1]
+    tf = prob.tspan[2]
+    N = prob.n_timesteps
+    dt = (tf-t0)/N
+    a = newparam
 
-    p = 1.0
+    nrows, ncols = size(prob.u0)
 
-    ODE_prob = ODEProblem{true, SciMLBase.FullSpecialize}(schrodinger!, Q0, tspan, p) # Need this option for debug to work
-    data_solution = solve(ODE_prob, saveat=1, abstol=1e-10, reltol=1e-10)
-    # Convert solution to array
-    data = Array(data_solution)
-    Q_target = data[:,end]
+    tn = NaN
+    tnp1 = NaN # Initialize variable
 
-    S(t,a) = [0.0 0.0;
-               0.0 0.0]
-    K(t,a) = [0.0 a*cos(t);
-               a*cos(t) 1.0]
-    St(t,a) = [0.0 0.0;
-                 0.0 0.0]
-    Kt(t,a) = [0.0 -a*sin(t);
-               -a*sin(t) 0.0]
-    Sa(t,a) = [0.0 0.0;
-               0.0 0.0]
-    Ka(t,a) = [0.0 cos(t);
-               cos(t) 0.0]
+    order = 4
+    # Weights for Hermite-Rule
+    if (order == 2)
+        wn = [1,0] # Second Order
+        wnp1 = [1,0] # Second Order
+    elseif (order == 4)
+        wn = [1,0.5*dt*1/3] # Fourth Order
+        wnp1 = [1,-0.5*dt*1/3] # Fourth Order
+    end
 
-    schroprob = SchrodingerProb(tspan, n_timesteps, Q0, p, S, K, St, Kt, Sa, Ka)
+    # Is S_mat = prob.S(tnp1,a) allocating memory every time? If so, I need to put a stop to that
+    function lhs_action(prob::SchrodingerProb, Q::AbstractVector{Float64}, a::Float64)::Vector{Float64}
+        S_mat  = prob.S(tnp1,a)
+        St_mat = prob.St(tnp1,a)
+        K_mat  = prob.K(tnp1,a)
+        Kt_mat = prob.Kt(tnp1,a)
+        u = Q[1:2]
+        v = Q[3:4]
 
-    infidelity = calc_infidelity(schroprob, Q_target, p)
-    println("Infidelity: $infidelity")
-    return infidelity
+        ut, vt = compute_utvt(S_mat,K_mat,u,v)
+        utt, vtt = compute_uttvtt(S_mat,K_mat,u,v,St_mat,Kt_mat,ut,vt)
+
+        u = u .- 0.5*dt*(wnp1[1]*ut + wnp1[2]*utt) # Q = I + (1/2)Δt*M̃*Q
+        v = v .- 0.5*dt*(wnp1[1]*vt + wnp1[2]*vtt)
+
+        return vcat(u, v)
+    end
+
+    lhs_action_wrapper(Q) = lhs_action(prob, Q, a)
+    LHS = LinearMap(lhs_action_wrapper, 2*E)
+
+    function rhs_action(prob::SchrodingerProb, Q::Vector{Float64}, a::Float64)::Vector{Float64}
+        S_mat  = prob.S(tn,a)
+        St_mat = prob.St(tn,a)
+        K_mat  = prob.K(tn,a)
+        Kt_mat = prob.Kt(tn,a)
+        u = Q[1:2]
+        v = Q[3:4]
+
+        ut, vt = compute_utvt(S_mat,K_mat,u,v)
+        utt, vtt = compute_uttvtt(S_mat,K_mat,u,v,St_mat,Kt_mat,ut,vt)
+
+        u = u .+ 0.5*dt*(wn[1]*ut + wn[2]*utt) # Q = I + (1/2)Δt*M̃*Q
+        v = v .+ 0.5*dt*(wn[1]*vt + wn[2]*vtt)
+
+        return vcat(u, v)
+    end
+
+    Qs = zeros(nrows, ncols, N+1)
+    Qs[:,:,1+0] .= prob.u0
+    Q_col = zeros(nrows)
+    RHS_col = zeros(nrows)
+    num_RHS = ncols
+
+    # Forward eval, saving all points
+    # Perforrmance note, for 10 timestep method, 418 KiB of 423 allocated here! ()
+    @time for n in 0:N-1
+        tn = t0 + n*dt
+        tnp1 = t0 + (n+1)*dt
+
+        for i in num_RHS:-1:1
+            Q_col .= Qs[:,i,1+n]
+            RHS_col = rhs_action(prob, Q_col, a)
+            gmres!(Q_col, LHS, RHS_col, abstol=1e-15, reltol=1e-15)
+            Qs[:,i,1+n+1] .= Q_col
+        end
+    end
+    return Qs
 end
 
 
-function test_discrete_adjoint()
-    tspan = (0.0, 1.0)
-    n_steps = 10
-    dt_save = (tspan[2] - tspan[1])/n_steps
-
-    Q0 = [1.0 0.0 0.0 0.0;
-          0.0 1.0 0.0 0.0;
-          0.0 0.0 1.0 0.0;
-          0.0 0.0 0.0 1.0]
-    num_RHS = size(Q0, 2)
-
-    p = 1.0
-
-    true_sol_ary = zeros(4,num_RHS,n_steps+1)
-    for i in 1:num_RHS
-        Q0_col = Q0[:,i]
-        ODE_prob = ODEProblem{true, SciMLBase.FullSpecialize}(schrodinger!, Q0_col, tspan, p) # Need this option for debug to work
-        data_solution = solve(ODE_prob, saveat=dt_save, abstol=1e-10, reltol=1e-10)
-        data_solution_mat = Array(data_solution)
-        true_sol_ary[:,i,:] .= data_solution_mat
-    end
-
-    Q_target = true_sol_ary[:,:,end]
-
-    S(t,a) = [0.0 0.0;
-               0.0 0.0]
-    K(t,a) = [0.0 a*cos(t);
-               a*cos(t) 1.0]
-    St(t,a) = [0.0 0.0;
-                 0.0 0.0]
-    Kt(t,a) = [0.0 -a*sin(t);
-               -a*sin(t) 0.0]
-    Sa(t,a) = [0.0 0.0;
-               0.0 0.0]
-    Ka(t,a) = [0.0 cos(t);
-               cos(t) 0.0]
-
-    N = 10
-    gradients = zeros(N+1)
-    for i in 0:N
-        schroprob = SchrodingerProb(tspan, 2^i, Q0, p, S, K, St, Kt, Sa, Ka)
-        gradients[1+i] = discrete_adjoint(schroprob, p, Q_target)
-    end
-    ratios = zeros(N)
-    for i in 1:N
-        ratios[i] = log2(gradients[i] / gradients[i+1])
-    end
-    println("Gradients: $gradients")
-    println("Log2 Ratios: $ratios")
-end
 
 
 """
