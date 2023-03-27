@@ -102,7 +102,7 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
     tn = NaN
     tnp1 = NaN # Initialize variable
 
-    order = 2
+    order = 4
     # Weights for Hermite-Rule
     if (order == 2)
         wn = [1,0] # Second Order
@@ -185,7 +185,7 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target::Matr
 
     tn = NaN
 
-    order = 2
+    order = 4
     # Weights for Hermite-Rule
     if (order == 2)
         wn = [1,0]
@@ -548,7 +548,7 @@ end
 """
 Testing correctness of discrete adjoint gradient by convergence of finite diffrence
 """
-function test4()
+function test4(plot_err=true)
     tspan = (0.0, 1.0)
     Q0 = [1.0 0.0;
           0.0 1.0;
@@ -599,11 +599,21 @@ function test4()
         infidelity_l = calc_infidelity(QN_l, Q_target)
 
         grad_fin_dif = (infidelity_r - infidelity_l)/(2*da)
-        grad_fin_dif_ary[i] = abs((grad_fin_dif - grad_dis_adj)/grad_dis_adj)
+        if plot_err
+            grad_fin_dif_ary[i] = abs((grad_fin_dif - grad_dis_adj)/grad_dis_adj)
+        else
+            grad_fin_dif_ary[i] = grad_fin_dif
+        end
     end
 
     pl = plot(da_ary, grad_fin_dif_ary)
-    plot!(pl, scale=:log10)
+    plot!(pl, xlabel="dα")
+    if plot_err
+        plot!(ylabel="Relative Error in ∇")
+        plot!(pl, scale=:log10)
+    else
+        plot!(ylabel="Gradient (using Finite Difference)")
+    end
 
     return pl
 end
