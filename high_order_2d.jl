@@ -6,6 +6,18 @@ include("./auto_diff_example.jl")
 
 const E = 2 # Hardcoding number of essential energy levels for now
 
+#== To Do =====================================================================
+# - Test infidelity using hand-picked matrices
+# - Test discrete adjoint for 2nd order method
+# - Test discrete adjoint for 4th order method
+# - Add Filon Method, run comparisons (using similar structure should result in
+# comparable runtimes)
+# - Check memory allocation of methods (I suspect there is a lot in lhs/rhs_action)
+#
+# Note on performance, I think to have good performance I need all the matrix 
+# functions, and the actions in LHS/RHS, to be mutating. That'll take some work.
+== End To Do ================================================================#
+
 mutable struct SchrodingerProb
     tspan::Tuple{Float64, Float64}
     n_timesteps::Int64
@@ -74,7 +86,7 @@ end
 function calc_infidelity(QN::Matrix{Float64}, target::Matrix{Float64})::Float64
     R = copy(target)
     T = vcat(target[3:4,:], -target[1:2,:])
-    return 1 - (1/E^2)*(tr(QN'*R)^2 + tr(QN'*T)^2)^2
+    return 1 - (1/E^2)*(tr(QN'*R)^2 + tr(QN'*T)^2)
 end
 
 
@@ -90,9 +102,16 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
     tn = NaN
     tnp1 = NaN # Initialize variable
 
-    # Weights for fourth order Hermite-Rule
-    wnp1 = [1,-0.5*dt*1/3] # Fourth Order
-    #wnp1 = [1,0] # Second Order
+    order = 2
+    # Weights for Hermite-Rule
+    if (order == 2)
+        wn = [1,0] # Second Order
+        wnp1 = [1,0] # Second Order
+    elseif (order == 4)
+        wn = [1,0.5*dt*1/3] # Fourth Order
+        wnp1 = [1,-0.5*dt*1/3] # Fourth Order
+    end
+
     # Is S_mat = prob.S(tnp1,a) allocating memory every time? If so, I need to put a stop to that
     function lhs_action(prob::SchrodingerProb, Q::AbstractVector{Float64}, a::Float64)::Vector{Float64}
         S_mat  = prob.S(tnp1,a)
@@ -110,12 +129,10 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
 
         return vcat(u, v)
     end
+
     lhs_action_wrapper(Q) = lhs_action(prob, Q, a)
     LHS = LinearMap(lhs_action_wrapper, 2*E)
 
-    # Weights for fourth order Hermite-Rule
-    wn = [1,0.5*dt*1/3] # Fourth Order
-    #wn = [1,0] # Second Order
     function rhs_action(prob::SchrodingerProb, Q::Vector{Float64}, a::Float64)::Vector{Float64}
         S_mat  = prob.S(tn,a)
         St_mat = prob.St(tn,a)
@@ -140,7 +157,8 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
     num_RHS = ncols
 
     # Forward eval, saving all points
-    for n in 0:N-1
+    # Perforrmance note, for 10 timestep method, 418 KiB of 423 allocated here! ()
+    @time for n in 0:N-1
         tn = t0 + n*dt
         tnp1 = t0 + (n+1)*dt
 
@@ -167,9 +185,17 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target::Matr
 
     tn = NaN
 
-    # Weights for fourth order Hermite-Rule
-    wnp1 = [1,-0.5*dt*1/3] # Fourth Order
-    #wnp1 = [1,0] # Second Order
+    order = 2
+    # Weights for Hermite-Rule
+    if (order == 2)
+        wn = [1,0]
+        wnp1 = [1,0]
+    elseif (order == 4)
+        wn = [1,0.5*dt*1/3]
+        wnp1 = [1,-0.5*dt*1/3]
+    end
+
+
     function lhs_action(prob::SchrodingerProb, Q::AbstractVector{Float64}, a::Float64)::Vector{Float64}
         S_mat  = prob.S(tn,a)'
         St_mat = prob.St(tn,a)'
@@ -189,9 +215,6 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target::Matr
     lhs_action_wrapper(Q) = lhs_action(prob, Q, a)
     LHS = LinearMap(lhs_action_wrapper, 2*E)
 
-    # Weights for fourth order Hermite-Rule
-    wn = [1,0.5*dt*1/3] # Fourth Order
-    #wn = [1,0] # Second Order
     function rhs_action(prob::SchrodingerProb, Q::Vector{Float64}, a::Float64)::Vector{Float64}
         S_mat  = prob.S(tn,a)'
         St_mat = prob.St(tn,a)'
@@ -219,11 +242,12 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target::Matr
     T[3:4,:] .= -target[1:2,:]
     Λs = zeros(nrows, ncols, N+1)
 
-    terminal_RHS = (2/E^2)*( tr(QN'*R)*R + tr(QN'*T)*T )
-
     num_RHS = ncols
     Λ_col = zeros(nrows)
     RHS_col = zeros(nrows)
+
+    # Handle terminal condition
+    terminal_RHS = (2/E^2)*( tr(QN'*R)*R + tr(QN'*T)*T )
     for i in 1:num_RHS
         Λ_col .= QN[:,i]
         RHS_col .= terminal_RHS[:,i]
@@ -246,7 +270,7 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target::Matr
     for n in 0:N-1
         tn = t0 + n*dt
         tnp1 = t0 + (n+1)*dt
-        gradient += tr((Ma(tn, a)*Qs[:,:,1+n] + Ma(tnp1, a)*Qs[:,:,1+n])'*Λs[:,:,1+n+1])
+        gradient += tr((Ma(tn, a)*Qs[:,:,1+n] + Ma(tnp1, a)*Qs[:,:,1+n+1])'*Λs[:,:,1+n+1])
     end
     gradient *= -0.5*dt
     return gradient
@@ -399,7 +423,7 @@ function test1()
         Qs_next = eval_forward(schroprob, p)[:,:,1:nsteps[i]÷n_steps_ODEProblem:end]
         Q_diffs_next = (Qs_next - true_sol_ary)[:,:,2:end]
         Q_diffs_next = (Qs_next - true_sol_ary)[:,:,2:end] # Remove first entry, initial condition
-        ratios = log2.(Q_diffs_prev ./ Q_diffs_next)
+        ratios = log2.(abs.(Q_diffs_prev ./ Q_diffs_next))
         max_ratios[i-1] = max(ratios...)
         min_ratios[i-1] = min(ratios...)
         max_errors[i] = max(Q_diffs_next...)
