@@ -158,7 +158,7 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
 
     # Forward eval, saving all points
     # Perforrmance note, for 10 timestep method, 418 KiB of 423 allocated here! ()
-    @time for n in 0:N-1
+    for n in 0:N-1
         tn = t0 + n*dt
         tnp1 = t0 + (n+1)*dt
 
@@ -348,7 +348,7 @@ function eval_forward_filon(prob::SchrodingerProb, newparam::Float64)::Array{Flo
 
     # Forward eval, saving all points
     # Perforrmance note, for 10 timestep method, 418 KiB of 423 allocated here! ()
-    @time for n in 0:N-1
+    for n in 0:N-1
         tn = t0 + n*dt
         tnp1 = t0 + (n+1)*dt
 
