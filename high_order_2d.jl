@@ -373,10 +373,10 @@ function test1()
     n_steps_ODEProblem = 10
     dt_save = (tspan[2] - tspan[1])/n_steps_ODEProblem
 
-    Q0 = [1.0 0.0 0.0 0.0;
-          0.0 1.0 0.0 0.0;
-          0.0 0.0 1.0 0.0;
-          0.0 0.0 0.0 1.0]
+    Q0 = [1.0 0.0;
+          0.0 1.0;
+          0.0 0.0;
+          0.0 0.0]
     #Q0 = zeros(4,1)
     #Q0[2,1] = 1
     num_RHS = size(Q0, 2)
