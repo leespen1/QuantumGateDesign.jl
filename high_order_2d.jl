@@ -571,7 +571,7 @@ function test4(plot_err=true)
     Ka(t,a) = [0.0 cos(t);
                cos(t) 0.0]
     p = 1.0
-    schroprob = SchrodingerProb(tspan, 10, Q0, p, S, K, St, Kt, Sa, Ka)
+    schroprob = SchrodingerProb(tspan, 10000, Q0, p, S, K, St, Kt, Sa, Ka)
     Q_target = eval_forward(schroprob, p)[:,:,end]
 
     grad_dis_adj = discrete_adjoint(schroprob, p, Q_target)
@@ -602,7 +602,7 @@ function test4(plot_err=true)
 
         grad_fin_dif = (infidelity_r - infidelity_l)/(2*da)
         if plot_err
-            grad_fin_dif_ary[i] = abs((grad_fin_dif - grad_dis_adj)/grad_dis_adj)
+            grad_fin_dif_ary[i] = abs(grad_fin_dif - grad_dis_adj)
         else
             grad_fin_dif_ary[i] = grad_fin_dif
         end
@@ -611,7 +611,7 @@ function test4(plot_err=true)
     pl = plot(da_ary, grad_fin_dif_ary)
     plot!(pl, xlabel="dα")
     if plot_err
-        plot!(ylabel="Relative Error in ∇")
+        plot!(ylabel="Absolute Error in ∇")
         plot!(pl, scale=:log10)
     else
         plot!(ylabel="Gradient (using Finite Difference)")
