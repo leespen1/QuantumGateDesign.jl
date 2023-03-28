@@ -27,10 +27,11 @@ mutable struct SchrodingerProb
     K::Function
     St::Function
     Kt::Function
+    Stt::Function
+    Ktt::Function
     Sa::Function
     Ka::Function
     M::Function
-    Mt::Function
     Ma::Function
 end
 
@@ -47,14 +48,15 @@ function SchrodingerProb(
     K::Function,
     St::Function,
     Kt::Function,
+    Stt::Function,
+    Ktt::Function,
     Sa::Function,
     Ka::Function,
     )
 
     M(t,a) = [S(t,a) -K(t,a); K(t,a) S(t,a)]
-    Mt(t,a) = [St(t,a) -Kt(t,a); Kt(t,a) St(t,a)]
     Ma(t,a) = [Sa(t,a) -Ka(t,a); Ka(t,a) Sa(t,a)]
-    return SchrodingerProb(tspan, n_timesteps, u0, a, S, K, St, Kt, Sa, Ka, M, Mt, Ma)
+    return SchrodingerProb(tspan, n_timesteps, u0, a, S, K, St, Kt, Stt, Ktt, Sa, Ka, M, Ma)
 end
 
 function complex_to_real(A)
@@ -83,6 +85,20 @@ function compute_uttvtt(S::AbstractMatrix{Float64},K::AbstractMatrix{Float64},
 end
 
 
+function compute_utttvttt(S::AbstractMatrix{Float64},K::AbstractMatrix{Float64},
+        u::Vector{Float64},v::Vector{Float64},
+        St::AbstractMatrix{Float64},Kt::AbstractMatrix{Float64},
+        ut::Vector{Float64},vt::Vector{Float64},
+        Stt::AbstractMatrix{Float64},Ktt::AbstractMatrix{Float64},
+        utt::Vector{Float64},vtt::Vector{Float64}
+    )::Tuple{Vector{Float64},Vector{Float64}}
+
+    uttt = Stt*u + St*ut - Ktt*v - Kt*vt + St*ut + S*utt - Kt*vt - K*vtt
+    vttt = Ktt*u + Kt*ut + Stt*v + St*vt + Kt*ut + K*utt + St*vt + S*vtt
+    return uttt, vttt
+end
+
+
 function calc_infidelity(QN::Matrix{Float64}, target::Matrix{Float64})::Float64
     R = copy(target)
     T = vcat(target[3:4,:], -target[1:2,:])
@@ -90,7 +106,7 @@ function calc_infidelity(QN::Matrix{Float64}, target::Matrix{Float64})::Float64
 end
 
 
-function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3}
+function eval_forward(prob::SchrodingerProb, newparam::Float64; order::Int64=4)::Array{Float64,3}
     t0 = prob.tspan[1]
     tf = prob.tspan[2]
     N = prob.n_timesteps
@@ -102,30 +118,36 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
     tn = NaN
     tnp1 = NaN # Initialize variable
 
-    order = 4
-    # Weights for Hermite-Rule
+    # Determine Weights for Hermite-Rule
     if (order == 2)
-        wn = [1,0] # Second Order
-        wnp1 = [1,0] # Second Order
+        wn = [1,0,0] # Second Order
+        wnp1 = [1,0,0] # Second Order
     elseif (order == 4)
-        wn = [1,0.5*dt*1/3] # Fourth Order
-        wnp1 = [1,-0.5*dt*1/3] # Fourth Order
+        wn = [1,1/3,0] # Fourth Order
+        wnp1 = [1,-1/3,0] # Fourth Order
+    elseif (order == 6)
+        wn = [1, 2/5, 1/15]
+        wnp1 = [1, -2/5, 1/15]
     end
 
     # Is S_mat = prob.S(tnp1,a) allocating memory every time? If so, I need to put a stop to that
     function lhs_action(prob::SchrodingerProb, Q::AbstractVector{Float64}, a::Float64)::Vector{Float64}
         S_mat  = prob.S(tnp1,a)
         St_mat = prob.St(tnp1,a)
+        Stt_mat = prob.Stt(tnp1,a)
         K_mat  = prob.K(tnp1,a)
         Kt_mat = prob.Kt(tnp1,a)
+        Ktt_mat = prob.Ktt(tnp1,a)
         u = Q[1:2]
         v = Q[3:4]
 
         ut, vt = compute_utvt(S_mat,K_mat,u,v)
         utt, vtt = compute_uttvtt(S_mat,K_mat,u,v,St_mat,Kt_mat,ut,vt)
+        uttt, vttt = compute_utttvttt(S_mat,K_mat,u,v,St_mat,Kt_mat,ut,vt,Stt_mat,Ktt_mat,utt,vtt)
 
-        u = u .- 0.5*dt*(wnp1[1]*ut + wnp1[2]*utt) # Q = I + (1/2)Δt*M̃*Q
-        v = v .- 0.5*dt*(wnp1[1]*vt + wnp1[2]*vtt)
+        
+        u = u .- 0.5*dt*(wnp1[1]*ut + 0.5*dt*(wnp1[2]*utt + 0.5*dt*wnp1[3]*uttt)) # Q = I + (1/2)Δt*M̃*Q
+        v = v .- 0.5*dt*(wnp1[1]*vt + 0.5*dt*(wnp1[2]*vtt + 0.5*dt*wnp1[3]*vttt))
 
         return vcat(u, v)
     end
@@ -136,16 +158,19 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
     function rhs_action(prob::SchrodingerProb, Q::Vector{Float64}, a::Float64)::Vector{Float64}
         S_mat  = prob.S(tn,a)
         St_mat = prob.St(tn,a)
+        Stt_mat = prob.Stt(tn,a)
         K_mat  = prob.K(tn,a)
         Kt_mat = prob.Kt(tn,a)
+        Ktt_mat = prob.Ktt(tn,a)
         u = Q[1:2]
         v = Q[3:4]
 
         ut, vt = compute_utvt(S_mat,K_mat,u,v)
         utt, vtt = compute_uttvtt(S_mat,K_mat,u,v,St_mat,Kt_mat,ut,vt)
+        uttt, vttt = compute_utttvttt(S_mat,K_mat,u,v,St_mat,Kt_mat,ut,vt,Stt_mat,Ktt_mat,utt,vtt)
 
-        u = u .+ 0.5*dt*(wn[1]*ut + wn[2]*utt) # Q = I + (1/2)Δt*M̃*Q
-        v = v .+ 0.5*dt*(wn[1]*vt + wn[2]*vtt)
+        u = u .+ 0.5*dt*(wn[1]*ut + 0.5*dt*(wn[2]*utt + 0.5*dt*wn[3]*uttt)) # Q = I + (1/2)Δt*M̃*Q
+        v = v .+ 0.5*dt*(wn[1]*vt + 0.5*dt*(wn[2]*vtt + 0.5*dt*wn[3]*vttt))
 
         return vcat(u, v)
     end
@@ -172,7 +197,7 @@ function eval_forward(prob::SchrodingerProb, newparam::Float64)::Array{Float64,3
     return Qs
 end
 
-function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target::Matrix{Float64})
+function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target::Matrix{Float64}; order::Int64=4)::Float64
     Qs = eval_forward(prob, newparam)
 
     t0 = prob.tspan[1]
@@ -185,7 +210,6 @@ function discrete_adjoint(prob::SchrodingerProb, newparam::Float64, target::Matr
 
     tn = NaN
 
-    order = 4
     # Weights for Hermite-Rule
     if (order == 2)
         wn = [1,0]
