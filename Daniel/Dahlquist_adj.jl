@@ -42,6 +42,7 @@ function z_by_Euler(a::Real,dt::Real,N::Int)
     
 end
 
+h = 1e-8
 
 T = 1.0
 b = 2.0
@@ -51,6 +52,7 @@ J(x) = 0.5*(y_exact(b,T)-y_ex(x))^2
 
 println("Exact gradient = ",gradient_exact(a,b,T))
 println("FD/AD gradient = ",ForwardDiff.derivative(J, a))
+println("Fin.D gradient = ",(J(a+h)-J(a-h))/(2*h))
 
 Nt = 1000
 dt = T/Nt
@@ -64,4 +66,5 @@ EDG = -(y_disc_final - y_by_E(a))*z_by_Euler(a,dt,Nt)
 
 println("FD/AD discrete gradient = ",ForwardDiff.derivative(K, a))
 println("Exact discrete gradient = ",EDG)
+println("Fin.D discrete gradient = ",(K(a+h)-K(a-h))/(2*h))
 
