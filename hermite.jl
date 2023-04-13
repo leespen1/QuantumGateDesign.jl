@@ -127,17 +127,7 @@ function eval_forward(prob::SchrodingerProb, α)
     return uv_history
 end
 
-function pi_pulse(Ω::ComplexF64=1.0+0.0im)
-    #Ks::Matrix{Float64} = [0 0; 0 1]
-    Ks::Matrix{Float64} = [0 0; 0 0] # Rotating frame
-    Ss::Matrix{Float64} = [0 0; 0 0]
-    a_plus_adag::Matrix{Float64} = [0 1; 1 0]
-    a_minus_adag::Matrix{Float64} = [0 1; -1 0]
-    p(t,α) = real(Ω)
-    q(t,α) = imag(Ω)
-    u0::Vector{Float64} = [1,0]
-    v0::Vector{Float64} = [0,0]
-    tf::Float64 = pi/(2*abs(Ω))
-    nsteps::Int64 = 100
-    return SchrodingerProb(Ks,Ss,a_plus_adag,a_minus_adag,p,q,u0,v0,tf,nsteps)
-end
+
+
+
+
