@@ -69,7 +69,7 @@ end
 
 
 
-function eval_forward(prob::SchrodingerProb, α)
+function eval_forward(prob::SchrodingerProb, α=missing)
     Ks = prob.Ks
     Ss = prob.Ss
     a_plus_adag = prob.a_plus_adag
