@@ -9,12 +9,19 @@ mutable struct SchrodingerProb
     a_minus_adag::Matrix{Float64} # a - a^†
     p::Function
     q::Function
+    dpdt::Function
+    dqdt::Function
     u0::Vector{Float64}
     v0::Vector{Float64}
     tf::Float64
     nsteps::Int64
 end
 
+function SchrodingerProb(Ks,Ss,a_plus_adag,a_minus_adag,p,q,u0,v0,tf,nsteps)
+    dpdt(t,a) = nothing
+    dqdt(t,a) = nothing
+    return SchrodingerProb(Ks,Ss,a_plus_adag,a_minus_adag,p,q, dpdt, dqdt, u0,v0,tf,nsteps)
+end
 
 
 function utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
@@ -24,17 +31,6 @@ function utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
     #Calculates the matrix-matrix or matrix-vector product AB and stores the result in Y, overwriting the existing value of Y. Note that Y must not be aliased with either A or B.
     #mul!(C, A, B, α, β) -> C
     #Combined inplace matrix-matrix or matrix-vector multiply-add A B α + C β. The result is stored in C by overwriting it. Note that C must not be aliased with either A or B.
-    
-    ## Memory Allocating Version
-    #ut = Ss*u
-    #ut += q(t,α)*a_minus_adag*u
-    #ut -= Ks*a_plus_adag*u
-    #ut -= p(t,α)*a_plus_adag*u
-
-    #vt = Ss*v
-    #vt += q(t,α)*a_minus_adag*v
-    #vt += Ks*a_plus_adag*v
-    #vt += p(t,α)*a_plus_adag*v
     
     # Non-Memory-Allocating Version (test performance)
     # ut = (Ss + q(t)(a-a†))u - (Ks + p(t)(a+a†))v
@@ -50,6 +46,27 @@ function utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
     mul!(vt, a_plus_adag, u, p(t,α), 1)
 end
 
+function uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, dpdt, dqdt, t, α)
+    ## Make use of utvt!
+    utvt!(utt, vtt, ut, vt, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
+    ## Replicate utvt! explicitly 
+    #mul!(utt, Ss, ut)
+    #mul!(utt, a_minus_adag, ut, q(t,α), 1)
+    #mul!(utt, Ks, vt, -1, 1)
+    #mul!(utt, a_plus_adag, vt, -p(t,α), 1)
+
+    mul!(utt, a_minus_adag, u, dqdt(t,α), 1)
+    mul!(utt, a_plus_adag, v, -dpdt(t,α), 1)
+
+    ### Replicate utvt! explicitly 
+    #mul!(vtt, Ss, vt)
+    #mul!(vtt, a_minus_adag, vt, q(t,α), 1)
+    #mul!(vtt, Ks, ut, 1, 1)
+    #mul!(vtt, a_plus_adag, ut, p(t,α), 1)
+
+    mul!(vtt, a_minus_adag, v, dqdt(t,α), 1)
+    mul!(vtt, a_plus_adag, u, dpdt(t,α), 1)
+end
 
 
 function LHS_func(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α, dt)
@@ -67,15 +84,40 @@ function LHS_func(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α, 
     return LHS_uv
 end
 
+function LHS_func_order4(utt, vtt, ut, vt, u, v,
+        Ks, Ss, a_plus_adag, a_minus_adag,
+        p, q, dpdt, dqdt, t, α, dt)
+
+    utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
+    uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, dpdt, dqdt, t, α)
+
+    weights = [1,-1/3]
+    
+    LHSu = copy(u)
+    axpy!(-0.5*dt*weights[1],ut,LHSu)
+    axpy!(-0.25*dt^2*weights[2],utt,LHSu)
+    LHSv = copy(v)
+    axpy!(-0.5*dt*weights[1],vt,LHSv)
+    axpy!(-0.25*dt^2*weights[2],vtt,LHSv)
+
+    LHS_uv = zeros(4)
+    copyto!(LHS_uv,1,LHSu,1,2)
+    copyto!(LHS_uv,3,LHSv,1,2)
+
+    return LHS_uv
+end
 
 
-function eval_forward(prob::SchrodingerProb, α=missing)
+
+function eval_forward(prob::SchrodingerProb, α=missing; order=2)
     Ks = prob.Ks
     Ss = prob.Ss
     a_plus_adag = prob.a_plus_adag
     a_minus_adag = prob.a_minus_adag
     p = prob.p
     q = prob.q
+    dpdt = prob.dpdt
+    dqdt = prob.dqdt
     u0 = prob.u0
     v0 = prob.v0
     tf = prob.tf
@@ -95,37 +137,88 @@ function eval_forward(prob::SchrodingerProb, α=missing)
     RHSv::Vector{Float64} = zeros(2)
     RHS_uv::Vector{Float64} = zeros(4)
 
-    u = copy(u0)
-    v = copy(v0)
-    ut = zeros(2)
-    vt = zeros(2)
+    if order == 2
+        u = copy(u0)
+        v = copy(v0)
+        ut = zeros(2)
+        vt = zeros(2)
 
-    for i in 1:nsteps
-        utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
-        copy!(RHSu,u)
-        axpy!(0.5*dt,ut,RHSu)
+        for i in 1:nsteps
+            utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
+            copy!(RHSu,u)
+            axpy!(0.5*dt,ut,RHSu)
 
-        copy!(RHSv,v)
-        axpy!(0.5*dt,vt,RHSv)
+            copy!(RHSv,v)
+            axpy!(0.5*dt,vt,RHSv)
 
-        copyto!(RHS_uv,1,RHSu,1,2)
-        copyto!(RHS_uv,3,RHSv,1,2)
+            copyto!(RHS_uv,1,RHSu,1,2)
+            copyto!(RHS_uv,3,RHSv,1,2)
 
-        t += dt
+            t += dt
 
-        LHS_map = LinearMap(
-            uv -> LHS_func(ut, vt, uv[1:2], uv[3:4], Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α, dt),
-            4,4
-        )
+            LHS_map = LinearMap(
+                uv -> LHS_func(ut, vt, uv[1:2], uv[3:4],
+                               Ks, Ss, a_plus_adag, a_minus_adag,
+                               p, q, t, α, dt),
+                4,4
+            )
 
-        gmres!(uv, LHS_map, RHS_uv)
-        uv_history[:,1+i] .= uv
-        u = uv[1:2]
-        v = uv[3:4]
+            gmres!(uv, LHS_map, RHS_uv, abstol=1e-15, reltol=1e-15)
+            uv_history[:,1+i] .= uv
+            u = uv[1:2]
+            v = uv[3:4]
+        end
+    else
+        # Order 4
+        println("4th Order")
+        u = copy(u0)
+        v = copy(v0)
+        ut = zeros(2)
+        vt = zeros(2)
+        utt = zeros(2)
+        vtt = zeros(2)
+
+        for i in 1:nsteps
+            utvt!(ut, vt, u, v,
+                  Ks, Ss, a_plus_adag, a_minus_adag,
+                  p, q, t, α)
+            uttvtt!(utt, vtt, ut, vt, u, v,
+                    Ks, Ss, a_plus_adag, a_minus_adag,
+                    p, q, dpdt, dqdt, t, α)
+
+            weights = [1,1/3]
+            copy!(RHSu,u)
+            axpy!(0.5*dt*weights[1],ut,RHSu)
+            axpy!(0.25*dt^2*weights[2],utt,RHSu)
+
+            copy!(RHSv,v)
+            axpy!(0.5*dt*weights[1],vt,RHSv)
+            axpy!(0.25*dt^2*weights[2],vtt,RHSv)
+
+            copyto!(RHS_uv,1,RHSu,1,2)
+            copyto!(RHS_uv,3,RHSv,1,2)
+
+            t += dt
+
+            LHS_map = LinearMap(
+                uv -> LHS_func_order4(utt, vtt, ut, vt, uv[1:2], uv[3:4],
+                                      Ks, Ss, a_plus_adag, a_minus_adag,
+                                      p, q, dpdt, dqdt, t, α, dt),
+                4,4
+            )
+
+            gmres!(uv, LHS_map, RHS_uv)
+            uv_history[:,1+i] .= uv
+            u = uv[1:2]
+            v = uv[3:4]
+        end
+
+
     end
-
     return uv_history
 end
+
+
 
 
 

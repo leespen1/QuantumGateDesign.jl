@@ -1,4 +1,5 @@
 include("../src/hermite.jl")
+using Plots
 
 function this_prob(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
     Ks::Matrix{Float64} = [0 0; 0 1]
@@ -7,9 +8,11 @@ function this_prob(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
     a_minus_adag::Matrix{Float64} = [0 1; -1 0]
     p(t,α) = α*cos(ω*t)
     q(t,α) = 0.0
+    dpdt(t,α) = -α*ω*sin(ω*t)
+    dqdt(t,α) = 0.0
     u0::Vector{Float64} = [1,0]
     v0::Vector{Float64} = [0,0]
-    return SchrodingerProb(Ks,Ss,a_plus_adag,a_minus_adag,p,q,u0,v0,tf,nsteps)
+    return SchrodingerProb(Ks,Ss,a_plus_adag,a_minus_adag,p,q,dpdt,dqdt,u0,v0,tf,nsteps)
 end
 
 
@@ -34,31 +37,31 @@ function this_prob_grad(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
 end
 =#
 
-function convergence_test!(prob::SchrodingerProb, α=1.0)
+function convergence_test(α=1.0; order=2)
 
-    prob.nsteps = 200
-    history200 = eval_forward(prob, α)
-    # Change stride to match 100 timestep result
-    history200 = history200[:,1:2:end]
-    prob.nsteps = 100
-    prob100 = this_prob(nsteps=100)
-    history100 = eval_forward(prob100, α)
+    # MAKES SURE TIMESTEPS ARE SMALL ENOUGH THAT SOLUTION ISNT OVERRESOLVED
+    prob20 = this_prob(nsteps=20)
+    history20 = eval_forward(prob20, α, order=order)
+    # Change stride to match coarse timestep result
+    history20 = history20[:,1:2:end]
+    prob10 = this_prob(nsteps=10)
+    history10 = eval_forward(prob10, α, order=order)
 
-    # Use 10000 timesteps for "true solution"
-    prob10000 = this_prob(nsteps=10000)
-    history_true = eval_forward(prob10000, α)
+    # Use 1000 timesteps for "true solution"
+    prob1000 = this_prob(nsteps=1000)
+    history_true = eval_forward(prob1000, α, order=order)
     history_true = history_true[:,1:100:end]
 
-    error100 = abs.(history_true - history100)
-    error200 = abs.(history_true - history200)
+    error10 = abs.(history_true - history10)
+    error20 = abs.(history_true - history20)
 
-    log_ratio = log2.(error100 ./ error200)
-    println("Log₂ of error ratio between 100 step and 200 step methods")
+    log_ratio = log2.(error10 ./ error20)
+    println("Log₂ of error ratio between 10 step and 20 step methods")
     println("(Analytic solution used for 'true' value)")
 
 
     display(log_ratio)
-    return log_ratio, error100, error200
+    return log_ratio, error10, error20
 end
 
 function finite_difference(prob, α, target, dα=1e-5)
@@ -98,7 +101,7 @@ function eval_forward_grad_mat(target, α=1.0; nsteps=100)
     0.0 cos(t) 0.0 0.0     0.0 a*cos(t) 0.0 0.0  
     cos(t) 0.0 0.0 0.0     a*cos(t) 1.0 0.0 0.0  
     ]
-    for n in 0:prob.nsteps-1
+    for n in 0:nsteps-1
         tn = n*dt
         tnp1 = (n+1)*dt
         u = (I - 0.5*dt*M(tnp1, α)) \ (u + 0.5*dt*M(tn,α)*u)
@@ -113,6 +116,62 @@ function eval_forward_grad_mat(target, α=1.0; nsteps=100)
     grad_gargamel = -0.5*((Q'*R)*(dQda'*R) + (Q'*T)*(dQda'*T))
     return grad_gargamel
 end
+
+
+function figures()
+    prob = this_prob()
+    α = 1.0
+    history = eval_forward(prob, α)
+    target = history[:,end]
+
+    N = 100
+    alphas = LinRange(0,2,N)
+    grads_fd = zeros(N)
+    grads_diff = zeros(N)
+    for i in 1:N
+        α = alphas[i]
+        grads_fd[i] = finite_difference(prob, α, target)
+        grads_diff[i] = eval_forward_grad_mat(target, α)
+    end
+    return alphas, grads_fd, grads_diff 
+end
+
+
+function figure2!(prob::SchrodingerProb, α=1.0; order=2)
+    N = 5
+    final_states = zeros(4,N)
+    base = 2
+    for i in 1:N
+        prob.nsteps = base^i
+        history = eval_forward(prob, α, order=order)
+        final_states[:,i] = history[:,end]
+    end
+    prob.nsteps = base^(N+1)
+    history = eval_forward(prob, α, order=order)
+    final_state_fine = history[:,end]
+
+    step_sizes = zeros(N)
+    for i in 1:N
+        step_sizes[i] = prob.tf / (base^i)
+    end
+    sol_errs = [norm(final_states[:,i] - final_state_fine) for i in 1:N]
+    infidelities = [infidelity(final_states[:,i],final_state_fine) for i in 1:N]
+   
+    return step_sizes, sol_errs, infidelities
+end
+
+function plot_figure2(step_sizes, sol_errs, infidelities)
+    pl = plot(step_sizes, abs.(sol_errs), linewidth=2, marker=:circle, label="Error", scale=:log10)
+    plot!(step_sizes, abs.(infidelities), linewidth=2, marker=:circle, label="Infidelities")
+    plot!(step_sizes, step_sizes .^ 2, label="Δt^2", linestyle=:dash)
+    plot!(step_sizes, step_sizes .^ 4, label="Δt^4", linestyle=:dash)
+    plot!(step_sizes, step_sizes .^ 6, label="Δt^6", linestyle=:dash)
+    plot!(legendfontsize=14,guidefontsize=14,tickfontsize=14)
+    plot!(legend=:bottomright)
+    plot!(xlabel="Δt")
+    return pl
+end
+
 
 
 #=
@@ -171,3 +230,4 @@ function eval_grad_fwd(target, α=1.0; ω::Float64=1.0)
     return gradient
 end
 =#
+
