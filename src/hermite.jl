@@ -129,5 +129,179 @@ end
 
 
 
+"""
+Evolve schrodinger problem with forcing applied, and forcing given as an array
+of forces at each discretized point in time.
+
+Maybe I should also do a one with forcing functions as well.
+"""
+function eval_forward_forced(prob::SchrodingerProb, forcing_mat::Matrix{Float64}, α=missing)
+    Ks = prob.Ks
+    Ss = prob.Ss
+    a_plus_adag = prob.a_plus_adag
+    a_minus_adag = prob.a_minus_adag
+    p = prob.p
+    q = prob.q
+    u0 = prob.u0
+    v0 = prob.v0
+    tf = prob.tf
+    nsteps = prob.nsteps
+
+    t = 0
+    dt = tf/nsteps
 
 
+    uv = zeros(4)
+    copyto!(uv,1,u0,1,2)
+    copyto!(uv,3,v0,1,2)
+    uv_history = Matrix{Float64}(undef,4,1+nsteps)
+    uv_history[:,1] .= uv
+
+    RHSu::Vector{Float64} = zeros(2)
+    RHSv::Vector{Float64} = zeros(2)
+    RHS_uv::Vector{Float64} = zeros(4)
+
+    u = copy(u0)
+    v = copy(v0)
+    ut = zeros(2)
+    vt = zeros(2)
+
+    for i in 1:nsteps
+        utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
+        copy!(RHSu,u)
+        axpy!(0.5*dt,ut,RHSu)
+
+        copy!(RHSv,v)
+        axpy!(0.5*dt,vt,RHSv)
+
+        copyto!(RHS_uv,1,RHSu,1,2)
+        copyto!(RHS_uv,3,RHSv,1,2)
+
+        # Apply forcing (trapezoidal rule on forcing, is explicit)
+        axpy!(0.5*dt,forcing_mat[:,i], RHS_uv)
+        axpy!(0.5*dt,forcing_mat[:,i+1], RHS_uv)
+
+        t += dt
+
+        LHS_map = LinearMap(
+            uv -> LHS_func(ut, vt, uv[1:2], uv[3:4], Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α, dt),
+            4,4
+        )
+
+        gmres!(uv, LHS_map, RHS_uv)
+        uv_history[:,1+i] .= uv
+        u = uv[1:2]
+        v = uv[3:4]
+    end
+
+    return uv_history
+end
+
+
+
+function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpdt, dqdt, α=missing)
+    R = target[:]
+    T = vcat(R[3:4], -R[1:2])
+    
+    # Get state vector history
+    history = eval_forward(prob, α)
+
+    Ks = prob.Ks
+    Ss = prob.Ss
+    a_plus_adag = prob.a_plus_adag
+    a_minus_adag = prob.a_minus_adag
+    p = prob.p
+    q = prob.q
+    u0 = prob.u0
+    v0 = prob.v0
+    tf = prob.tf
+    nsteps = prob.nsteps
+
+    # For adjoint evolution, need transposes 
+    Ks_t = Matrix(transpose(Ks))
+    Ss_t = Matrix(transpose(Ss))
+    a_plus_adag_t = Matrix(transpose(a_plus_adag))
+    a_minus_adag_t = Matrix(transpose(a_minus_adag))
+    
+    dt = tf/nsteps
+
+
+    lambda = zeros(4)
+    lambda_history = zeros(4,1+nsteps)
+    ut = zeros(2)
+    vt = zeros(2)
+
+    # Terminal Condition
+    t = tf
+    LHS_map = LinearMap(
+        x -> LHS_func(ut, vt, x[1:2], x[3:4], Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t, p, q, t, α, dt),
+        4,4
+    )
+    RHS = dot(history[:,end],R)*R + dot(history[:,end],T)*T
+    gmres!(lambda, LHS_map, RHS)
+
+    lambda_history[:,1+nsteps] .= lambda
+    u = copy(lambda[1:2])
+    v = copy(lambda[3:4])
+    
+
+    RHSu::Vector{Float64} = zeros(2)
+    RHSv::Vector{Float64} = zeros(2)
+    RHS::Vector{Float64} = zeros(4)
+
+
+    t = tf - dt
+    # Discrete Adjoint Scheme
+    for i in nsteps-1:-1:1
+        utvt!(ut, vt, u, v, Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t, p, q, t, α)
+        copy!(RHSu,u)
+        axpy!(0.5*dt,ut,RHSu)
+
+        copy!(RHSv,v)
+        axpy!(0.5*dt,vt,RHSv)
+
+        copyto!(RHS,1,RHSu,1,2)
+        copyto!(RHS,3,RHSv,1,2)
+
+        # NOTE: LHS and RHS Linear transformations use the SAME TIME
+
+        LHS_map = LinearMap(
+            x -> LHS_func(ut, vt, x[1:2], x[3:4], Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t, p, q, t, α, dt),
+            4,4
+        )
+
+        gmres!(lambda, LHS_map, RHS)
+        lambda_history[:,1+i] .= lambda
+        u = lambda[1:2]
+        v = lambda[3:4]
+        t -= dt
+    end
+
+    grad = 0.0
+    zero_mat = zeros(2,2)
+    uv = zeros(4)
+    for n in 0:nsteps-1
+        u = history[1:2,1+n]
+        v = history[3:4,1+n]
+        # Note that system matrices go to zero
+        utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpdt, dqdt, t, α)
+        grad += dot(vcat(ut,vt), lambda_history[:,1+n+1])
+
+        u = history[1:2,1+n+1]
+        v = history[3:4,1+n+1]
+        # Note that system matrices go to zero
+        utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpdt, dqdt, t, α)
+        grad += dot(vcat(ut,vt), lambda_history[:,1+n+1])
+    end
+    grad *= -0.5*dt
+
+    return lambda_history, grad
+
+end
+
+
+function infidelity(ψ::Vector{Float64}, target::Vector{Float64})
+    R = copy(target)
+    T = vcat(R[3:4], -R[1:2])
+    return 1 - (dot(ψ,R)^2 + dot(ψ,T)^2)
+end

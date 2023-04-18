@@ -1,3 +1,9 @@
+include("../src/hermite.jl")
+
+"""
+Construct a 'SchrodingerProb' corresponding to a Rabi Oscillator, with default
+time corresponding to a pi/2 pulse.
+"""
 function rabi_osc(Ω::ComplexF64=1.0+0.0im, tf::Float64=NaN; nsteps::Int64=100)
     #Ks::Matrix{Float64} = [0 0; 0 1]
     Ks::Matrix{Float64} = [0 0; 0 0] # Rotating frame
@@ -13,6 +19,27 @@ function rabi_osc(Ω::ComplexF64=1.0+0.0im, tf::Float64=NaN; nsteps::Int64=100)
         tf = pi/(2*abs(Ω))
     end
     return SchrodingerProb(Ks,Ss,a_plus_adag,a_minus_adag,p,q,u0,v0,tf,nsteps)
+end
+
+
+"""
+Evolve intitial condition according to rabi oscillation H_c = Ωa + Ω̄a† (in rotating frame).
+Input initial condition is *real-valued*, with the first half of the vector
+being the real part and the second half being the negative imaginary part.
+Output is *real-valued*, in the same representation. 
+
+Assumed to be 2-level system.
+"""
+function analytic_rabi(Ω::ComplexF64,t::Float64,ψ0::Vector{Float64})
+    @assert length(ψ0) == 4
+    ψ0_complex = ψ0[1+0:1+1] - im*ψ0[1+2:1+3]
+    r = abs(Ω)
+    θ = angle(Ω)
+    ψt_0 = cos(r*t)ψ0[1+0] + (sin(θ) - im*cos(θ)*sin(r*t))ψ0[1+1]
+    ψt_1 = -(sin(θ) + im*cos(θ)*sin(r*t))ψ0[1+0] + cos(r*t)ψ0[1+1] 
+
+    ψt_real = [real(ψt_0), real(ψt_1), -imag(ψt_0), -imag(ψt_1)]
+    return ψt_real
 end
 
 
@@ -56,27 +83,7 @@ function rabi_convergence_test(Ω::ComplexF64=1.0+0.0im; α=missing, analytic=tr
         println("(10000 steps used for true value)")
     end
 
+
     display(log_ratio)
-    return log_ratio
+    return log_ratio, error100, error200
 end
-
-"""
-Evolve intitial condition according to rabi oscillation H_c = Ωa + Ω̄a† (in rotating frame).
-Input initial condition is *real-valued*, with the first half of the vector
-being the real part and the second half being the negative imaginary part.
-Output is *real-valued*, in the same representation. 
-
-Assumed to be 2-level system.
-"""
-function analytic_rabi(Ω::ComplexF64,t::Float64,ψ0::Vector{Float64})
-    @assert length(ψ0) == 4
-    ψ0_complex = ψ0[1+0:1+1] - im*ψ0[1+2:1+3]
-    r = abs(Ω)
-    θ = angle(Ω)
-    ψt_0 = cos(r*t)ψ0[1+0] + (sin(θ) - im*cos(θ)*sin(r*t))ψ0[1+1]
-    ψt_1 = -(sin(θ) + im*cos(θ)*sin(r*t))ψ0[1+0] + cos(r*t)ψ0[1+1] 
-
-    ψt_real = [real(ψt_0), real(ψt_1), -imag(ψt_0), -imag(ψt_1)]
-    return ψt_real
-end
-
