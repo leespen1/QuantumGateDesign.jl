@@ -441,27 +441,20 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpda, 
     return grad
 end
 
-"""
-Evaluate gradient using differentiated/forced method approach.
-Use forward diff for calculating gradients.
-"""
-function eval_grad_auto_forced(prob::SchrodingerProb, target, α=1.0)
+
+
+function eval_grad_forced(prob, target, dpda, dqda, α=1.0)
     # Get state vector history
     history = eval_forward(prob, α)
 
     ## Prepare forcing (-idH/dα ψ)
     # Prepare dH/dα
     
-    # 
+    # System hamiltonian is constant, falls out when taking derivative
     Ks::Matrix{Float64} = zeros(2,2)
     Ss::Matrix{Float64} = zeros(2,2)
     a_plus_adag = prob.a_plus_adag
     a_minus_adag = prob.a_minus_adag
-    # dp/dα and dq/dα using auto (forward) differentiation
-    p_wrapped(t_a_vec) = prob.p(t_a_vec[1], t_a_vec[2])
-    q_wrapped(t_a_vec) = prob.q(t_a_vec[1], t_a_vec[2])
-    dpda(t,α) = ForwardDiff.gradient(p_wrapped, [t,α])[2]
-    dqda(t,α) = ForwardDiff.gradient(q_wrapped, [t,α])[2]
 
     forcing_mat = zeros(4,1+prob.nsteps)
     forcing_vec = zeros(4)
@@ -489,7 +482,6 @@ function eval_grad_auto_forced(prob::SchrodingerProb, target, α=1.0)
         t += dt
     end
 
-
     differentiated_prob = copy(prob) 
     # Get history of dψ/dα
     # Initial conditions for dψ/dα
@@ -505,6 +497,22 @@ function eval_grad_auto_forced(prob::SchrodingerProb, target, α=1.0)
 
     gradient = -2*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
     return gradient
+end
+
+
+
+"""
+Evaluate gradient using differentiated/forced method approach.
+Use forward diff for calculating gradients.
+"""
+function eval_grad_auto_forced(prob::SchrodingerProb, target, α=1.0)
+    # dp/dα and dq/dα using auto (forward) differentiation
+    p_wrapped(t_a_vec) = prob.p(t_a_vec[1], t_a_vec[2])
+    q_wrapped(t_a_vec) = prob.q(t_a_vec[1], t_a_vec[2])
+    dpda(t,α) = ForwardDiff.gradient(p_wrapped, [t,α])[2]
+    dqda(t,α) = ForwardDiff.gradient(q_wrapped, [t,α])[2]
+
+    return eval_grad_forced(prob, target, dpda, dqda, α)
 end
 
 

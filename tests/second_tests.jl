@@ -133,30 +133,31 @@ function figure1()
     target = history[:,end]
 
     dpda(t,a) = cos(t)
-    dqda(t,a) = cos(t)
+    dqda(t,a) = 0.0
 
     N = 100
     alphas = LinRange(0,2,N)
     grads_fd = zeros(N)
-    grads_diff_mat = zeros(N)
+    #grads_diff_mat = zeros(N)
     grads_diff_forced = zeros(N)
     grads_diff_auto_forced = zeros(N)
     grads_da = zeros(N)
     for i in 1:N
         α = alphas[i]
         grads_fd[i] = finite_difference(prob, α, target)
-        grads_diff_mat[i] = eval_forward_grad_mat(target, α)
-        grads_diff_forced[i] = eval_grad_forced(target, α)
+        #grads_diff_mat[i] = eval_forward_grad_mat(target, α)
+        grads_diff_forced[i] = eval_grad_forced(prob, target, dpda, dqda, α)
         grads_diff_auto_forced[i] = eval_grad_auto_forced(prob, target, α)
         grads_da[i] = discrete_adjoint(prob, target, dpda, dqda, α)
     end
-    return alphas, grads_fd, grads_diff_mat, grads_diff_forced, grads_diff_auto_forced, grads_da
+    #return alphas, grads_fd, grads_diff_mat, grads_diff_forced, grads_diff_auto_forced, grads_da
+    return alphas, grads_fd, grads_diff_forced, grads_diff_auto_forced, grads_da
 end
 
-function plot_figure1(alphas, grads_fd, grads_diff_mat, grads_diff_forced, grads_diff_auto_forced, grads_da)
+function plot_figure1(alphas, grads_fd, grads_diff_forced, grads_diff_auto_forced, grads_da)
     # If all the gradients are working, this graph won't be much use
     pl1 = plot(alphas, grads_fd, label="Finite Difference", lw=2)
-    plot!(pl1, alphas, grads_diff_mat, label="Differentiation (Matrix)", lw=2)
+    #plot!(pl1, alphas, grads_diff_mat, label="Differentiation (Matrix)", lw=2)
     plot!(pl1, alphas, grads_diff_forced, label="Differentiation (Forced)", lw=2)
     plot!(pl1, alphas, grads_diff_auto_forced, label="Differentiation (Auto Forced)", lw=2)
     plot!(pl1, alphas, grads_da, label="Discrete Adjoint", lw=2)
@@ -166,11 +167,11 @@ function plot_figure1(alphas, grads_fd, grads_diff_mat, grads_diff_forced, grads
     # Use finite difference as the "true" value
     errs_diff_forced = abs.(grads_fd .- grads_diff_forced)
     errs_diff_auto_forced = abs.(grads_fd .- grads_diff_auto_forced)
-    errs_diff_mat = abs.(grads_fd .- grads_diff_mat)
+    #errs_diff_mat = abs.(grads_fd .- grads_diff_mat)
     errs_da = abs.(grads_fd .- grads_da)
     pl2 = plot(alphas, errs_diff_forced, label="Differentiaion (Forced)", lw=2)
-    plot!(alphas, errs_diff_auto_forced, label="Differentiaion (Auto Forced)", lw=2)
-    plot!(pl2, alphas, errs_diff_mat, label="Differentiaion (Matrix)", lw=2)
+    plot!(alphas, errs_diff_auto_forced, label="Differentiaion (Auto Forced)", lw=2, linestyle=:dash)
+    #plot!(pl2, alphas, errs_diff_mat, label="Differentiaion (Matrix)", lw=2)
     plot!(pl2, alphas, errs_da, label="Discrete Adjoint", lw=2)
     plot!(pl2, legendfontsize=14,guidefontsize=14,tickfontsize=14)
     plot!(pl2, yscale=:log10)
@@ -216,57 +217,4 @@ end
 
 
 
-function eval_grad_forced(target, α=1.0; ω::Float64=1.0)
-    # Get state vector history
-    prob = this_prob(ω=ω)
-    history = eval_forward(prob, α)
-
-    ## Prepare forcing (-idH/dα ψ)
-    # Prepare dH/dα
-    Ks::Matrix{Float64} = [0 0; 0 0]
-    Ss::Matrix{Float64} = [0 0; 0 0]
-    a_plus_adag::Matrix{Float64} = [0 1; 1 0]
-    a_minus_adag::Matrix{Float64} = [0 1; -1 0]
-    p(t,α) = cos(ω*t)
-    q(t,α) = 0.0
-
-    forcing_mat = zeros(4,1+prob.nsteps)
-    forcing_vec = zeros(4)
-
-    u = zeros(2)
-    v = zeros(2)
-    ut = zeros(2)
-    vt = zeros(2)
-
-    nsteps = prob.nsteps
-    t = 0
-    dt = prob.tf/nsteps
-    for i in 0:nsteps
-        copyto!(u,history[1:2,1+i])
-        copyto!(v,history[3:4,1+i])
-
-        utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
-        copyto!(forcing_vec,1,ut,1,2)
-        copyto!(forcing_vec,3,vt,1,2)
-
-        forcing_mat[:,1+i] .= forcing_vec
-
-        t += dt
-    end
-    
-    # Get history of dψ/dα
-    # Initial conditions for dψ/dα
-    copyto!(prob.u0, [0.0,0.0])
-    copyto!(prob.v0, [0.0,0.0])
-
-    history_dψdα = eval_forward_forced(prob, forcing_mat, α)
-
-    dQda = history_dψdα[:,end]
-    Q = history[:,end]
-    R = copy(target)
-    T = vcat(R[3:4], -R[1:2])
-
-    gradient = -2*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
-    return gradient
-end
 
