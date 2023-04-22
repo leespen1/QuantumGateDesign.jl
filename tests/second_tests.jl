@@ -127,44 +127,49 @@ end
 
 
 function figure1()
-    prob = this_prob()
     α = 1.0
+    prob = this_prob()
     history = eval_forward(prob, α)
     target = history[:,end]
+
+    dpda(t,a) = cos(t)
+    dqda(t,a) = cos(t)
 
     N = 100
     alphas = LinRange(0,2,N)
     grads_fd = zeros(N)
     grads_diff_mat = zeros(N)
     grads_diff_forced = zeros(N)
+    grads_da = zeros(N)
     for i in 1:N
         α = alphas[i]
         grads_fd[i] = finite_difference(prob, α, target)
         grads_diff_mat[i] = eval_forward_grad_mat(target, α)
         grads_diff_forced[i] = eval_grad_forced(target, α)
+        grads_da[i] = discrete_adjoint(prob, target, dpda, dqda, α)
     end
-    return alphas, grads_fd, grads_diff_mat, grads_diff_forced
+    return alphas, grads_fd, grads_diff_mat, grads_diff_forced, grads_da
 end
 
-function plot_figure1(alphas, grads_fd, grads_diff_mat, grads_diff_forced)
-    #=
+function plot_figure1(alphas, grads_fd, grads_diff_mat, grads_diff_forced, grads_da)
     # If all the gradients are working, this graph won't be much use
     pl1 = plot(alphas, grads_fd, label="Finite Difference", lw=2)
     plot!(pl1, alphas, grads_diff_mat, label="Differentiation (Matrix)", lw=2)
     plot!(pl1, alphas, grads_diff_forced, label="Differentiation (Forced)", lw=2)
+    plot!(pl1, alphas, grads_da, label="Discrete Adjoint", lw=2)
     plot!(pl1, xlabel="α", ylabel="Gradient")
     plot!(pl1, legendfontsize=14,guidefontsize=14,tickfontsize=14)
-    =#
 
     # Use finite difference as the "true" value
     errs_diff_forced = abs.(grads_fd .- grads_diff_forced)
     errs_diff_mat = abs.(grads_fd .- grads_diff_mat)
+    errs_da = abs.(grads_fd .- grads_da)
     pl2 = plot(alphas, errs_diff_forced, label="Differentiaion (Forced)", lw=2)
     plot!(pl2, alphas, errs_diff_mat, label="Differentiaion (Matrix)", lw=2)
+    plot!(pl2, alphas, errs_da, label="Discrete Adjoint", lw=2)
     plot!(pl2, legendfontsize=14,guidefontsize=14,tickfontsize=14)
     plot!(pl2, yscale=:log10)
-    #return pl1, pl2
-    return pl2
+    return pl1, pl2
 end
 
 

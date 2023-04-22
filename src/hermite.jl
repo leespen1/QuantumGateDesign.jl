@@ -37,7 +37,7 @@ mutable struct SchrodingerProb
     end
 end
 
-function copy(prob::SchrodingerProb)
+function Base.copy(prob::SchrodingerProb)
     return SchrodingerProb(prob.Ks, prob.Ss,
                            prob.p, prob.q, prob.dpdt, prob.dqdt,
                            prob.u0, prob.v0,
@@ -335,7 +335,7 @@ end
 
 
 
-function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpdt, dqdt, α=missing)
+function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpda, dqda, α=missing)
     R = target[:]
     T = vcat(R[3:4], -R[1:2])
     
@@ -354,13 +354,16 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpdt, 
     nsteps = prob.nsteps
 
     # For adjoint evolution, need transposes 
-    Ks_t = Matrix(transpose(Ks))
+    #Ks_t = Matrix(transpose(Ks))
+    #Ss_t = Matrix(transpose(Ss))
+    #a_plus_adag_t = Matrix(transpose(a_plus_adag))
+    #a_minus_adag_t = Matrix(transpose(a_minus_adag))
+    Ks_t = Matrix(transpose(-Ks)) # NOTE THAT K changes sign!
     Ss_t = Matrix(transpose(Ss))
-    a_plus_adag_t = Matrix(transpose(a_plus_adag))
+    a_plus_adag_t = Matrix(transpose(-a_plus_adag)) # NOTE THAT K changes sign!
     a_minus_adag_t = Matrix(transpose(a_minus_adag))
     
     dt = tf/nsteps
-
 
     lambda = zeros(4)
     lambda_history = zeros(4,1+nsteps)
@@ -370,21 +373,21 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpdt, 
     # Terminal Condition
     t = tf
     LHS_map = LinearMap(
-        x -> LHS_func(ut, vt, x[1:2], x[3:4], Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t, p, q, t, α, dt),
+        x -> LHS_func(ut, vt, x[1:2], x[3:4],
+                      Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+                      p, q, t, α, dt),
         4,4
     )
-    RHS = dot(history[:,end],R)*R + dot(history[:,end],T)*T
-    gmres!(lambda, LHS_map, RHS)
+    RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
+    gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
     lambda_history[:,1+nsteps] .= lambda
     u = copy(lambda[1:2])
     v = copy(lambda[3:4])
     
-
     RHSu::Vector{Float64} = zeros(2)
     RHSv::Vector{Float64} = zeros(2)
     RHS::Vector{Float64} = zeros(4)
-
 
     t = tf - dt
     # Discrete Adjoint Scheme
@@ -406,7 +409,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpdt, 
             4,4
         )
 
-        gmres!(lambda, LHS_map, RHS)
+        gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
         lambda_history[:,1+i] .= lambda
         u = lambda[1:2]
         v = lambda[3:4]
@@ -419,21 +422,24 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpdt, 
     for n in 0:nsteps-1
         u = history[1:2,1+n]
         v = history[3:4,1+n]
+        t = n*dt
         # Note that system matrices go to zero
-        utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpdt, dqdt, t, α)
+        utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
         grad += dot(vcat(ut,vt), lambda_history[:,1+n+1])
 
         u = history[1:2,1+n+1]
         v = history[3:4,1+n+1]
+        t = (n+1)*dt
         # Note that system matrices go to zero
-        utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpdt, dqdt, t, α)
+        utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
         grad += dot(vcat(ut,vt), lambda_history[:,1+n+1])
     end
     grad *= -0.5*dt
 
-    return lambda_history, grad
-
+    #return lambda_history, grad
+    return grad
 end
+
 
 
 function infidelity(ψ::Vector{Float64}, target::Vector{Float64})
