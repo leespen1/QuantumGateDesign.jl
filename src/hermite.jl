@@ -31,10 +31,17 @@ mutable struct SchrodingerProb
         a_plus_adag::Matrix{Float64} = [0.0 1.0; 1.0 0.0]
         a_minus_adag::Matrix{Float64} = [0.0 1.0; -1.0 0.0]
 
-        new(Ks, Ss, a_plus_adag, a_minus_adag,
+        new(copy(Ks), copy(Ss), a_plus_adag, a_minus_adag,
             p, q, dpdt, dqdt,
-            u0, v0, tf, nsteps)
+            copy(u0), copy(v0), tf, nsteps)
     end
+end
+
+function copy(prob::SchrodingerProb)
+    return SchrodingerProb(prob.Ks, prob.Ss,
+                           prob.p, prob.q, prob.dpdt, prob.dqdt,
+                           prob.u0, prob.v0,
+                           prob.tf, prob.nsteps)
 end
 #=
 mutable struct SchrodingerProb
