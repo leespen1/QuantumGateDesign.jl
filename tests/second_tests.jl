@@ -39,7 +39,7 @@ end
 
 function convergence_test(α=1.0; order=2)
 
-    # MAKES SURE TIMESTEPS ARE SMALL ENOUGH THAT SOLUTION ISNT OVERRESOLVED
+    # MAKE SURE TIMESTEPS ARE SMALL ENOUGH THAT SOLUTION ISNT OVERRESOLVED
     prob20 = this_prob(nsteps=20)
     history20 = eval_forward(prob20, α, order=order)
     # Change stride to match coarse timestep result
@@ -65,13 +65,14 @@ function convergence_test(α=1.0; order=2)
 end
 
 function finite_difference(prob, α, target, dα=1e-5)
+    # Centered Difference Approximation
     history_r = eval_forward(prob, α+dα)
     history_l = eval_forward(prob, α-dα)
     ψf_r = history_r[:,end]
     ψf_l = history_l[:,end]
     infidelity_r = infidelity(ψf_r, target)
     infidelity_l = infidelity(ψf_l, target)
-    gradient = (infidelity_r - infidelity_l)/dα
+    gradient = (infidelity_r - infidelity_l)/(2*dα)
     return gradient
 end
 
@@ -107,18 +108,27 @@ function eval_forward_grad_mat(target, α=1.0; nsteps=100)
         u = (I - 0.5*dt*M(tnp1, α)) \ (u + 0.5*dt*M(tn,α)*u)
     end
 
-    R = target[:]
-    T = vcat(R[3:4], -R[1:2])
     Q = u[1:4,end]
     dQda = u[5:8,end]
 
-    #grad_gargamel = 2*sum(Q .* dQda)
-    grad_gargamel = -0.5*((Q'*R)*(dQda'*R) + (Q'*T)*(dQda'*T))
+    R = target[:]
+    T = vcat(R[3:4], -R[1:2])
+
+    #target_complex::Vector{ComplexF64} = target[1:2] - im*target[3:4]
+    #Q_complex::Vector{ComplexF64} = Q[1:2] - im*Q[3:4]
+    #dQda_complex::Vector{ComplexF64} = dQda[1:2] - im*dQda[3:4]
+
+    ## The following two are equivalent, checked with ComplexF64 vectors
+    #
+    #grad_gargamel = -2*real((Q_complex'*target_complex)*(target_complex'*dQda_complex))
+    grad_gargamel = -2*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
+
+    # rewrite gradient
     return grad_gargamel
 end
 
 
-function figures()
+function figure1()
     prob = this_prob()
     α = 1.0
     history = eval_forward(prob, α)
@@ -127,14 +137,34 @@ function figures()
     N = 100
     alphas = LinRange(0,2,N)
     grads_fd = zeros(N)
-    grads_diff = zeros(N)
+    grads_diff_mat = zeros(N)
+    grads_diff_forced = zeros(N)
     for i in 1:N
         α = alphas[i]
         grads_fd[i] = finite_difference(prob, α, target)
-        grads_diff[i] = eval_forward_grad_mat(target, α)
+        grads_diff_mat[i] = eval_forward_grad_mat(target, α)
+        grads_diff_forced[i] = eval_grad_forced(target, α)
     end
-    return alphas, grads_fd, grads_diff 
+    return alphas, grads_fd, grads_diff_mat, grads_diff_forced
 end
+
+function plot_figure1(alphas, grads_fd, grads_diff_mat, grads_diff_forced)
+    pl1 = plot(alphas, grads_fd, label="Finite Difference", lw=2)
+    plot!(pl1, alphas, grads_diff_mat, label="Differentiation (Matrix)", lw=2)
+    plot!(pl1, alphas, grads_diff_forced, label="Differentiation (Forced)", lw=2)
+    plot!(pl1, xlabel="α", ylabel="Gradient")
+    plot!(pl1, legendfontsize=14,guidefontsize=14,tickfontsize=14)
+
+    # Use finite difference as the "true" value
+    errs_diff_forced = abs.(grads_fd .- grads_diff_forced)
+    errs_diff_mat = abs.(grads_fd .- grads_diff_mat)
+    pl2 = plot(alphas, errs_diff_forced, label="Differentiaion (Forced)", lw=2)
+    plot!(pl2, alphas, errs_diff_mat, label="Differentiaion (Matrix)", lw=2)
+    plot!(pl2, legendfontsize=14,guidefontsize=14,tickfontsize=14)
+    plot!(pl2, yscale=:log10)
+    return pl, pl2
+end
+
 
 
 function figure2!(prob::SchrodingerProb, α=1.0; order=2)
@@ -174,8 +204,7 @@ end
 
 
 
-#=
-function eval_grad_fwd(target, α=1.0; ω::Float64=1.0)
+function eval_grad_forced(target, α=1.0; ω::Float64=1.0)
     # Get state vector history
     prob = this_prob(ω=ω)
     history = eval_forward(prob, α)
@@ -220,14 +249,12 @@ function eval_grad_fwd(target, α=1.0; ω::Float64=1.0)
 
     history_dψdα = eval_forward_forced(prob, forcing_mat, α)
 
-    dψdα_T = history_dψdα[:,end]
-    ψ_T = history[:,end]
+    dQda = history_dψdα[:,end]
+    Q = history[:,end]
     R = copy(target)
     T = vcat(R[3:4], -R[1:2])
 
-    gradient = -0.5*(dot(ψ_T,R)*dot(dψdα_T,R) + dot(ψ_T,T)*dot(dψdα_T,T))
-    #grad_gargamel = -0.5*((Q'*R)*(dQda'*R) + (Q'*T)*(dQda'*T))
+    gradient = -2*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
     return gradient
 end
-=#
 
