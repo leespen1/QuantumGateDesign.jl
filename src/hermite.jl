@@ -15,8 +15,6 @@ mutable struct SchrodingerProb
     v0::Vector{Float64}
     tf::Float64
     nsteps::Int64
-    u_hist::Matrix{Float64}
-    v_hist::Matrix{Float64}
     function SchrodingerProb(
             Ks::Matrix{Float64},
             Ss::Matrix{Float64},
@@ -32,12 +30,10 @@ mutable struct SchrodingerProb
 
         a_plus_adag::Matrix{Float64} = [0.0 1.0; 1.0 0.0]
         a_minus_adag::Matrix{Float64} = [0.0 1.0; -1.0 0.0]
-        u_hist = Matrix{Float64}(undef, 2, nsteps+1)
-        v_hist = Matrix{Float64}(undef, 2, nsteps+1)
 
         new(Ks, Ss, a_plus_adag, a_minus_adag,
             p, q, dpdt, dqdt,
-            u0, v0, tf, nsteps, u_hist, v_hist)
+            u0, v0, tf, nsteps)
     end
 end
 #=
