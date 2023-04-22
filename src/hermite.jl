@@ -15,12 +15,52 @@ mutable struct SchrodingerProb
     v0::Vector{Float64}
     tf::Float64
     nsteps::Int64
-end
+    u_hist::Matrix{Float64}
+    v_hist::Matrix{Float64}
+    function SchrodingerProb(
+            Ks::Matrix{Float64},
+            Ss::Matrix{Float64},
+            p::Function,
+            q::Function,
+            dpdt::Function,
+            dqdt::Function,
+            u0::Vector{Float64},
+            v0::Vector{Float64},
+            tf::Float64,
+            nsteps::Int64
+        )
 
-function SchrodingerProb(Ks,Ss,a_plus_adag,a_minus_adag,p,q,u0,v0,tf,nsteps)
+        a_plus_adag::Matrix{Float64} = [0.0 1.0; 1.0 0.0]
+        a_minus_adag::Matrix{Float64} = [0.0 1.0; -1.0 0.0]
+        u_hist = Matrix{Float64}(undef, 2, nsteps+1)
+        v_hist = Matrix{Float64}(undef, 2, nsteps+1)
+
+        new(Ks, Ss, a_plus_adag, a_minus_adag,
+            p, q, dpdt, dqdt,
+            u0, v0, tf, nsteps, u_hist, v_hist)
+    end
+end
+#=
+mutable struct SchrodingerProb
+    Ks::Matrix{Float64}
+    Ss::Matrix{Float64}
+    a_plus_adag::Matrix{Float64} # a + a^†
+    a_minus_adag::Matrix{Float64} # a - a^†
+    p::Function
+    q::Function
+    dpdt::Function
+    dqdt::Function
+    u0::Vector{Float64}
+    v0::Vector{Float64}
+    tf::Float64
+    nsteps::Int64
+end
+=#
+
+function SchrodingerProb(Ks,Ss,p,q,u0,v0,tf,nsteps)
     dpdt(t,a) = nothing
     dqdt(t,a) = nothing
-    return SchrodingerProb(Ks,Ss,a_plus_adag,a_minus_adag,p,q, dpdt, dqdt, u0,v0,tf,nsteps)
+    return SchrodingerProb(Ks,Ss,p,q, dpdt, dqdt, u0,v0,tf,nsteps)
 end
 
 

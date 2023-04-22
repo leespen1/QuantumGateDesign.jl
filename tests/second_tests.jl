@@ -4,15 +4,13 @@ using Plots
 function this_prob(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
     Ks::Matrix{Float64} = [0 0; 0 1]
     Ss::Matrix{Float64} = [0 0; 0 0]
-    a_plus_adag::Matrix{Float64} = [0 1; 1 0]
-    a_minus_adag::Matrix{Float64} = [0 1; -1 0]
     p(t,α) = α*cos(ω*t)
     q(t,α) = 0.0
     dpdt(t,α) = -α*ω*sin(ω*t)
     dqdt(t,α) = 0.0
     u0::Vector{Float64} = [1,0]
     v0::Vector{Float64} = [0,0]
-    return SchrodingerProb(Ks,Ss,a_plus_adag,a_minus_adag,p,q,dpdt,dqdt,u0,v0,tf,nsteps)
+    return SchrodingerProb(Ks,Ss,p,q,dpdt,dqdt,u0,v0,tf,nsteps)
 end
 
 
@@ -149,11 +147,14 @@ function figure1()
 end
 
 function plot_figure1(alphas, grads_fd, grads_diff_mat, grads_diff_forced)
+    #=
+    # If all the gradients are working, this graph won't be much use
     pl1 = plot(alphas, grads_fd, label="Finite Difference", lw=2)
     plot!(pl1, alphas, grads_diff_mat, label="Differentiation (Matrix)", lw=2)
     plot!(pl1, alphas, grads_diff_forced, label="Differentiation (Forced)", lw=2)
     plot!(pl1, xlabel="α", ylabel="Gradient")
     plot!(pl1, legendfontsize=14,guidefontsize=14,tickfontsize=14)
+    =#
 
     # Use finite difference as the "true" value
     errs_diff_forced = abs.(grads_fd .- grads_diff_forced)
@@ -162,7 +163,8 @@ function plot_figure1(alphas, grads_fd, grads_diff_mat, grads_diff_forced)
     plot!(pl2, alphas, errs_diff_mat, label="Differentiaion (Matrix)", lw=2)
     plot!(pl2, legendfontsize=14,guidefontsize=14,tickfontsize=14)
     plot!(pl2, yscale=:log10)
-    return pl, pl2
+    #return pl1, pl2
+    return pl2
 end
 
 
