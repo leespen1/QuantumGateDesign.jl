@@ -14,26 +14,6 @@ function this_prob(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
 end
 
 
-#=
-#Actually I don't really need this. ∂ψ/∂α is evolved according to the original
-#schrodinger equation. The part with ∂H/∂α  is in the forcing term
-"""
-Evolve ∂ψ/∂α (in relation to the above problem). Will need forcing
-System hamiltonian falls out, initial conditions are zero, and controls change
-according to ∂/∂α
-"""
-function this_prob_grad(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
-    Ks::Matrix{Float64} = [0 0; 0 0]
-    Ss::Matrix{Float64} = [0 0; 0 0]
-    a_plus_adag::Matrix{Float64} = [0 1; 1 0]
-    a_minus_adag::Matrix{Float64} = [0 1; -1 0]
-    p(t,α) = cos(ω*t)
-    q(t,α) = 0.0
-    u0::Vector{Float64} = [0,0]
-    v0::Vector{Float64} = [0,0]
-    return SchrodingerProb(Ks,Ss,a_plus_adag,a_minus_adag,p,q,u0,v0,tf,nsteps)
-end
-=#
 
 function convergence_test(α=1.0; order=2)
 
@@ -62,10 +42,10 @@ function convergence_test(α=1.0; order=2)
     return log_ratio, error10, error20
 end
 
-function finite_difference(prob, α, target, dα=1e-5)
+function finite_difference(prob, α, target, dα=1e-5; order=2)
     # Centered Difference Approximation
-    history_r = eval_forward(prob, α+dα)
-    history_l = eval_forward(prob, α-dα)
+    history_r = eval_forward(prob, α+dα, order=order)
+    history_l = eval_forward(prob, α-dα, order=order)
     ψf_r = history_r[:,end]
     ψf_l = history_l[:,end]
     infidelity_r = infidelity(ψf_r, target)
@@ -126,10 +106,9 @@ function eval_forward_grad_mat(target, α=1.0; nsteps=100)
 end
 
 
-function figure1()
-    α = 1.0
+function figure1(α=1.0; order=2)
     prob = this_prob()
-    history = eval_forward(prob, α)
+    history = eval_forward(prob, α, order=order)
     target = history[:,end]
 
     dpda(t,a) = cos(t)
@@ -144,11 +123,11 @@ function figure1()
     grads_da = zeros(N)
     for i in 1:N
         α = alphas[i]
-        grads_fd[i] = finite_difference(prob, α, target)
+        grads_fd[i] = finite_difference(prob, α, target, order=order)
         #grads_diff_mat[i] = eval_forward_grad_mat(target, α)
-        grads_diff_forced[i] = eval_grad_forced(prob, target, dpda, dqda, α)
-        grads_diff_auto_forced[i] = eval_grad_auto_forced(prob, target, α)
-        grads_da[i] = discrete_adjoint(prob, target, dpda, dqda, α)
+        grads_diff_forced[i] = eval_grad_forced(prob, target, dpda, dqda, α, order=order)
+        grads_diff_auto_forced[i] = eval_grad_auto_forced(prob, target, α, order=order)
+        grads_da[i] = discrete_adjoint(prob, target, dpda, dqda, α, order=order)
     end
     #return alphas, grads_fd, grads_diff_mat, grads_diff_forced, grads_diff_auto_forced, grads_da
     return alphas, grads_fd, grads_diff_forced, grads_diff_auto_forced, grads_da
@@ -180,38 +159,55 @@ end
 
 
 
-function figure2!(prob::SchrodingerProb, α=1.0; order=2)
+function figure2(α=1.0)
+    prob = this_prob()
+    orders = [2,4]
     N = 5
-    final_states = zeros(4,N)
     base = 2
-    for i in 1:N
-        prob.nsteps = base^i
-        history = eval_forward(prob, α, order=order)
-        final_states[:,i] = history[:,end]
-    end
-    prob.nsteps = base^(N+1)
-    history = eval_forward(prob, α, order=order)
-    final_state_fine = history[:,end]
+    sol_errs = zeros(N, length(orders))
+    infidelities = zeros(N, length(orders))
 
     step_sizes = zeros(N)
-    for i in 1:N
-        step_sizes[i] = prob.tf / (base^i)
+    for n in 1:N
+        step_sizes[n] = prob.tf / (base^n)
     end
-    sol_errs = [norm(final_states[:,i] - final_state_fine) for i in 1:N]
-    infidelities = [infidelity(final_states[:,i],final_state_fine) for i in 1:N]
+
+    # Get 'true' solution, using most timesteps and highest order
+    prob.nsteps = base^(N+1)
+    history = eval_forward(prob, α, order=max(orders...)) 
+    final_state_fine = history[:,end]
+
+    for j in 1:length(orders)
+        order = orders[j]
+        final_states = zeros(4,N)
+        for i in 1:N
+            prob.nsteps = base^i
+            history = eval_forward(prob, α, order=order)
+            final_states[:,i] = history[:,end]
+        end
+
+        for i in 1:N
+            sol_errs[i,j] = norm(final_states[:,i] - final_state_fine)
+            infidelities[i,j] = infidelity(final_states[:,i], final_state_fine)
+        end
+    end
    
-    return step_sizes, sol_errs, infidelities
+    return step_sizes, sol_errs, infidelities, orders
 end
 
-function plot_figure2(step_sizes, sol_errs, infidelities)
-    pl = plot(step_sizes, abs.(sol_errs), linewidth=2, marker=:circle, label="Error", scale=:log10)
-    plot!(step_sizes, abs.(infidelities), linewidth=2, marker=:circle, label="Infidelities")
-    plot!(step_sizes, step_sizes .^ 2, label="Δt^2", linestyle=:dash)
-    plot!(step_sizes, step_sizes .^ 4, label="Δt^4", linestyle=:dash)
-    plot!(step_sizes, step_sizes .^ 6, label="Δt^6", linestyle=:dash)
-    plot!(legendfontsize=14,guidefontsize=14,tickfontsize=14)
-    plot!(legend=:bottomright)
-    plot!(xlabel="Δt")
+function plot_figure2(step_sizes, sol_errs, infidelities, orders)
+    pl = plot()
+    for i in 1:length(orders)
+        plot!(pl, step_sizes, abs.(sol_errs[:,i]), linewidth=2, marker=:circle, label="Error (Order $(orders[i]))")
+        plot!(pl, step_sizes, abs.(infidelities[:,i]), linewidth=2, marker=:circle, label="Infidelities (Order $(orders[i]))")
+    end
+    plot!(pl, step_sizes, step_sizes .^ 2, label="Δt^2", linestyle=:dash)
+    plot!(pl, step_sizes, step_sizes .^ 4, label="Δt^4", linestyle=:dash)
+    plot!(pl, step_sizes, step_sizes .^ 6, label="Δt^6", linestyle=:dash)
+    plot!(pl, legendfontsize=14, guidefontsize=14, tickfontsize=14)
+    plot!(pl, scale=:log10)
+    plot!(pl, legend=:bottomright)
+    plot!(pl, xlabel="Δt")
     return pl
 end
 

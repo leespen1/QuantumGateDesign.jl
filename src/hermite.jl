@@ -181,14 +181,21 @@ function eval_forward(prob::SchrodingerProb, α=missing; order=2)
     RHSv::Vector{Float64} = zeros(2)
     RHS_uv::Vector{Float64} = zeros(4)
 
+    u = copy(u0)
+    v = copy(v0)
+    ut = zeros(2)
+    vt = zeros(2)
+    utt = zeros(2)
+    vtt = zeros(2)
+
     if order == 2
-        u = copy(u0)
-        v = copy(v0)
-        ut = zeros(2)
-        vt = zeros(2)
+        # Order 2
+        println("2nd Order")
 
         for i in 1:nsteps
-            utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
+            utvt!(ut, vt, u, v,
+                  Ks, Ss, a_plus_adag, a_minus_adag,
+                  p, q, t, α)
             copy!(RHSu,u)
             axpy!(0.5*dt,ut,RHSu)
 
@@ -212,15 +219,9 @@ function eval_forward(prob::SchrodingerProb, α=missing; order=2)
             u = uv[1:2]
             v = uv[3:4]
         end
-    else
+    elseif order == 4
         # Order 4
         println("4th Order")
-        u = copy(u0)
-        v = copy(v0)
-        ut = zeros(2)
-        vt = zeros(2)
-        utt = zeros(2)
-        vtt = zeros(2)
 
         for i in 1:nsteps
             utvt!(ut, vt, u, v,
@@ -256,9 +257,10 @@ function eval_forward(prob::SchrodingerProb, α=missing; order=2)
             u = uv[1:2]
             v = uv[3:4]
         end
-
-
+    else
+        throw("Invalid order: $order")
     end
+
     return uv_history
 end
 
@@ -272,7 +274,7 @@ of forces at each discretized point in time.
 
 Maybe I should also do a one with forcing functions as well.
 """
-function eval_forward_forced(prob::SchrodingerProb, forcing_mat::Matrix{Float64}, α=missing)
+function eval_forward_forced(prob::SchrodingerProb, forcing_mat::Matrix{Float64}, α=missing; order=2)
     Ks = prob.Ks
     Ss = prob.Ss
     a_plus_adag = prob.a_plus_adag
@@ -286,7 +288,6 @@ function eval_forward_forced(prob::SchrodingerProb, forcing_mat::Matrix{Float64}
 
     t = 0
     dt = tf/nsteps
-
 
     uv = zeros(4)
     copyto!(uv,1,u0,1,2)
@@ -302,41 +303,50 @@ function eval_forward_forced(prob::SchrodingerProb, forcing_mat::Matrix{Float64}
     v = copy(v0)
     ut = zeros(2)
     vt = zeros(2)
+    utt = zeros(2)
+    vtt = zeros(2)
 
-    for i in 1:nsteps
-        utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
-        copy!(RHSu,u)
-        axpy!(0.5*dt,ut,RHSu)
+    if order == 2
+        for i in 1:nsteps
+            utvt!(ut, vt, u, v,
+                  Ks, Ss, a_plus_adag, a_minus_adag,
+                  p, q, t, α)
+            copy!(RHSu,u)
+            axpy!(0.5*dt,ut,RHSu)
 
-        copy!(RHSv,v)
-        axpy!(0.5*dt,vt,RHSv)
+            copy!(RHSv,v)
+            axpy!(0.5*dt,vt,RHSv)
 
-        copyto!(RHS_uv,1,RHSu,1,2)
-        copyto!(RHS_uv,3,RHSv,1,2)
+            copyto!(RHS_uv,1,RHSu,1,2)
+            copyto!(RHS_uv,3,RHSv,1,2)
 
-        # Apply forcing (trapezoidal rule on forcing, is explicit)
-        axpy!(0.5*dt,forcing_mat[:,i], RHS_uv)
-        axpy!(0.5*dt,forcing_mat[:,i+1], RHS_uv)
+            axpy!(0.5*dt,forcing_mat[:,i], RHS_uv)
+            axpy!(0.5*dt,forcing_mat[:,i+1], RHS_uv)
 
-        t += dt
+            t += dt
 
-        LHS_map = LinearMap(
-            uv -> LHS_func(ut, vt, uv[1:2], uv[3:4], Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α, dt),
-            4,4
-        )
+            LHS_map = LinearMap(
+                uv -> LHS_func(ut, vt, uv[1:2], uv[3:4],
+                               Ks, Ss, a_plus_adag, a_minus_adag,
+                               p, q, t, α, dt),
+                4,4
+            )
 
-        gmres!(uv, LHS_map, RHS_uv)
-        uv_history[:,1+i] .= uv
-        u = uv[1:2]
-        v = uv[3:4]
+            gmres!(uv, LHS_map, RHS_uv, abstol=1e-15, reltol=1e-15)
+            uv_history[:,1+i] .= uv
+            u = uv[1:2]
+            v = uv[3:4]
+        end
+    else
+        throw("Invalid order: $order")
     end
-
+    
     return uv_history
 end
 
 
 
-function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpda, dqda, α=missing)
+function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpda, dqda, α=missing; order=2)
     R = target[:]
     T = vcat(R[3:4], -R[1:2])
     
@@ -370,72 +380,76 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpda, 
     lambda_history = zeros(4,1+nsteps)
     ut = zeros(2)
     vt = zeros(2)
+    grad = 0.0
 
-    # Terminal Condition
-    t = tf
-    LHS_map = LinearMap(
-        x -> LHS_func(ut, vt, x[1:2], x[3:4],
-                      Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
-                      p, q, t, α, dt),
-        4,4
-    )
-    RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
-    gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
-
-    lambda_history[:,1+nsteps] .= lambda
-    u = copy(lambda[1:2])
-    v = copy(lambda[3:4])
-    
-    RHSu::Vector{Float64} = zeros(2)
-    RHSv::Vector{Float64} = zeros(2)
-    RHS::Vector{Float64} = zeros(4)
-
-    t = tf - dt
-    # Discrete Adjoint Scheme
-    for i in nsteps-1:-1:1
-        utvt!(ut, vt, u, v, Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t, p, q, t, α)
-        copy!(RHSu,u)
-        axpy!(0.5*dt,ut,RHSu)
-
-        copy!(RHSv,v)
-        axpy!(0.5*dt,vt,RHSv)
-
-        copyto!(RHS,1,RHSu,1,2)
-        copyto!(RHS,3,RHSv,1,2)
-
-        # NOTE: LHS and RHS Linear transformations use the SAME TIME
-
+    if order == 2
+        # Terminal Condition
+        t = tf
         LHS_map = LinearMap(
-            x -> LHS_func(ut, vt, x[1:2], x[3:4], Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t, p, q, t, α, dt),
+            x -> LHS_func(ut, vt, x[1:2], x[3:4],
+                          Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+                          p, q, t, α, dt),
             4,4
         )
-
+        RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
         gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
-        lambda_history[:,1+i] .= lambda
-        u = lambda[1:2]
-        v = lambda[3:4]
-        t -= dt
-    end
 
-    grad = 0.0
-    zero_mat = zeros(2,2)
-    uv = zeros(4)
-    for n in 0:nsteps-1
-        u = history[1:2,1+n]
-        v = history[3:4,1+n]
-        t = n*dt
-        # Note that system matrices go to zero
-        utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
-        grad += dot(vcat(ut,vt), lambda_history[:,1+n+1])
+        lambda_history[:,1+nsteps] .= lambda
+        u = copy(lambda[1:2])
+        v = copy(lambda[3:4])
+        
+        RHSu::Vector{Float64} = zeros(2)
+        RHSv::Vector{Float64} = zeros(2)
+        RHS::Vector{Float64} = zeros(4)
 
-        u = history[1:2,1+n+1]
-        v = history[3:4,1+n+1]
-        t = (n+1)*dt
-        # Note that system matrices go to zero
-        utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
-        grad += dot(vcat(ut,vt), lambda_history[:,1+n+1])
+        t = tf - dt
+        # Discrete Adjoint Scheme
+        for i in nsteps-1:-1:1
+            utvt!(ut, vt, u, v, Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t, p, q, t, α)
+            copy!(RHSu,u)
+            axpy!(0.5*dt,ut,RHSu)
+
+            copy!(RHSv,v)
+            axpy!(0.5*dt,vt,RHSv)
+
+            copyto!(RHS,1,RHSu,1,2)
+            copyto!(RHS,3,RHSv,1,2)
+
+            # NOTE: LHS and RHS Linear transformations use the SAME TIME
+
+            LHS_map = LinearMap(
+                x -> LHS_func(ut, vt, x[1:2], x[3:4], Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t, p, q, t, α, dt),
+                4,4
+            )
+
+            gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+            lambda_history[:,1+i] .= lambda
+            u = lambda[1:2]
+            v = lambda[3:4]
+            t -= dt
+        end
+
+        zero_mat = zeros(2,2)
+        uv = zeros(4)
+        for n in 0:nsteps-1
+            u = history[1:2,1+n]
+            v = history[3:4,1+n]
+            t = n*dt
+            # Note that system matrices go to zero
+            utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
+            grad += dot(vcat(ut,vt), lambda_history[:,1+n+1])
+
+            u = history[1:2,1+n+1]
+            v = history[3:4,1+n+1]
+            t = (n+1)*dt
+            # Note that system matrices go to zero
+            utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
+            grad += dot(vcat(ut,vt), lambda_history[:,1+n+1])
+        end
+        grad *= -0.5*dt
+    else
+        throw("Invalid order: $order")
     end
-    grad *= -0.5*dt
 
     #return lambda_history, grad
     return grad
@@ -443,9 +457,9 @@ end
 
 
 
-function eval_grad_forced(prob, target, dpda, dqda, α=1.0)
+function eval_grad_forced(prob, target, dpda, dqda, α=1.0; order=2)
     # Get state vector history
-    history = eval_forward(prob, α)
+    history = eval_forward(prob, α, order=order)
 
     ## Prepare forcing (-idH/dα ψ)
     # Prepare dH/dα
@@ -488,7 +502,7 @@ function eval_grad_forced(prob, target, dpda, dqda, α=1.0)
     copyto!(differentiated_prob.u0, [0.0,0.0])
     copyto!(differentiated_prob.v0, [0.0,0.0])
 
-    history_dψdα = eval_forward_forced(differentiated_prob, forcing_mat, α)
+    history_dψdα = eval_forward_forced(differentiated_prob, forcing_mat, α, order=order)
 
     dQda = history_dψdα[:,end]
     Q = history[:,end]
@@ -505,14 +519,14 @@ end
 Evaluate gradient using differentiated/forced method approach.
 Use forward diff for calculating gradients.
 """
-function eval_grad_auto_forced(prob::SchrodingerProb, target, α=1.0)
+function eval_grad_auto_forced(prob::SchrodingerProb, target, α=1.0; order=2)
     # dp/dα and dq/dα using auto (forward) differentiation
     p_wrapped(t_a_vec) = prob.p(t_a_vec[1], t_a_vec[2])
     q_wrapped(t_a_vec) = prob.q(t_a_vec[1], t_a_vec[2])
     dpda(t,α) = ForwardDiff.gradient(p_wrapped, [t,α])[2]
     dqda(t,α) = ForwardDiff.gradient(q_wrapped, [t,α])[2]
 
-    return eval_grad_forced(prob, target, dpda, dqda, α)
+    return eval_grad_forced(prob, target, dpda, dqda, α, order=order)
 end
 
 
