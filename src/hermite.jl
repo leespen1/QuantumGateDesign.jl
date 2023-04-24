@@ -38,34 +38,23 @@ mutable struct SchrodingerProb
     end
 end
 
-function Base.copy(prob::SchrodingerProb)
-    return SchrodingerProb(prob.Ks, prob.Ss,
-                           prob.p, prob.q, prob.dpdt, prob.dqdt,
-                           prob.u0, prob.v0,
-                           prob.tf, prob.nsteps)
-end
-#=
-mutable struct SchrodingerProb
-    Ks::Matrix{Float64}
-    Ss::Matrix{Float64}
-    a_plus_adag::Matrix{Float64} # a + a^†
-    a_minus_adag::Matrix{Float64} # a - a^†
-    p::Function
-    q::Function
-    dpdt::Function
-    dqdt::Function
-    u0::Vector{Float64}
-    v0::Vector{Float64}
-    tf::Float64
-    nsteps::Int64
-end
-=#
+
 
 function SchrodingerProb(Ks,Ss,p,q,u0,v0,tf,nsteps)
     dpdt(t,a) = nothing
     dqdt(t,a) = nothing
     return SchrodingerProb(Ks,Ss,p,q, dpdt, dqdt, u0,v0,tf,nsteps)
 end
+
+
+
+function Base.copy(prob::SchrodingerProb)
+    return SchrodingerProb(prob.Ks, prob.Ss,
+                           prob.p, prob.q, prob.dpdt, prob.dqdt,
+                           prob.u0, prob.v0,
+                           prob.tf, prob.nsteps)
+end
+
 
 
 function utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
@@ -153,7 +142,100 @@ end
 
 
 
-function eval_forward(prob::SchrodingerProb, α=missing; order=2)
+function eval_forward(prob::SchrodingerProb, α=missing; order=2, return_time_derivatives=false)
+    if order == 2
+        return eval_forward_order2(prob, α, return_time_derivatives=return_time_derivatives)
+    elseif order == 4
+        return eval_forward_order4(prob, α, return_time_derivatives=return_time_derivatives)
+    end
+    throw("Invalid order: $order")
+end
+
+
+function eval_forward_order2(prob::SchrodingerProb, α=missing;
+        return_time_derivatives=false)
+    Ks = prob.Ks
+    Ss = prob.Ss
+    a_plus_adag = prob.a_plus_adag
+    a_minus_adag = prob.a_minus_adag
+    p = prob.p
+    q = prob.q
+    u0 = prob.u0
+    v0 = prob.v0
+    tf = prob.tf
+    nsteps = prob.nsteps
+
+    t = 0
+    dt = tf/nsteps
+
+
+    uv = zeros(4)
+    copyto!(uv,1,u0,1,2)
+    copyto!(uv,3,v0,1,2)
+    uv_history = Matrix{Float64}(undef,4,1+nsteps)
+    uv_history[:,1] .= uv
+    utvt_history = Matrix{Float64}(undef,4,1+nsteps)
+
+    RHSu::Vector{Float64} = zeros(2)
+    RHSv::Vector{Float64} = zeros(2)
+    RHS_uv::Vector{Float64} = zeros(4)
+
+    u = copy(u0)
+    v = copy(v0)
+    ut = zeros(2)
+    vt = zeros(2)
+
+    # Order 2
+    println("2nd Order")
+
+    for i in 1:nsteps
+        utvt!(ut, vt, u, v,
+              Ks, Ss, a_plus_adag, a_minus_adag,
+              p, q, t, α)
+
+        utvt_history[1:2,1+(i-1)] .= ut
+        utvt_history[3:4,1+(i-1)] .= vt
+
+        copy!(RHSu,u)
+        axpy!(0.5*dt,ut,RHSu)
+
+        copy!(RHSv,v)
+        axpy!(0.5*dt,vt,RHSv)
+
+        copyto!(RHS_uv,1,RHSu,1,2)
+        copyto!(RHS_uv,3,RHSv,1,2)
+
+        t += dt
+
+        LHS_map = LinearMap(
+            uv -> LHS_func(ut, vt, uv[1:2], uv[3:4],
+                           Ks, Ss, a_plus_adag, a_minus_adag,
+                           p, q, t, α, dt),
+            4,4
+        )
+
+        gmres!(uv, LHS_map, RHS_uv, abstol=1e-15, reltol=1e-15)
+        uv_history[:,1+i] .= uv
+        u = uv[1:2]
+        v = uv[3:4]
+    end
+
+    # One last time, for utvt history at final time
+    utvt!(ut, vt, u, v,
+          Ks, Ss, a_plus_adag, a_minus_adag,
+          p, q, t, α)
+
+    utvt_history[1:2,1+nsteps] .= ut
+    utvt_history[3:4,1+nsteps] .= vt
+
+    if return_time_derivatives
+        return uv_history, utvt_history
+    end
+    return uv_history
+end
+
+function eval_forward_order4(prob::SchrodingerProb, α=missing;
+        return_time_derivatives=false)
     Ks = prob.Ks
     Ss = prob.Ss
     a_plus_adag = prob.a_plus_adag
@@ -176,6 +258,8 @@ function eval_forward(prob::SchrodingerProb, α=missing; order=2)
     copyto!(uv,3,v0,1,2)
     uv_history = Matrix{Float64}(undef,4,1+nsteps)
     uv_history[:,1] .= uv
+    utvt_history = Matrix{Float64}(undef,4,1+nsteps)
+    uttvtt_history = Matrix{Float64}(undef,4,1+nsteps)
 
     RHSu::Vector{Float64} = zeros(2)
     RHSv::Vector{Float64} = zeros(2)
@@ -188,82 +272,67 @@ function eval_forward(prob::SchrodingerProb, α=missing; order=2)
     utt = zeros(2)
     vtt = zeros(2)
 
-    if order == 2
-        # Order 2
-        println("2nd Order")
+    # Order 4
+    println("4th Order")
 
-        for i in 1:nsteps
-            utvt!(ut, vt, u, v,
-                  Ks, Ss, a_plus_adag, a_minus_adag,
-                  p, q, t, α)
-            copy!(RHSu,u)
-            axpy!(0.5*dt,ut,RHSu)
+    for i in 1:nsteps
+        utvt!(ut, vt, u, v,
+              Ks, Ss, a_plus_adag, a_minus_adag,
+              p, q, t, α)
+        uttvtt!(utt, vtt, ut, vt, u, v,
+                Ks, Ss, a_plus_adag, a_minus_adag,
+                p, q, dpdt, dqdt, t, α)
 
-            copy!(RHSv,v)
-            axpy!(0.5*dt,vt,RHSv)
+        utvt_history[1:2,1+(i-1)] .= ut
+        utvt_history[3:4,1+(i-1)] .= vt
+        uttvtt_history[1:2,1+(i-1)] .= utt
+        uttvtt_history[3:4,1+(i-1)] .= vtt
 
-            copyto!(RHS_uv,1,RHSu,1,2)
-            copyto!(RHS_uv,3,RHSv,1,2)
+        weights = [1,1/3]
+        copy!(RHSu,u)
+        axpy!(0.5*dt*weights[1],ut,RHSu)
+        axpy!(0.25*dt^2*weights[2],utt,RHSu)
 
-            t += dt
+        copy!(RHSv,v)
+        axpy!(0.5*dt*weights[1],vt,RHSv)
+        axpy!(0.25*dt^2*weights[2],vtt,RHSv)
 
-            LHS_map = LinearMap(
-                uv -> LHS_func(ut, vt, uv[1:2], uv[3:4],
-                               Ks, Ss, a_plus_adag, a_minus_adag,
-                               p, q, t, α, dt),
-                4,4
-            )
+        copyto!(RHS_uv,1,RHSu,1,2)
+        copyto!(RHS_uv,3,RHSv,1,2)
 
-            gmres!(uv, LHS_map, RHS_uv, abstol=1e-15, reltol=1e-15)
-            uv_history[:,1+i] .= uv
-            u = uv[1:2]
-            v = uv[3:4]
-        end
-    elseif order == 4
-        # Order 4
-        println("4th Order")
+        t += dt
 
-        for i in 1:nsteps
-            utvt!(ut, vt, u, v,
-                  Ks, Ss, a_plus_adag, a_minus_adag,
-                  p, q, t, α)
-            uttvtt!(utt, vtt, ut, vt, u, v,
-                    Ks, Ss, a_plus_adag, a_minus_adag,
-                    p, q, dpdt, dqdt, t, α)
+        LHS_map = LinearMap(
+            uv -> LHS_func_order4(utt, vtt, ut, vt, uv[1:2], uv[3:4],
+                                  Ks, Ss, a_plus_adag, a_minus_adag,
+                                  p, q, dpdt, dqdt, t, α, dt),
+            4,4
+        )
 
-            weights = [1,1/3]
-            copy!(RHSu,u)
-            axpy!(0.5*dt*weights[1],ut,RHSu)
-            axpy!(0.25*dt^2*weights[2],utt,RHSu)
-
-            copy!(RHSv,v)
-            axpy!(0.5*dt*weights[1],vt,RHSv)
-            axpy!(0.25*dt^2*weights[2],vtt,RHSv)
-
-            copyto!(RHS_uv,1,RHSu,1,2)
-            copyto!(RHS_uv,3,RHSv,1,2)
-
-            t += dt
-
-            LHS_map = LinearMap(
-                uv -> LHS_func_order4(utt, vtt, ut, vt, uv[1:2], uv[3:4],
-                                      Ks, Ss, a_plus_adag, a_minus_adag,
-                                      p, q, dpdt, dqdt, t, α, dt),
-                4,4
-            )
-
-            gmres!(uv, LHS_map, RHS_uv)
-            uv_history[:,1+i] .= uv
-            u = uv[1:2]
-            v = uv[3:4]
-        end
-    else
-        throw("Invalid order: $order")
+        gmres!(uv, LHS_map, RHS_uv)
+        uv_history[:,1+i] .= uv
+        u = uv[1:2]
+        v = uv[3:4]
     end
 
+    # One last time, for utvt history at final time
+    utvt!(ut, vt, u, v,
+          Ks, Ss, a_plus_adag, a_minus_adag,
+          p, q, t, α)
+    uttvtt!(utt, vtt, ut, vt, u, v,
+            Ks, Ss, a_plus_adag, a_minus_adag,
+            p, q, dpdt, dqdt, t, α)
+
+    utvt_history[1:2,1+nsteps] .= ut
+    utvt_history[3:4,1+nsteps] .= vt
+    uttvtt_history[1:2,1+nsteps] .= utt
+    uttvtt_history[3:4,1+nsteps] .= vtt
+
+    if return_time_derivatives
+        return uv_history, utvt_history, uttvtt_history
+    end
     return uv_history
 end
-
 
 
 
@@ -447,6 +516,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, dpda, 
             grad += dot(vcat(ut,vt), lambda_history[:,1+n+1])
         end
         grad *= -0.5*dt
+    elseif order == 4
     else
         throw("Invalid order: $order")
     end
