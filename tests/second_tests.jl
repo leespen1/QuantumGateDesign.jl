@@ -8,9 +8,15 @@ function this_prob(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
     q(t,α) = 0.0
     dpdt(t,α) = -α*ω*sin(ω*t)
     dqdt(t,α) = 0.0
+    dpda(t,α) = cos(ω*t)
+    dqda(t,α) = 0.0
+    d2p_dta(t,α) = -ω*sin(ω*t)
+    d2q_dta(t,α) = 0.0
     u0::Vector{Float64} = [1,0]
     v0::Vector{Float64} = [0,0]
-    return SchrodingerProb(Ks,Ss,p,q,dpdt,dqdt,u0,v0,tf,nsteps)
+    return SchrodingerProb(Ks,Ss,
+                           p,q,dpdt,dqdt,dpda,dqda,d2p_dta,d2q_dta,
+                           u0,v0,tf,nsteps)
 end
 
 
@@ -107,53 +113,48 @@ end
 
 
 function figure1(α=1.0; order=2)
-    prob = this_prob()
+    prob = this_prob(nsteps=10)
     history = eval_forward(prob, α, order=order)
     target = history[:,end]
-
-    dpda(t,a) = cos(t)
-    dqda(t,a) = 0.0
 
     N = 100
     alphas = LinRange(0,2,N)
     grads_fd = zeros(N)
     #grads_diff_mat = zeros(N)
     grads_diff_forced = zeros(N)
-    grads_diff_auto_forced = zeros(N)
     grads_da = zeros(N)
     for i in 1:N
         α = alphas[i]
         grads_fd[i] = finite_difference(prob, α, target, order=order)
         #grads_diff_mat[i] = eval_forward_grad_mat(target, α)
-        grads_diff_forced[i] = eval_grad_forced(prob, target, dpda, dqda, α, order=order)
-        grads_diff_auto_forced[i] = eval_grad_auto_forced(prob, target, α, order=order)
-        grads_da[i] = discrete_adjoint(prob, target, dpda, dqda, α, order=order)
+        #grads_diff_forced[i] = eval_grad_forced(prob, target, dpda, dqda, α, order=order)
+        grads_da[i] = discrete_adjoint(prob, target, α, order=order)
+        grads_diff_forced[i] = eval_grad_forced(prob, target, α, order=order)
+        #grads_da[i] = discrete_adjoint(prob, target, dpda, dqda, α, order=2)
     end
     #return alphas, grads_fd, grads_diff_mat, grads_diff_forced, grads_diff_auto_forced, grads_da
-    return alphas, grads_fd, grads_diff_forced, grads_diff_auto_forced, grads_da
+    return alphas, grads_fd, grads_diff_forced, grads_da
 end
 
-function plot_figure1(alphas, grads_fd, grads_diff_forced, grads_diff_auto_forced, grads_da)
+function plot_figure1(alphas, grads_fd, grads_diff_forced, grads_da)
     # If all the gradients are working, this graph won't be much use
     pl1 = plot(alphas, grads_fd, label="Finite Difference", lw=2)
     #plot!(pl1, alphas, grads_diff_mat, label="Differentiation (Matrix)", lw=2)
-    plot!(pl1, alphas, grads_diff_forced, label="Differentiation (Forced)", lw=2)
-    plot!(pl1, alphas, grads_diff_auto_forced, label="Differentiation (Auto Forced)", lw=2)
+    plot!(pl1, alphas, grads_diff_forced, label="Differentiation / Forced", lw=2)
     plot!(pl1, alphas, grads_da, label="Discrete Adjoint", lw=2)
     plot!(pl1, xlabel="α", ylabel="Gradient")
     plot!(pl1, legendfontsize=14,guidefontsize=14,tickfontsize=14)
 
     # Use finite difference as the "true" value
     errs_diff_forced = abs.(grads_fd .- grads_diff_forced)
-    errs_diff_auto_forced = abs.(grads_fd .- grads_diff_auto_forced)
     #errs_diff_mat = abs.(grads_fd .- grads_diff_mat)
     errs_da = abs.(grads_fd .- grads_da)
-    pl2 = plot(alphas, errs_diff_forced, label="Differentiaion (Forced)", lw=2)
-    plot!(alphas, errs_diff_auto_forced, label="Differentiaion (Auto Forced)", lw=2, linestyle=:dash)
+    pl2 = plot(alphas, errs_diff_forced, label="Differentiation / Forced", lw=2)
     #plot!(pl2, alphas, errs_diff_mat, label="Differentiaion (Matrix)", lw=2)
     plot!(pl2, alphas, errs_da, label="Discrete Adjoint", lw=2)
     plot!(pl2, legendfontsize=14,guidefontsize=14,tickfontsize=14)
     plot!(pl2, yscale=:log10)
+    plot!(pl2, xlabel="α", ylabel="Gradient Error")
     return pl1, pl2
 end
 
