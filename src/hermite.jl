@@ -613,7 +613,9 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             # NOTE: LHS and RHS Linear transformations use the SAME TIME
 
             LHS_map = LinearMap(
-                x -> LHS_func(lambda_ut, lambda_vt, x[1:2], x[3:4], Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t, p, q, t, α, dt),
+                x -> LHS_func(lambda_ut, lambda_vt, x[1:2], x[3:4],
+                              Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+                              p, q, t, α, dt),
                 4,4
             )
 
@@ -641,6 +643,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
         lambda_u = copy(lambda[1:2])
         lambda_v = copy(lambda[3:4])
         
+        weights = [1,1/3]
         t = tf - dt
         # Discrete Adjoint Scheme
         for i in nsteps-1:-1:1
@@ -651,7 +654,6 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
                 Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
                 p, q, dpdt, dqdt, t, α)
 
-            weights = [1,1/3]
             copy!(RHS_lambda_u,lambda_u)
             axpy!(0.5*dt*weights[1],lambda_ut,RHS_lambda_u)
             axpy!(0.25*dt^2*weights[2],lambda_utt,RHS_lambda_u)
@@ -835,24 +837,20 @@ function eval_grad_forced(prob, target, α=1.0; order=2)
 end
 
 
-# Deprecated, dpda, and dqda moved to SchrodingerProblem struct. 
-# If trying to use automatic differentiation, do it when creating SchrodingerProblem
-#=
-"""
-Evaluate gradient using differentiated/forced method approach.
-Use forward diff for calculating gradients.
-"""
-function eval_grad_auto_forced(prob::SchrodingerProb, target, α=1.0; order=2)
-    # dp/dα and dq/dα using auto (forward) differentiation
-    p_wrapped(t_a_vec) = prob.p(t_a_vec[1], t_a_vec[2])
-    q_wrapped(t_a_vec) = prob.q(t_a_vec[1], t_a_vec[2])
-    dpda(t,α) = ForwardDiff.gradient(p_wrapped, [t,α])[2]
-    dqda(t,α) = ForwardDiff.gradient(q_wrapped, [t,α])[2]
 
-    return eval_grad_forced(prob, target, dpda, dqda, α, order=order)
+# In the future, will need to updat to allow dα to work for vector-valued α
+# (i.e., compute a whole vector gradient)
+function eval_grad_finite_difference(prob, target, α, dα=1e-5; order=2)
+    # Centered Difference Approximation
+    history_r = eval_forward(prob, α+dα, order=order)
+    history_l = eval_forward(prob, α-dα, order=order)
+    ψf_r = history_r[:,end]
+    ψf_l = history_l[:,end]
+    infidelity_r = infidelity(ψf_r, target)
+    infidelity_l = infidelity(ψf_l, target)
+    gradient = (infidelity_r - infidelity_l)/(2*dα)
+    return gradient
 end
-=#
-
 
 
 function infidelity(ψ::Vector{Float64}, target::Vector{Float64})
