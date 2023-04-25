@@ -112,13 +112,13 @@ function eval_forward_grad_mat(target, α=1.0; nsteps=100)
 end
 
 
-function figure1(α=1.0; order=2)
-    prob = this_prob(nsteps=10)
+function figure1(α=1.0; order=2, nsteps=10)
+    prob = this_prob(nsteps=nsteps)
     history = eval_forward(prob, α, order=order)
     target = history[:,end]
 
     N = 100
-    alphas = LinRange(0,2,N)
+    alphas = LinRange(0.1,2,N)
     grads_fd = zeros(N)
     #grads_diff_mat = zeros(N)
     grads_diff_forced = zeros(N)
@@ -127,10 +127,8 @@ function figure1(α=1.0; order=2)
         α = alphas[i]
         grads_fd[i] = finite_difference(prob, α, target, order=order)
         #grads_diff_mat[i] = eval_forward_grad_mat(target, α)
-        #grads_diff_forced[i] = eval_grad_forced(prob, target, dpda, dqda, α, order=order)
         grads_da[i] = discrete_adjoint(prob, target, α, order=order)
         grads_diff_forced[i] = eval_grad_forced(prob, target, α, order=order)
-        #grads_da[i] = discrete_adjoint(prob, target, dpda, dqda, α, order=2)
     end
     #return alphas, grads_fd, grads_diff_mat, grads_diff_forced, grads_diff_auto_forced, grads_da
     return alphas, grads_fd, grads_diff_forced, grads_da
@@ -154,27 +152,26 @@ function plot_figure1(alphas, grads_fd, grads_diff_forced, grads_da)
     plot!(pl2, alphas, errs_da, label="Discrete Adjoint", lw=2)
     plot!(pl2, legendfontsize=14,guidefontsize=14,tickfontsize=14)
     plot!(pl2, yscale=:log10)
-    plot!(pl2, xlabel="α", ylabel="Gradient Error")
+    plot!(pl2, xlabel="α", title="Deviation from Finite Difference Gradient")
     return pl1, pl2
 end
 
 
 
-function figure2(α=1.0)
-    prob = this_prob()
+function figure2(;α=1.0, tf=1.0, ω=1.0, base_nsteps=2)
+    prob = this_prob(tf=tf, ω=ω)
     orders = [2,4]
     N = 5
-    base = 2
     sol_errs = zeros(N, length(orders))
     infidelities = zeros(N, length(orders))
 
     step_sizes = zeros(N)
     for n in 1:N
-        step_sizes[n] = prob.tf / (base^n)
+        step_sizes[n] = prob.tf / (base_nsteps^n)
     end
 
     # Get 'true' solution, using most timesteps and highest order
-    prob.nsteps = base^(N+1)
+    prob.nsteps = base_nsteps^(N+1)
     history = eval_forward(prob, α, order=max(orders...)) 
     final_state_fine = history[:,end]
 
@@ -182,7 +179,7 @@ function figure2(α=1.0)
         order = orders[j]
         final_states = zeros(4,N)
         for i in 1:N
-            prob.nsteps = base^i
+            prob.nsteps = base_nsteps^i
             history = eval_forward(prob, α, order=order)
             final_states[:,i] = history[:,end]
         end

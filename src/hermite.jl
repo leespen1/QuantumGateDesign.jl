@@ -202,8 +202,6 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
     vt = zeros(2)
 
     # Order 2
-    println("2nd Order")
-
     for i in 1:nsteps
         utvt!(ut, vt, u, v,
               Ks, Ss, a_plus_adag, a_minus_adag,
@@ -289,8 +287,6 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
     vtt = zeros(2)
 
     # Order 4
-    println("4th Order")
-
     for i in 1:nsteps
         utvt!(ut, vt, u, v,
               Ks, Ss, a_plus_adag, a_minus_adag,
@@ -469,32 +465,53 @@ function eval_forward_forced_order4(prob::SchrodingerProb, forcing_ary::Array{Fl
     utt = zeros(2)
     vtt = zeros(2)
 
+    weights = [1,1/3]
+    weights_LHS = [1,-1/3]
     for i in 1:nsteps
+        # First time derivative at current timestep
         utvt!(ut, vt, u, v,
               Ks, Ss, a_plus_adag, a_minus_adag,
               p, q, t, α)
+        axpy!(1.0,forcing_ary[1:2,i,1], ut)
+        axpy!(1.0,forcing_ary[3:4,i,1], vt)
+
+        # Second time derivative at current timestep
         uttvtt!(utt, vtt, ut, vt, u, v,
                 Ks, Ss, a_plus_adag, a_minus_adag,
                 p, q, dpdt, dqdt, t, α)
+        axpy!(1.0,forcing_ary[1:2,i,2], utt)
+        axpy!(1.0,forcing_ary[3:4,i,2], vtt)
 
-        weights = [1,1/3]
+        # Accumulate RHS (current time contributions)
         copy!(RHSu,u)
-        axpy!(0.5*dt,ut,RHSu)
+        axpy!(0.5*dt*weights[1],ut,RHSu)
         axpy!(0.25*dt^2*weights[2],utt,RHSu)
 
         copy!(RHSv,v)
-        axpy!(0.5*dt,vt,RHSv)
+        axpy!(0.5*dt*weights[1],vt,RHSv)
         axpy!(0.25*dt^2*weights[2],vtt,RHSv)
+
+        # Add in forcing from first time derivative at next timestep
+        axpy!(0.5*dt*weights_LHS[1],forcing_ary[1:2,i+1,1], RHSu)
+        axpy!(0.5*dt*weights_LHS[1],forcing_ary[3:4,i+1,1], RHSv)
+
+        # Add in forcing from second time derivative at next timestep
+        axpy!(0.25*dt^2*weights_LHS[2],forcing_ary[1:2,i+1,2], RHSu)
+        axpy!(0.25*dt^2*weights_LHS[2],forcing_ary[3:4,i+1,2], RHSv)
+
+        # Advance time to next point
+        t += dt
+
+        # Don't forget to differentiate the forcing from the first derivative
+        utvt!(ut, vt, forcing_ary[1:2,i+1,1], forcing_ary[3:4,i+1,1],
+              Ks, Ss, a_plus_adag, a_minus_adag,
+              p, q, t, α)
+
+        axpy!(0.25*dt^2*weights_LHS[2], ut, RHSu)
+        axpy!(0.25*dt^2*weights_LHS[2], vt, RHSv)
 
         copyto!(RHS_uv,1,RHSu,1,2)
         copyto!(RHS_uv,3,RHSv,1,2)
-
-        axpy!(0.5*dt,forcing_ary[:,i,1], RHS_uv)
-        axpy!(0.5*dt,forcing_ary[:,i+1,1], RHS_uv)
-        axpy!(0.25*dt^2,forcing_ary[:,i,2], RHS_uv)
-        axpy!(0.25*dt^2,forcing_ary[:,i+1,2], RHS_uv)
-
-        t += dt
 
         LHS_map = LinearMap(
             uv -> LHS_func_order4(utt, vtt, ut, vt, uv[1:2], uv[3:4],
@@ -708,8 +725,8 @@ function eval_grad_forced(prob, target, α=1.0; order=2)
     # Prepare dH/dα
     
     # System hamiltonian is constant, falls out when taking derivative
-    Ks::Matrix{Float64} = zeros(2,2)
-    Ss::Matrix{Float64} = zeros(2,2)
+    dKs_da::Matrix{Float64} = zeros(2,2)
+    dSs_da::Matrix{Float64} = zeros(2,2)
     a_plus_adag = prob.a_plus_adag
     a_minus_adag = prob.a_minus_adag
     dpda = prob.dpda
@@ -735,7 +752,7 @@ function eval_grad_forced(prob, target, α=1.0; order=2)
             copyto!(u,history[1:2,1+i,1])
             copyto!(v,history[3:4,1+i,1])
 
-            utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
+            utvt!(ut, vt, u, v, dKs_da, dSs_da, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
             copyto!(forcing_vec,1,ut,1,2)
             copyto!(forcing_vec,3,vt,1,2)
 
@@ -764,7 +781,7 @@ function eval_grad_forced(prob, target, α=1.0; order=2)
             v .= history[3:4,1+i,1]
 
             utvt!(ut, vt, u, v, 
-                  Ks, Ss, a_plus_adag, a_minus_adag,
+                  dKs_da, dSs_da, a_plus_adag, a_minus_adag,
                   dpda, dqda, t, α)
             forcing_vec2[1:2] .= ut
             forcing_vec2[3:4] .= vt
@@ -772,29 +789,24 @@ function eval_grad_forced(prob, target, α=1.0; order=2)
             forcing_ary[:,1+i,1] .= forcing_vec2
 
             # Fourth Order Forcing
-            #= Do I double count the contributions from first derivative?
-            # H*∂H/∂α*ψ
-            utvt!(ut, vt, forcing_vec2[1:2], forcing_vec2[3:4],
-                  prob.Ks, prob.Ss, a_plus_adag, a_minus_adag,
-                  dpda, dqda, t, α)
-            forcing_vec4[1:2] .= ut
-            forcing_vec4[3:4] .= vt
-            =#
             forcing_vec4 = zeros(4)
 
             utvt!(ut, vt, u, v,
-                  Ks, Ss, a_plus_adag, a_minus_adag,
+                  dKs_da, dSs_da, a_plus_adag, a_minus_adag,
                   d2p_dta, d2q_dta, t, α)
             forcing_vec4[1:2] += ut
             forcing_vec4[3:4] += vt
 
-            u .= history[1:2,1+i,2]
-            v .= history[3:4,1+i,2]
-            utvt!(ut, vt, u, v,
-                  Ks, Ss, a_plus_adag, a_minus_adag,
+            ut .= history[1:2,1+i,2]
+            vt .= history[3:4,1+i,2]
+
+            A = zeros(2) # Placeholders
+            B = zeros(2)
+            utvt!(A, B, ut, vt,
+                  dKs_da, dSs_da, a_plus_adag, a_minus_adag,
                   dpda, dqda, t, α)
-            forcing_vec4[1:2] += ut
-            forcing_vec4[3:4] += vt
+            forcing_vec4[1:2] += A
+            forcing_vec4[3:4] += B
 
             forcing_ary[:,1+i,2] .= forcing_vec4
 
