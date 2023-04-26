@@ -149,11 +149,11 @@ function LHS_func_order4(utt, vtt, ut, vt, u, v,
     axpy!(-0.5*dt*weights[1],vt,LHSv)
     axpy!(-0.25*dt^2*weights[2],vtt,LHSv)
 
-    LHS_uv = zeros(4)
-    copyto!(LHS_uv,1,LHSu,1,2)
-    copyto!(LHS_uv,3,LHSv,1,2)
+    LHS = zeros(4)
+    copyto!(LHS,1,LHSu,1,2)
+    copyto!(LHS,3,LHSv,1,2)
 
-    return LHS_uv
+    return LHS
 end
 
 
@@ -194,7 +194,7 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
 
     RHSu::Vector{Float64} = zeros(2)
     RHSv::Vector{Float64} = zeros(2)
-    RHS_uv::Vector{Float64} = zeros(4)
+    RHS::Vector{Float64} = zeros(4)
 
     u = copy(u0)
     v = copy(v0)
@@ -216,8 +216,8 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
         copy!(RHSv,v)
         axpy!(0.5*dt,vt,RHSv)
 
-        copyto!(RHS_uv,1,RHSu,1,2)
-        copyto!(RHS_uv,3,RHSv,1,2)
+        copyto!(RHS,1,RHSu,1,2)
+        copyto!(RHS,3,RHSv,1,2)
 
         t += dt
 
@@ -228,7 +228,7 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
             4,4
         )
 
-        gmres!(uv, LHS_map, RHS_uv, abstol=1e-15, reltol=1e-15)
+        gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
         uv_history[:,1+i] .= uv
         u = uv[1:2]
         v = uv[3:4]
@@ -277,7 +277,7 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
 
     RHSu::Vector{Float64} = zeros(2)
     RHSv::Vector{Float64} = zeros(2)
-    RHS_uv::Vector{Float64} = zeros(4)
+    RHS::Vector{Float64} = zeros(4)
 
     u = copy(u0)
     v = copy(v0)
@@ -309,8 +309,8 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
         axpy!(0.5*dt*weights[1],vt,RHSv)
         axpy!(0.25*dt^2*weights[2],vtt,RHSv)
 
-        copyto!(RHS_uv,1,RHSu,1,2)
-        copyto!(RHS_uv,3,RHSv,1,2)
+        copyto!(RHS,1,RHSu,1,2)
+        copyto!(RHS,3,RHSv,1,2)
 
         t += dt
 
@@ -321,7 +321,7 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
             4,4
         )
 
-        gmres!(uv, LHS_map, RHS_uv)
+        gmres!(uv, LHS_map, RHS)
         uv_history[:,1+i] .= uv
         u = uv[1:2]
         v = uv[3:4]
@@ -625,6 +625,53 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             lambda_v = lambda[3:4]
             t -= dt
         end
+    
+        zero_mat = zeros(2,2)
+        uv = zeros(4)
+        u = zeros(2)
+        v = zeros(2)
+        # Won't actually hold ut and vt, but rather real/imag parts of dH/dα*ψ
+        ut = zeros(2)
+        vt = zeros(2)
+        dummy_u = zeros(2)
+        dummy_v = zeros(2)
+        dummy = zeros(4)
+
+        # Accumulate Gradient
+        grad = 0.0
+        for n in 0:nsteps-1
+            u = history[1:2,1+n]
+            v = history[3:4,1+n]
+            t = n*dt
+            # Note that system matrices go to zero
+            utvt!(ut, vt, u, v,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+                  dpda, dqda, t, α)
+
+            dummy_u .= 0.0
+            dummy_v .= 0.0
+            axpy!(0.5*dt,ut,dummy_u)
+            axpy!(0.5*dt,vt,dummy_v)
+            dummy[1:2] .= dummy_u
+            dummy[3:4] .= dummy_v
+            grad += dot(dummy, lambda_history[:,1+n+1])
+
+            u = history[1:2,1+n+1]
+            v = history[3:4,1+n+1]
+            t = (n+1)*dt
+            # Note that system matrices go to zero
+            utvt!(ut, vt, u, v,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag,
+                  dpda, dqda, t, α)
+            dummy_u .= 0.0
+            dummy_v .= 0.0
+            axpy!(0.5*dt,ut,dummy_u)
+            axpy!(0.5*dt,vt,dummy_v)
+            dummy[1:2] .= dummy_u
+            dummy[3:4] .= dummy_v
+            grad += dot(dummy, lambda_history[:,1+n+1])
+        end
+        grad *= -1.0
 
     elseif order == 4
         # Terminal Condition
@@ -681,37 +728,81 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             lambda_v = lambda[3:4]
             t -= dt
         end
+        # Need different gradient calculation for 4th order!!!
+        zero_mat = zeros(2,2)
+        uv = zeros(4)
+        u = zeros(2)
+        v = zeros(2)
+        # Won't actually hold ut and vt, but rather real/imag parts of dH/dα*ψ
+        ut = zeros(2)
+        vt = zeros(2)
+        utt = zeros(2)
+        vtt = zeros(2)
+        dummy_u = zeros(2)
+        dummy_v = zeros(2)
+        dummy = zeros(4)
+
+        # Accumulate Gradient
+        grad = 0.0
+        #weights_n = [1,-1/3]
+        #weights_np1 = [1,1/3]
+        weights_n = [1,1/3]
+        weights_np1 = [1,-1/3]
+        for n in 0:nsteps-1
+            u = history[1:2,1+n]
+            v = history[3:4,1+n]
+            t = n*dt
+            # Note that system matrices go to zero
+            utvt!(ut, vt, u, v,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+                  dpda, dqda, t, α)
+            uttvtt!(utt, vtt, ut, vt, u, v,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+                  dpda, dqda, d2p_dta, d2q_dta, t, α)
+
+            dummy_u .= 0.0
+            axpy!(0.5*dt*weights_n[1],ut,dummy_u)
+            axpy!(0.25*dt^2*weights_n[2],utt,dummy_u)
+
+            dummy_v .= 0.0
+            axpy!(0.5*dt*weights_n[1],vt,dummy_v)
+            axpy!(0.25*dt^2*weights_n[2],vtt,dummy_v)
+
+            dummy[1:2] .= dummy_u
+            dummy[3:4] .= dummy_v
+
+            grad += dot(dummy, lambda_history[:,1+n+1])
 
 
+            u = history[1:2,1+n+1]
+            v = history[3:4,1+n+1]
+            t = (n+1)*dt
+
+            utvt!(ut, vt, u, v,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+                  dpda, dqda, t, α)
+            uttvtt!(utt, vtt, ut, vt, u, v,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+                  dpda, dqda, d2p_dta, d2q_dta, t, α)
+
+            dummy_u .= 0.0
+            axpy!(0.5*dt*weights_np1[1],ut,dummy_u)
+            axpy!(0.25*dt^2*weights_np1[2],utt,dummy_u)
+
+            dummy_v .= 0.0
+            axpy!(0.5*dt*weights_np1[1],vt,dummy_v)
+            axpy!(0.25*dt^2*weights_np1[2],vtt,dummy_v)
+
+            dummy[1:2] .= dummy_u
+            dummy[3:4] .= dummy_v
+
+            grad += dot(dummy, lambda_history[:,1+n+1])
+        end
+        grad *= -1.0
     else
         throw("Invalid order: $order")
     end
 
-    zero_mat = zeros(2,2)
-    uv = zeros(4)
-    u = zeros(2)
-    v = zeros(2)
-    # Won't actually hold ut and vt, but rather real/imag parts of dH/dα*ψ
-    ut = zeros(2)
-    vt = zeros(2)
-
-    grad = 0.0
-    for n in 0:nsteps-1
-        u = history[1:2,1+n]
-        v = history[3:4,1+n]
-        t = n*dt
-        # Note that system matrices go to zero
-        utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
-        grad += dot(vcat(ut,vt), lambda_history[:,1+n+1])
-
-        u = history[1:2,1+n+1]
-        v = history[3:4,1+n+1]
-        t = (n+1)*dt
-        # Note that system matrices go to zero
-        utvt!(ut, vt, u, v, zero_mat, zero_mat, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
-        grad += dot(vcat(ut,vt), lambda_history[:,1+n+1])
-    end
-    grad *= -0.5*dt
 
     #return lambda_history, grad
     return grad

@@ -8,16 +8,23 @@ function rabi_osc(Ω::ComplexF64=1.0+0.0im, tf::Float64=NaN; nsteps::Int64=100)
     #Ks::Matrix{Float64} = [0 0; 0 1]
     Ks::Matrix{Float64} = [0 0; 0 0] # Rotating frame
     Ss::Matrix{Float64} = [0 0; 0 0]
-    p(t,α) = real(Ω)
-    q(t,α) = imag(Ω)
+    p(t,α) = α*real(Ω)
+    q(t,α) = α*imag(Ω)
+    dpdt(t,α) = 0.0
+    dqdt(t,α) = 0.0
+    dpda(t,α) = real(Ω)
+    dqda(t,α) = imag(Ω)
+    d2p_dta(t,α) = 0.0
+    d2q_dta(t,α) = 0.0
     u0::Vector{Float64} = [1,0]
     v0::Vector{Float64} = [0,0]
     # Default time to pi/2 pulse
     if isnan(tf)
         tf = pi/(2*abs(Ω))
     end
-    return SchrodingerProb(Ks,Ss,p,q,u0,v0,tf,nsteps)
+    return SchrodingerProb(Ks,Ss,p,q,dpdt,dqdt,dpda,dqda,d2p_dta,d2q_dta,u0,v0,tf,nsteps)
 end
+
 
 
 """

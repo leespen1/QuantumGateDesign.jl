@@ -38,13 +38,14 @@ end
 
 function plot_convergence_test(step_sizes, sol_errs, infidelities, orders)
     pl = plot()
+    #colors = [:blue, :red]
     for i in 1:length(orders)
-        plot!(pl, step_sizes, abs.(sol_errs[:,i]), linewidth=2, marker=:circle, label="Error (Order $(orders[i]))")
-        plot!(pl, step_sizes, abs.(infidelities[:,i]), linewidth=2, marker=:circle, label="Infidelities (Order $(orders[i]))")
+        plot!(pl, step_sizes, abs.(sol_errs[:,i]), linewidth=2, marker=:circle, label="Error (Order $(orders[i]))", color=i)
+        plot!(pl, step_sizes, abs.(infidelities[:,i]), linewidth=2, marker=:square, label="Infidelities (Order $(orders[i]))", color=i)
     end
-    plot!(pl, step_sizes, step_sizes .^ 2, label="Δt^2", linestyle=:dash)
-    plot!(pl, step_sizes, step_sizes .^ 4, label="Δt^4", linestyle=:dash)
-    plot!(pl, step_sizes, step_sizes .^ 6, label="Δt^6", linestyle=:dash)
+    plot!(pl, step_sizes, step_sizes .^ 2, label="Δt^2", linestyle=:solid, color=:grey, lw=2)
+    plot!(pl, step_sizes, step_sizes .^ 4, label="Δt^4", linestyle=:dash, color=:grey, lw=2)
+    plot!(pl, step_sizes, step_sizes .^ 6, label="Δt^6", linestyle=:dashdot, color=:grey, lw=2)
     plot!(pl, legendfontsize=14, guidefontsize=14, tickfontsize=14)
     plot!(pl, scale=:log10)
     plot!(pl, legend=:bottomright)
