@@ -114,7 +114,9 @@ end
 
 
 function LHS_func(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α, dt)
-    utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
+    utvt!(ut, vt, u, v,
+          Ks, Ss, a_plus_adag, a_minus_adag,
+          p, q, t, α)
     
     LHSu = copy(u)
     axpy!(-0.5*dt,ut,LHSu)
@@ -132,8 +134,12 @@ function LHS_func_order4(utt, vtt, ut, vt, u, v,
         Ks, Ss, a_plus_adag, a_minus_adag,
         p, q, dpdt, dqdt, t, α, dt)
 
-    utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
-    uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, dpdt, dqdt, t, α)
+    utvt!(ut, vt, u, v,
+          Ks, Ss, a_plus_adag, a_minus_adag,
+          p, q, t, α)
+    uttvtt!(utt, vtt, ut, vt, u, v,
+            Ks, Ss, a_plus_adag, a_minus_adag,
+            p, q, dpdt, dqdt, t, α)
 
     weights = [1,-1/3]
     
@@ -178,7 +184,6 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
 
     t = 0
     dt = tf/nsteps
-
 
     uv = zeros(4)
     copyto!(uv,1,u0,1,2)
@@ -260,7 +265,6 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
 
     t = 0
     dt = tf/nsteps
-
 
     uv = zeros(4)
     copyto!(uv,1,u0,1,2)
@@ -590,10 +594,9 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
         lambda_u = copy(lambda[1:2])
         lambda_v = copy(lambda[3:4])
         
-
-        t = tf - dt
         # Discrete Adjoint Scheme
         for i in nsteps-1:-1:1
+            t -= dt
             utvt!(lambda_ut, lambda_vt, lambda_u, lambda_v,
                   Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
                   p, q, t, α)
@@ -619,7 +622,6 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             lambda_history[:,1+i] .= lambda
             lambda_u = lambda[1:2]
             lambda_v = lambda[3:4]
-            t -= dt
         end
     
         zero_mat = zeros(2,2)
@@ -646,10 +648,13 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
 
             dummy_u .= 0.0
             dummy_v .= 0.0
+
             axpy!(0.5*dt,ut,dummy_u)
             axpy!(0.5*dt,vt,dummy_v)
+
             dummy[1:2] .= dummy_u
             dummy[3:4] .= dummy_v
+
             grad += dot(dummy, lambda_history[:,1+n+1])
 
             u = history[1:2,1+n+1]
@@ -659,12 +664,16 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             utvt!(ut, vt, u, v,
                   zero_mat, zero_mat, a_plus_adag, a_minus_adag,
                   dpda, dqda, t, α)
+
             dummy_u .= 0.0
             dummy_v .= 0.0
+
             axpy!(0.5*dt,ut,dummy_u)
             axpy!(0.5*dt,vt,dummy_v)
+
             dummy[1:2] .= dummy_u
             dummy[3:4] .= dummy_v
+
             grad += dot(dummy, lambda_history[:,1+n+1])
         end
         grad *= -1.0
@@ -680,6 +689,13 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
                           p, q, dpdt, dqdt, t, α, dt),
             4,4
         )
+        #LHS_map = LinearMap(
+        #    x -> LHS_func(lambda_ut, lambda_vt,
+        #                  x[1:2], x[3:4],
+        #                  Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+        #                  p, q, t, α, dt),
+        #    4,4
+        #)
         RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
         gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
@@ -688,9 +704,9 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
         lambda_v = copy(lambda[3:4])
         
         weights = [1,1/3]
-        t = tf - dt
         # Discrete Adjoint Scheme
         for i in nsteps-1:-1:1
+            t -= dt
             utvt!(lambda_ut, lambda_vt, lambda_u, lambda_v,
                   Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
                   p, q, t, α)
@@ -718,12 +734,18 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
                               p, q, dpdt, dqdt, t, α, dt),
                 4,4
             )
+            #LHS_map = LinearMap(
+            #    x -> LHS_func(lambda_ut, lambda_vt,
+            #                  x[1:2], x[3:4],
+            #                  Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+            #                  p, q, t, α, dt),
+            #    4,4
+            #)
 
             gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
             lambda_history[:,1+i] .= lambda
             lambda_u = lambda[1:2]
             lambda_v = lambda[3:4]
-            t -= dt
         end
         # Need different gradient calculation for 4th order!!!
         zero_mat = zeros(2,2)
@@ -753,15 +775,19 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             utvt!(ut, vt, u, v,
                   zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
                   dpda, dqda, t, α)
+            #utvt!(utt, vtt, ut, vt,
+            #      zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+            #      dpda, dqda, t, α)
             uttvtt!(utt, vtt, ut, vt, u, v,
                   zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
                   dpda, dqda, d2p_dta, d2q_dta, t, α)
 
             dummy_u .= 0.0
+            dummy_v .= 0.0
+
             axpy!(0.5*dt*weights_n[1],ut,dummy_u)
             axpy!(0.25*dt^2*weights_n[2],utt,dummy_u)
 
-            dummy_v .= 0.0
             axpy!(0.5*dt*weights_n[1],vt,dummy_v)
             axpy!(0.25*dt^2*weights_n[2],vtt,dummy_v)
 
@@ -770,7 +796,6 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
 
             grad += dot(dummy, lambda_history[:,1+n+1])
 
-
             u = history[1:2,1+n+1]
             v = history[3:4,1+n+1]
             t = (n+1)*dt
@@ -778,15 +803,19 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             utvt!(ut, vt, u, v,
                   zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
                   dpda, dqda, t, α)
+            #utvt!(utt, vtt, ut, vt,
+            #      zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+            #      dpda, dqda, t, α)
             uttvtt!(utt, vtt, ut, vt, u, v,
                   zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
                   dpda, dqda, d2p_dta, d2q_dta, t, α)
 
             dummy_u .= 0.0
+            dummy_v .= 0.0
+
             axpy!(0.5*dt*weights_np1[1],ut,dummy_u)
             axpy!(0.25*dt^2*weights_np1[2],utt,dummy_u)
 
-            dummy_v .= 0.0
             axpy!(0.5*dt*weights_np1[1],vt,dummy_v)
             axpy!(0.25*dt^2*weights_np1[2],vtt,dummy_v)
 

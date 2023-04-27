@@ -46,14 +46,14 @@ function analytic_rabi(Ω::ComplexF64,t::Float64,ψ0::Vector{Float64})
 end
 
 
-function rabi_convergence_test(Ω::ComplexF64=1.0+0.0im; α=missing, analytic=true)
+function rabi_convergence_test(Ω::ComplexF64=1.0+0.0im; α=1.0, analytic=true, order=2)
 
     prob200 = rabi_osc(Ω, nsteps=200)
-    history200 = eval_forward(prob200, α)
+    history200 = eval_forward(prob200, α, order=order)
     # Change stride to match 100 timestep result
     history200 = history200[:,1:2:end]
     prob100 = rabi_osc(Ω, nsteps=100)
-    history100 = eval_forward(prob100, α)
+    history100 = eval_forward(prob100, α, order=order)
 
     if analytic
         # Use analytic true solution
@@ -70,7 +70,7 @@ function rabi_convergence_test(Ω::ComplexF64=1.0+0.0im; α=missing, analytic=tr
         end
     else
         # Use 10000 timesteps for "true solution"
-        prob10000 = rabi_osc(nsteps=10000)
+        prob10000 = rabi_osc(nsteps=10000, order=order)
         history_true = eval_forward(prob10000, α)
         history_true = history_true[:,1:100:end]
     end
