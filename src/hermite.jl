@@ -1,8 +1,3 @@
-using LinearAlgebra
-using LinearMaps
-using IterativeSolvers
-using ForwardDiff
-
 mutable struct SchrodingerProb
     Ks::Matrix{Float64}
     Ss::Matrix{Float64}
@@ -579,6 +574,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
     RHS::Vector{Float64} = zeros(4)
 
     if order == 2
+        println("Discrete Adjoint Order 2")
         # Terminal Condition
         t = tf
         LHS_map = LinearMap(
@@ -674,6 +670,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
         grad *= -1.0
 
     elseif order == 4
+        println("Discrete Adjoint Order 4")
         # Terminal Condition
         t = tf
         LHS_map = LinearMap(

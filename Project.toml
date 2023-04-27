@@ -1,0 +1,4 @@
+name = "HermiteOptimalControl"
+uuid = "f716b271-9d99-4329-8adc-fa1e42d5b881"
+authors = ["Spencer Lee <leespen1@msu.edu>"]
+version = "0.1.0"
