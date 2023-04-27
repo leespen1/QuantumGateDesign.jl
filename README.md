@@ -1,7 +1,5 @@
 # Hermite Optimal Control
-Julia package for evolving Schrodinger's equation with a control applied and
-computing the gradient of the infidelity cost function. Will eventually be used
-in quantum optimal control problem.
+Julia package for quantum optimal control using Hermite methods.
 
 ## To Do
 - [ ] Fix 4th order discrete adjoint
