@@ -1,5 +1,3 @@
-include("../src/hermite.jl")
-
 """
 Construct a 'SchrodingerProb' corresponding to a Rabi Oscillator, with default
 time corresponding to a pi/2 pulse.

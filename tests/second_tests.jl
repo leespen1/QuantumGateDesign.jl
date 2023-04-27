@@ -1,6 +1,3 @@
-include("../src/hermite.jl")
-include("general_tests.jl")
-
 function this_prob(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
     Ks::Matrix{Float64} = [0 0; 0 1]
     Ss::Matrix{Float64} = [0 0; 0 0]
