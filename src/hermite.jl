@@ -67,7 +67,6 @@ function Base.copy(prob::SchrodingerProb)
 end
 
 
-
 function utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
     #Should I provide the functions p and q? or the values at (t,α)?
 
@@ -87,7 +86,7 @@ function utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
     mul!(vt, Ss, v)
     mul!(vt, a_minus_adag, v, q(t,α), 1)
     mul!(vt, Ks, u, 1, 1)
-    mul!(vt, a_plus_adag, u, p(t,α), 1)
+    mul!(vt, a_plus_adag,  u, p(t,α), 1)
 end
 
 function uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, dpdt, dqdt, t, α)
@@ -108,8 +107,8 @@ function uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q
     #mul!(vtt, Ks, ut, 1, 1)
     #mul!(vtt, a_plus_adag, ut, p(t,α), 1)
 
+    mul!(vtt, a_plus_adag,  u, dpdt(t,α), 1)
     mul!(vtt, a_minus_adag, v, dqdt(t,α), 1)
-    mul!(vtt, a_plus_adag, u, dpdt(t,α), 1)
 end
 
 
@@ -202,13 +201,13 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
     vt = zeros(2)
 
     # Order 2
-    for i in 1:nsteps
+    for n in 0:nsteps-1
         utvt!(ut, vt, u, v,
               Ks, Ss, a_plus_adag, a_minus_adag,
               p, q, t, α)
 
-        utvt_history[1:2,1+(i-1)] .= ut
-        utvt_history[3:4,1+(i-1)] .= vt
+        utvt_history[1:2,1+n] .= ut
+        utvt_history[3:4,1+n] .= vt
 
         copy!(RHSu,u)
         axpy!(0.5*dt,ut,RHSu)
@@ -229,7 +228,7 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
         )
 
         gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
-        uv_history[:,1+i] .= uv
+        uv_history[:,1+n+1] .= uv
         u = uv[1:2]
         v = uv[3:4]
     end
@@ -286,7 +285,7 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
     vtt = zeros(2)
 
     # Order 4
-    for i in 1:nsteps
+    for n in 0:nsteps-1
         utvt!(ut, vt, u, v,
               Ks, Ss, a_plus_adag, a_minus_adag,
               p, q, t, α)
@@ -294,10 +293,10 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
                 Ks, Ss, a_plus_adag, a_minus_adag,
                 p, q, dpdt, dqdt, t, α)
 
-        utvt_history[1:2,1+(i-1)] .= ut
-        utvt_history[3:4,1+(i-1)] .= vt
-        uttvtt_history[1:2,1+(i-1)] .= utt
-        uttvtt_history[3:4,1+(i-1)] .= vtt
+        utvt_history[1:2,1+n] .= ut
+        utvt_history[3:4,1+n] .= vt
+        uttvtt_history[1:2,1+n] .= utt
+        uttvtt_history[3:4,1+n] .= vtt
 
         weights = [1,1/3]
         copy!(RHSu,u)
@@ -321,7 +320,7 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
         )
 
         gmres!(uv, LHS_map, RHS)
-        uv_history[:,1+i] .= uv
+        uv_history[:,1+n+1] .= uv
         u = uv[1:2]
         v = uv[3:4]
     end
@@ -394,7 +393,7 @@ function eval_forward_forced_order2(prob::SchrodingerProb, forcing_ary::Array{Fl
     utt = zeros(2)
     vtt = zeros(2)
 
-    for i in 1:nsteps
+    for n in 0:nsteps-1
         utvt!(ut, vt, u, v,
               Ks, Ss, a_plus_adag, a_minus_adag,
               p, q, t, α)
@@ -407,8 +406,8 @@ function eval_forward_forced_order2(prob::SchrodingerProb, forcing_ary::Array{Fl
         copyto!(RHS_uv,1,RHSu,1,2)
         copyto!(RHS_uv,3,RHSv,1,2)
 
-        axpy!(0.5*dt,forcing_ary[:,i,1], RHS_uv)
-        axpy!(0.5*dt,forcing_ary[:,i+1,1], RHS_uv)
+        axpy!(0.5*dt,forcing_ary[:,1+n,1], RHS_uv)
+        axpy!(0.5*dt,forcing_ary[:,1+n+1,1], RHS_uv)
 
         t += dt
 
@@ -420,7 +419,7 @@ function eval_forward_forced_order2(prob::SchrodingerProb, forcing_ary::Array{Fl
         )
 
         gmres!(uv, LHS_map, RHS_uv, abstol=1e-15, reltol=1e-15)
-        uv_history[:,1+i] .= uv
+        uv_history[:,1+n+1] .= uv
         u = uv[1:2]
         v = uv[3:4]
     end
@@ -466,20 +465,20 @@ function eval_forward_forced_order4(prob::SchrodingerProb, forcing_ary::Array{Fl
 
     weights = [1,1/3]
     weights_LHS = [1,-1/3]
-    for i in 1:nsteps
+    for n in 0:nsteps-1
         # First time derivative at current timestep
         utvt!(ut, vt, u, v,
               Ks, Ss, a_plus_adag, a_minus_adag,
               p, q, t, α)
-        axpy!(1.0,forcing_ary[1:2,i,1], ut)
-        axpy!(1.0,forcing_ary[3:4,i,1], vt)
+        axpy!(1.0,forcing_ary[1:2,1+n,1], ut)
+        axpy!(1.0,forcing_ary[3:4,1+n,1], vt)
 
         # Second time derivative at current timestep
         uttvtt!(utt, vtt, ut, vt, u, v,
                 Ks, Ss, a_plus_adag, a_minus_adag,
                 p, q, dpdt, dqdt, t, α)
-        axpy!(1.0,forcing_ary[1:2,i,2], utt)
-        axpy!(1.0,forcing_ary[3:4,i,2], vtt)
+        axpy!(1.0,forcing_ary[1:2,1+n,2], utt)
+        axpy!(1.0,forcing_ary[3:4,1+n,2], vtt)
 
         # Accumulate RHS (current time contributions)
         copy!(RHSu,u)
@@ -491,18 +490,18 @@ function eval_forward_forced_order4(prob::SchrodingerProb, forcing_ary::Array{Fl
         axpy!(0.25*dt^2*weights[2],vtt,RHSv)
 
         # Add in forcing from first time derivative at next timestep
-        axpy!(0.5*dt*weights_LHS[1],forcing_ary[1:2,i+1,1], RHSu)
-        axpy!(0.5*dt*weights_LHS[1],forcing_ary[3:4,i+1,1], RHSv)
+        axpy!(0.5*dt*weights_LHS[1],forcing_ary[1:2,1+n+1,1], RHSu)
+        axpy!(0.5*dt*weights_LHS[1],forcing_ary[3:4,1+n+1,1], RHSv)
 
         # Add in forcing from second time derivative at next timestep
-        axpy!(0.25*dt^2*weights_LHS[2],forcing_ary[1:2,i+1,2], RHSu)
-        axpy!(0.25*dt^2*weights_LHS[2],forcing_ary[3:4,i+1,2], RHSv)
+        axpy!(0.25*dt^2*weights_LHS[2],forcing_ary[1:2,1+n+1,2], RHSu)
+        axpy!(0.25*dt^2*weights_LHS[2],forcing_ary[3:4,1+n+1,2], RHSv)
 
         # Advance time to next point
         t += dt
 
         # Don't forget to differentiate the forcing from the first derivative
-        utvt!(ut, vt, forcing_ary[1:2,i+1,1], forcing_ary[3:4,i+1,1],
+        utvt!(ut, vt, forcing_ary[1:2,1+n+1,1], forcing_ary[3:4,1+n+1,1],
               Ks, Ss, a_plus_adag, a_minus_adag,
               p, q, t, α)
 
@@ -520,7 +519,7 @@ function eval_forward_forced_order4(prob::SchrodingerProb, forcing_ary::Array{Fl
         )
 
         gmres!(uv, LHS_map, RHS_uv, abstol=1e-15, reltol=1e-15)
-        uv_history[:,1+i] .= uv
+        uv_history[:,1+n+1] .= uv
         u = uv[1:2]
         v = uv[3:4]
     end
@@ -530,7 +529,7 @@ end
 
 
 
-function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=missing; order=2)
+function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=missing; order=2, cost_type=:Infidelity)
     R = target[:]
     T = vcat(R[3:4], -R[1:2])
     
@@ -581,13 +580,19 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
         println("Discrete Adjoint Order 2")
         # Terminal Condition
         t = tf
+
+        if cost_type == :Infidelity
+            RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
+        elseif cost_type == :Norm
+            RHS = history[:,end]
+        end
+
         LHS_map = LinearMap(
             x -> LHS_func(lambda_ut, lambda_vt, x[1:2], x[3:4],
                           Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
                           p, q, t, α, dt),
             4,4
         )
-        RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
         gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
         lambda_history[:,1+nsteps] .= lambda
@@ -619,7 +624,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             )
 
             gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
-            lambda_history[:,1+i] .= lambda
+            lambda_history[:,1+n+1] .= lambda
             lambda_u = lambda[1:2]
             lambda_v = lambda[3:4]
         end
@@ -682,6 +687,13 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
         println("Discrete Adjoint Order 4")
         # Terminal Condition
         t = tf
+
+        if cost_type == :Infidelity
+            RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
+        elseif cost_type == :Norm
+            RHS = history[:,end]
+        end
+
         LHS_map = LinearMap(
             x -> LHS_func_order4(lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
                           x[1:2], x[3:4],
@@ -696,7 +708,6 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
         #                  p, q, t, α, dt),
         #    4,4
         #)
-        RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
         gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
         lambda_history[:,1+nsteps] .= lambda
@@ -705,7 +716,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
         
         weights = [1,1/3]
         # Discrete Adjoint Scheme
-        for i in nsteps-1:-1:1
+        for n in nsteps-1:-1:1
             t -= dt
             utvt!(lambda_ut, lambda_vt, lambda_u, lambda_v,
                   Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
@@ -743,7 +754,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             #)
 
             gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
-            lambda_history[:,1+i] .= lambda
+            lambda_history[:,1+n] .= lambda
             lambda_u = lambda[1:2]
             lambda_v = lambda[3:4]
         end
@@ -836,7 +847,7 @@ end
 
 
 
-function eval_grad_forced(prob, target, α=1.0; order=2)
+function eval_grad_forced(prob::SchrodingerProb, target, α=1.0; order=2, cost_type=:Infidelity)
     # Get state vector history
     history = eval_forward(prob, α, order=order, return_time_derivatives=true)
 
@@ -867,15 +878,15 @@ function eval_grad_forced(prob, target, α=1.0; order=2)
         dt = prob.tf/nsteps
 
         # Get forcing (dH/dα * ψ)
-        for i in 0:nsteps
-            copyto!(u,history[1:2,1+i,1])
-            copyto!(v,history[3:4,1+i,1])
+        for n in 0:nsteps
+            copyto!(u,history[1:2,1+n,1])
+            copyto!(v,history[3:4,1+n,1])
 
             utvt!(ut, vt, u, v, dKs_da, dSs_da, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
             copyto!(forcing_vec,1,ut,1,2)
             copyto!(forcing_vec,3,vt,1,2)
 
-            forcing_ary[:,1+i,1] .= forcing_vec
+            forcing_ary[:,1+n,1] .= forcing_vec
 
             t += dt
         end
@@ -894,10 +905,10 @@ function eval_grad_forced(prob, target, α=1.0; order=2)
         dt = prob.tf/nsteps
 
         # Get forcing (dH/dα * ψ)
-        for i in 0:nsteps
+        for n in 0:nsteps
             # Second Order Forcing
-            u .= history[1:2,1+i,1]
-            v .= history[3:4,1+i,1]
+            u .= history[1:2,1+n,1]
+            v .= history[3:4,1+n,1]
 
             utvt!(ut, vt, u, v, 
                   dKs_da, dSs_da, a_plus_adag, a_minus_adag,
@@ -905,7 +916,7 @@ function eval_grad_forced(prob, target, α=1.0; order=2)
             forcing_vec2[1:2] .= ut
             forcing_vec2[3:4] .= vt
 
-            forcing_ary[:,1+i,1] .= forcing_vec2
+            forcing_ary[:,1+n,1] .= forcing_vec2
 
             # Fourth Order Forcing
             forcing_vec4 = zeros(4)
@@ -916,8 +927,8 @@ function eval_grad_forced(prob, target, α=1.0; order=2)
             forcing_vec4[1:2] += ut
             forcing_vec4[3:4] += vt
 
-            ut .= history[1:2,1+i,2]
-            vt .= history[3:4,1+i,2]
+            ut .= history[1:2,1+n,2]
+            vt .= history[3:4,1+n,2]
 
             A = zeros(2) # Placeholders
             B = zeros(2)
@@ -927,7 +938,7 @@ function eval_grad_forced(prob, target, α=1.0; order=2)
             forcing_vec4[1:2] += A
             forcing_vec4[3:4] += B
 
-            forcing_ary[:,1+i,2] .= forcing_vec4
+            forcing_ary[:,1+n,2] .= forcing_vec4
 
             t += dt
         end
@@ -949,7 +960,13 @@ function eval_grad_forced(prob, target, α=1.0; order=2)
     R = copy(target)
     T = vcat(R[3:4], -R[1:2])
 
-    gradient = -2*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
+    if cost_type == :Infidelity
+        gradient = -2*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
+    elseif cost_type == :Norm
+        gradient = dot(dQda,Q)
+    else
+        throw("Invalid cost type: $cost_type")
+    end
     return gradient
 end
 
@@ -957,15 +974,23 @@ end
 
 # In the future, will need to updat to allow dα to work for vector-valued α
 # (i.e., compute a whole vector gradient)
-function eval_grad_finite_difference(prob, target, α, dα=1e-5; order=2)
+function eval_grad_finite_difference(prob::SchrodingerProb, target, α, dα=1e-5; order=2, cost_type=:Infidelity)
     # Centered Difference Approximation
     history_r = eval_forward(prob, α+dα, order=order)
     history_l = eval_forward(prob, α-dα, order=order)
     ψf_r = history_r[:,end]
     ψf_l = history_l[:,end]
-    infidelity_r = infidelity(ψf_r, target)
-    infidelity_l = infidelity(ψf_l, target)
-    gradient = (infidelity_r - infidelity_l)/(2*dα)
+    if cost_type == :Infidelity
+        cost_r = infidelity(ψf_r, target)
+        cost_l = infidelity(ψf_l, target)
+    elseif cost_type == :Norm
+        cost_r = 0.5*norm(ψf_r)^2
+        cost_l = 0.5*norm(ψf_l)^2
+    else
+        throw("Invalid cost type: $cost_type")
+    end
+
+    gradient = (cost_r - cost_l)/(2*dα)
     return gradient
 end
 
@@ -975,3 +1000,4 @@ function infidelity(ψ::Vector{Float64}, target::Vector{Float64})
     T = vcat(R[3:4], -R[1:2])
     return 1 - (dot(ψ,R)^2 + dot(ψ,T)^2)
 end
+

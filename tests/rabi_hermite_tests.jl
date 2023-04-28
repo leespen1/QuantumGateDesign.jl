@@ -2,7 +2,7 @@
 Construct a 'SchrodingerProb' corresponding to a Rabi Oscillator, with default
 time corresponding to a pi/2 pulse.
 """
-function rabi_osc(Ω::ComplexF64=1.0+0.0im, tf::Float64=NaN; nsteps::Int64=100)
+function rabi_osc(Ω::ComplexF64=1.0+0.0im, tf::Float64=NaN; nsteps::Int64=100, typed=true)
     #Ks::Matrix{Float64} = [0 0; 0 1]
     Ks::Matrix{Float64} = [0 0; 0 0] # Rotating frame
     Ss::Matrix{Float64} = [0 0; 0 0]
@@ -20,7 +20,9 @@ function rabi_osc(Ω::ComplexF64=1.0+0.0im, tf::Float64=NaN; nsteps::Int64=100)
     if isnan(tf)
         tf = pi/(2*abs(Ω))
     end
-    return SchrodingerProb(Ks,Ss,p,q,dpdt,dqdt,dpda,dqda,d2p_dta,d2q_dta,u0,v0,tf,nsteps)
+    return SchrodingerProb(Ks,Ss,
+                           p,q,dpdt,dqdt,dpda,dqda,d2p_dta,d2q_dta,
+                           u0,v0,tf,nsteps)
 end
 
 
