@@ -55,7 +55,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
         elseif cost_type == :Tracking
             RHS = -(history[:,end] - target)
         elseif cost_type == :Norm
-            RHS = history[:,end]
+            RHS = -history[:,end]
         end
 
         LHS_map = LinearMap(
@@ -164,7 +164,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
         elseif cost_type == :Tracking
             RHS = -(history[:,end] - target)
         elseif cost_type == :Norm
-            RHS = history[:,end]
+            RHS = -history[:,end]
         end
 
         LHS_map = LinearMap(
