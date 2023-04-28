@@ -52,6 +52,8 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
 
         if cost_type == :Infidelity
             RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
+        elseif cost_type == :Tracking
+            RHS = -(history[:,end] - target)
         elseif cost_type == :Norm
             RHS = history[:,end]
         end
@@ -93,7 +95,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             )
 
             gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
-            lambda_history[:,1+n+1] .= lambda
+            lambda_history[:,1+n] .= lambda
             lambda_u = lambda[1:2]
             lambda_v = lambda[3:4]
         end
@@ -159,6 +161,8 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
 
         if cost_type == :Infidelity
             RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
+        elseif cost_type == :Tracking
+            RHS = -(history[:,end] - target)
         elseif cost_type == :Norm
             RHS = history[:,end]
         end
@@ -431,6 +435,8 @@ function eval_grad_forced(prob::SchrodingerProb, target, α=1.0; order=2, cost_t
 
     if cost_type == :Infidelity
         gradient = -2*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
+    elseif cost_type == :Tracking
+        gradient = dot(dQda, Q - target)
     elseif cost_type == :Norm
         gradient = dot(dQda,Q)
     else
@@ -452,6 +458,9 @@ function eval_grad_finite_difference(prob::SchrodingerProb, target, α, dα=1e-5
     if cost_type == :Infidelity
         cost_r = infidelity(ψf_r, target)
         cost_l = infidelity(ψf_l, target)
+    elseif cost_type == :Tracking
+        cost_r = 0.5*norm(ψf_r - target)^2
+        cost_l = 0.5*norm(ψf_l - target)^2
     elseif cost_type == :Norm
         cost_r = 0.5*norm(ψf_r)^2
         cost_l = 0.5*norm(ψf_l)^2
