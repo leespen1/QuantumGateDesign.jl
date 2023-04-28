@@ -8,7 +8,10 @@ export gradient_test, plot_gradients, plot_gradient_deviation
 export convergence_test!, plot_convergence_test
 export rabi_osc
 
+include("SchrodingerProb.jl")
 include("hermite.jl")
+include("forward_evolution.jl")
+include("eval_grad.jl")
 include("gradient_test.jl")
 include("convergence_test.jl")
 include("../tests/rabi_hermite_tests.jl")

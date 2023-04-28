@@ -69,7 +69,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
         lambda_v = copy(lambda[3:4])
         
         # Discrete Adjoint Scheme
-        for i in nsteps-1:-1:1
+        for n in nsteps-1:-1:1
             t -= dt
             utvt!(lambda_ut, lambda_vt, lambda_u, lambda_v,
                   Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
