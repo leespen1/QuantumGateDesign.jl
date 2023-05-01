@@ -252,6 +252,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         weights_n = [1,1/3]
         weights_np1 = [1,-1/3]
         for n in 0:nsteps-1
+            # Qn contribution
             u = history[1:2,1+n]
             v = history[3:4,1+n]
             t = n*dt
@@ -259,6 +260,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             dummy_u .= 0.0
             dummy_v .= 0.0
 
+            # Second Order Corrections
             utvt!(ut, vt, u, v,
                   zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
                   dpda, dqda, t, α)
@@ -266,13 +268,23 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             axpy!(0.5*dt*weights_n[1],ut,dummy_u)
             axpy!(0.5*dt*weights_n[1],vt,dummy_v)
 
+            # Fourth Order Corrections
             utvt!(utt, vtt, ut, vt,
                   Ks, Ss, a_plus_adag, a_minus_adag, 
                   p, q, t, α)
+            axpy!(0.25*dt^2*weights_n[2],utt,dummy_u)
+            axpy!(0.25*dt^2*weights_n[2],vtt,dummy_v)
 
-            # Faà di Bruno's formula 
-            axpy!(2*0.25*dt^2*weights_n[2],utt,dummy_u)
-            axpy!(2*0.25*dt^2*weights_n[2],vtt,dummy_v)
+
+            utvt!(ut, vt, u, v,
+                  Ks, Ss, a_plus_adag, a_minus_adag, 
+                  p, q, t, α)
+            utvt!(utt, vtt, ut, vt,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+                  dpda, dqda, t, α)
+            axpy!(0.25*dt^2*weights_n[2],utt,dummy_u)
+            axpy!(0.25*dt^2*weights_n[2],vtt,dummy_v)
+
 
             utvt!(utt, vtt, u, v,
                   zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
@@ -284,9 +296,9 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             dummy[1:2] .= dummy_u
             dummy[3:4] .= dummy_v
 
-            gargamel = dummy[1] / history[1,1+n]
-
             grad += dot(dummy, lambda_history[:,1+n+1])
+
+
 
             u = history[1:2,1+n+1]
             v = history[3:4,1+n+1]
@@ -295,6 +307,8 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             dummy_u .= 0.0
             dummy_v .= 0.0
 
+
+            # Second Order Corrections
             utvt!(ut, vt, u, v,
                   zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
                   dpda, dqda, t, α)
@@ -302,13 +316,23 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             axpy!(0.5*dt*weights_np1[1],ut,dummy_u)
             axpy!(0.5*dt*weights_np1[1],vt,dummy_v)
 
+            # Fourth Order Corrections
             utvt!(utt, vtt, ut, vt,
                   Ks, Ss, a_plus_adag, a_minus_adag, 
                   p, q, t, α)
+            axpy!(0.25*dt^2*weights_np1[2],utt,dummy_u)
+            axpy!(0.25*dt^2*weights_np1[2],vtt,dummy_v)
 
-            # Faà di Bruno's formula 
-            axpy!(2*0.25*dt^2*weights_np1[2],utt,dummy_u)
-            axpy!(2*0.25*dt^2*weights_np1[2],vtt,dummy_v)
+
+            utvt!(ut, vt, u, v,
+                  Ks, Ss, a_plus_adag, a_minus_adag, 
+                  p, q, t, α)
+            utvt!(utt, vtt, ut, vt,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+                  dpda, dqda, t, α)
+            axpy!(0.25*dt^2*weights_np1[2],utt,dummy_u)
+            axpy!(0.25*dt^2*weights_np1[2],vtt,dummy_v)
+
 
             utvt!(utt, vtt, u, v,
                   zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
@@ -321,7 +345,6 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             dummy[3:4] .= dummy_v
 
             grad += dot(dummy, lambda_history[:,1+n+1])
-
         end
         grad *= -1.0
     else

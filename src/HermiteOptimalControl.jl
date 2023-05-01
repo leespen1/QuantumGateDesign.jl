@@ -7,6 +7,7 @@ export eval_grad_finite_difference, eval_grad_forced, discrete_adjoint
 export gradient_test, plot_gradients, plot_gradient_deviation
 export convergence_test!, plot_convergence_test
 export rabi_osc
+export gargamel_prob
 #export daniel_prob, daniel_test
 
 include("SchrodingerProb.jl")
