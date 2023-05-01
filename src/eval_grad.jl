@@ -47,7 +47,6 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
     RHS::Vector{Float64} = zeros(4)
 
     if order == 2
-        println("Discrete Adjoint Order 2")
         # Terminal Condition
         t = tf
 
@@ -156,7 +155,6 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         grad *= -1.0
 
     elseif order == 4
-        println("Discrete Adjoint Order 4")
         # Terminal Condition
         t = tf
 
@@ -329,8 +327,6 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
     else
         throw("Invalid order: $order")
     end
-
-    display(lambda_history)
 
     if return_lambda_history
         return grad, history, lambda_history

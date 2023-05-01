@@ -144,36 +144,38 @@ end
 
 # Some tests against the exact gradient
 # and aginst automagic differentiation 
+function test()
+    a = 1.1
+    T = 1.2
+    n = 100 
 
-a = 1.1
-T = 1.2
-n = 100 
+    uex = exp(a*sin(T)-T)
+    nsteps = [10 20 40 80 160]
+    get_err(n) = abs(get_u(a,n,T)-uex)
+    err = get_err.(nsteps)
+    println("Errors\n",err,"\n")
+    println("Rates of convergence\n",log2.(err[1:4]./err[2:5]))
 
-uex = exp(a*sin(T)-T)
-nsteps = [10 20 40 80 160]
-get_err(n) = abs(get_u(a,n,T)-uex)
-err = get_err.(nsteps)
-println("Errors\n",err,"\n")
-println("Rates of convergence\n",log2.(err[1:4]./err[2:5]))
+    cost(x)  = 0.5*get_u(x,n,T)^2
+    cost_grad(x)  = sin(T)*get_u(x,n,T)^2 
 
-cost(x)  = 0.5*get_u(x,n,T)^2
-cost_grad(x)  = sin(T)*get_u(x,n,T)^2 
+    aa = LinRange(-2,2,100)
+    J = cost.(aa)
+    dJda_ex = cost_grad.(aa)
 
-aa = LinRange(-2,2,100)
-J = cost.(aa)
-dJda_ex = cost_grad.(aa)
+    dJda = ForwardDiff.derivative.(cost, aa)
+    dJda_da = main.(aa,n,T)
 
-dJda = ForwardDiff.derivative.(cost, aa)
-dJda_da = main.(aa,n,T)
-
-# plot of gradients
-pl1 = plot(aa,dJda,lw=2)
-plot!(pl1,aa,dJda_ex,lw=2)
-plot!(pl1,aa,dJda_da,lw=2)
-# plot of differences between gradients
-pl2 = plot(aa,abs.(dJda-dJda_ex),lw=2)
-# 
-pl3 = plot(aa,abs.(dJda_da-dJda_ex),lw=2)
-# This last one should be machine precision
-pl4 = plot(aa,abs.(dJda-dJda_da),lw=2)
+    # plot of gradients
+    pl1 = plot(aa,dJda,lw=2)
+    plot!(pl1,aa,dJda_ex,lw=2)
+    plot!(pl1,aa,dJda_da,lw=2)
+    # plot of differences between gradients
+    pl2 = plot(aa,abs.(dJda-dJda_ex),lw=2)
+    # 
+    pl3 = plot(aa,abs.(dJda_da-dJda_ex),lw=2)
+    # This last one should be machine precision
+    pl4 = plot(aa,abs.(dJda-dJda_da),lw=2)
+    return pl1, pl2, pl3, pl4
+end
 
