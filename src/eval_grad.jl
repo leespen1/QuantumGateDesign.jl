@@ -1,4 +1,5 @@
-function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=missing; order=2, cost_type=:Infidelity)
+function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
+        α=missing; order=2, cost_type=:Infidelity, return_lambda_history=false)
     R = target[:]
     T = vcat(R[3:4], -R[1:2])
     
@@ -231,6 +232,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             lambda_u = lambda[1:2]
             lambda_v = lambda[3:4]
         end
+
         # Need different gradient calculation for 4th order!!!
         zero_mat = zeros(2,2)
         uv = zeros(4)
@@ -255,28 +257,36 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             u = history[1:2,1+n]
             v = history[3:4,1+n]
             t = n*dt
-            # Note that system matrices go to zero
-            utvt!(ut, vt, u, v,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-                  dpda, dqda, t, α)
-            #utvt!(utt, vtt, ut, vt,
-            #      zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-            #      dpda, dqda, t, α)
-            uttvtt!(utt, vtt, ut, vt, u, v,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-                  dpda, dqda, d2p_dta, d2q_dta, t, α)
 
             dummy_u .= 0.0
             dummy_v .= 0.0
 
-            axpy!(0.5*dt*weights_n[1],ut,dummy_u)
-            axpy!(0.25*dt^2*weights_n[2],utt,dummy_u)
+            utvt!(ut, vt, u, v,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+                  dpda, dqda, t, α)
 
+            axpy!(0.5*dt*weights_n[1],ut,dummy_u)
             axpy!(0.5*dt*weights_n[1],vt,dummy_v)
+
+            utvt!(utt, vtt, ut, vt,
+                  Ks, Ss, a_plus_adag, a_minus_adag, 
+                  p, q, t, α)
+
+            # Faà di Bruno's formula 
+            axpy!(2*0.25*dt^2*weights_n[2],utt,dummy_u)
+            axpy!(2*0.25*dt^2*weights_n[2],vtt,dummy_v)
+
+            utvt!(utt, vtt, u, v,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+                  d2p_dta, d2q_dta, t, α)
+
+            axpy!(0.25*dt^2*weights_n[2],utt,dummy_u)
             axpy!(0.25*dt^2*weights_n[2],vtt,dummy_v)
 
             dummy[1:2] .= dummy_u
             dummy[3:4] .= dummy_v
+
+            gargamel = dummy[1] / history[1,1+n]
 
             grad += dot(dummy, lambda_history[:,1+n+1])
 
@@ -284,37 +294,47 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64}, α=mis
             v = history[3:4,1+n+1]
             t = (n+1)*dt
 
-            utvt!(ut, vt, u, v,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-                  dpda, dqda, t, α)
-            #utvt!(utt, vtt, ut, vt,
-            #      zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-            #      dpda, dqda, t, α)
-            uttvtt!(utt, vtt, ut, vt, u, v,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-                  dpda, dqda, d2p_dta, d2q_dta, t, α)
-
             dummy_u .= 0.0
             dummy_v .= 0.0
 
-            axpy!(0.5*dt*weights_np1[1],ut,dummy_u)
-            axpy!(0.25*dt^2*weights_np1[2],utt,dummy_u)
+            utvt!(ut, vt, u, v,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+                  dpda, dqda, t, α)
 
+            axpy!(0.5*dt*weights_np1[1],ut,dummy_u)
             axpy!(0.5*dt*weights_np1[1],vt,dummy_v)
+
+            utvt!(utt, vtt, ut, vt,
+                  Ks, Ss, a_plus_adag, a_minus_adag, 
+                  p, q, t, α)
+
+            # Faà di Bruno's formula 
+            axpy!(2*0.25*dt^2*weights_np1[2],utt,dummy_u)
+            axpy!(2*0.25*dt^2*weights_np1[2],vtt,dummy_v)
+
+            utvt!(utt, vtt, u, v,
+                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
+                  d2p_dta, d2q_dta, t, α)
+
+            axpy!(0.25*dt^2*weights_np1[2],utt,dummy_u)
             axpy!(0.25*dt^2*weights_np1[2],vtt,dummy_v)
 
             dummy[1:2] .= dummy_u
             dummy[3:4] .= dummy_v
 
             grad += dot(dummy, lambda_history[:,1+n+1])
+
         end
         grad *= -1.0
     else
         throw("Invalid order: $order")
     end
 
+    display(lambda_history)
 
-    #return lambda_history, grad
+    if return_lambda_history
+        return grad, history, lambda_history
+    end
     return grad
 end
 
