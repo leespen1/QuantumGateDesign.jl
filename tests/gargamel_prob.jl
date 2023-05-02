@@ -1,6 +1,8 @@
 function gargamel_prob(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
     Ks::Matrix{Float64} = [0 0; 0 1]
     Ss::Matrix{Float64} = [0 0; 0 0]
+    a_plus_adag::Matrix{Float64} = [0.0 1.0; 1.0 0.0]
+    a_minus_adag::Matrix{Float64} = [0.0 1.0; -1.0 0.0]
     p(t,α) = α*cos(ω*t)
     q(t,α) = 0.0
     dpdt(t,α) = -α*ω*sin(ω*t)
@@ -11,7 +13,7 @@ function gargamel_prob(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
     d2q_dta(t,α) = 0.0
     u0::Vector{Float64} = [1,0]
     v0::Vector{Float64} = [0,0]
-    return SchrodingerProb(Ks,Ss,
+    return SchrodingerProb(Ks,Ss, a_plus_adag, a_minus_adag,
                            p,q,dpdt,dqdt,dpda,dqda,d2p_dta,d2q_dta,
                            u0,v0,tf,nsteps)
 end

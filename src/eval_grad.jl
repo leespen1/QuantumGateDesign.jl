@@ -394,7 +394,9 @@ function eval_grad_forced(prob::SchrodingerProb, target, α=1.0; order=2, cost_t
             copyto!(u,history[1:2,1+n,1])
             copyto!(v,history[3:4,1+n,1])
 
-            utvt!(ut, vt, u, v, dKs_da, dSs_da, a_plus_adag, a_minus_adag, dpda, dqda, t, α)
+            utvt!(ut, vt, u, v,
+                  dKs_da, dSs_da, a_plus_adag, a_minus_adag,
+                  dpda, dqda, t, α)
             copyto!(forcing_vec,1,ut,1,2)
             copyto!(forcing_vec,3,vt,1,2)
 
@@ -465,7 +467,8 @@ function eval_grad_forced(prob::SchrodingerProb, target, α=1.0; order=2, cost_t
     copyto!(differentiated_prob.u0, [0.0,0.0])
     copyto!(differentiated_prob.v0, [0.0,0.0])
 
-    history_dψdα = eval_forward_forced(differentiated_prob, forcing_ary, α, order=order)
+    history_dψdα = eval_forward_forced(differentiated_prob, forcing_ary, α, 
+                                       order=order)
 
     dQda = history_dψdα[:,end]
     Q = history[:,end,1]

@@ -2,7 +2,7 @@ function gradient_test(prob::SchrodingerProb, α, dα; order=2, cost_type=:Infid
     history = eval_forward(prob, α, order=order)
     target = history[:,end]
 
-    N = 100
+    N = 25
     alphas = LinRange(0.1,2,N)
     grads_fd = zeros(N)
     grads_diff_forced = zeros(N)

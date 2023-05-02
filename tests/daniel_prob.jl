@@ -30,6 +30,8 @@ S(t) = [a*cos(t)-1 0; 0 0]
 function daniel_prob(;tf::Float64=1.2, nsteps::Int64=100)
     Ks::Matrix{Float64} = [0 0; 0 0]
     Ss::Matrix{Float64} = [-1 0; 0 0]
+    a_plus_adag::Matrix{Float64} = [0.0 1.0; 1.0 0.0]
+    a_minus_adag::Matrix{Float64} = [0.0 1.0; -1.0 0.0]
     p(t,α) = 0.0
     q(t,α) = α*cos(t)
     dpdt(t,α) = 0.0
@@ -41,13 +43,15 @@ function daniel_prob(;tf::Float64=1.2, nsteps::Int64=100)
     u0::Vector{Float64} = [1,0]
     v0::Vector{Float64} = [0,0]
 
-    prob = SchrodingerProb(Ks,Ss,
+    # I should rename these to something else. Maybe hermitian/anti-hermitian_control? 
+    a_plus_adag = [0 0; 0 0]  
+    a_minus_adag = [1 0; 0 0]
+
+    prob = SchrodingerProb(Ks, Ss, a_plus_adag, a_minus_adag,
                            p,q,dpdt,dqdt,dpda,dqda,d2p_dta,d2q_dta,
                            u0,v0,tf,nsteps)
 
     # Do not really use a+a†, this is a hack to to recreate a scalar equation
-    prob.a_plus_adag = [0 0; 0 0] 
-    prob.a_minus_adag = [1 0; 0 0]
     return prob
 end
 
