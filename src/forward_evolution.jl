@@ -10,6 +10,7 @@ end
 
 function eval_forward_order2(prob::SchrodingerProb, α=missing;
         return_time_derivatives=false)
+    # Unpack problem parameters for easy use in function
     Ks = prob.Ks
     Ss = prob.Ss
     a_plus_adag = prob.a_plus_adag
@@ -20,25 +21,28 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
     v0 = prob.v0
     tf = prob.tf
     nsteps = prob.nsteps
+    N_ess = prob.N_ess_levels
+    N_grd = prob.N_guard_levels
+    N_tot = prob.N_tot_levels
 
     t = 0
     dt = tf/nsteps
 
-    uv = zeros(4)
-    copyto!(uv,1,u0,1,2)
-    copyto!(uv,3,v0,1,2)
-    uv_history = Matrix{Float64}(undef,4,1+nsteps)
+    uv = zeros(2*N_tot)
+    copyto!(uv,1,u0,1,N_tot)
+    copyto!(uv,1+N_tot,v0,1,N_tot)
+    uv_history = Matrix{Float64}(undef,2*N_tot,1+nsteps)
     uv_history[:,1] .= uv
-    utvt_history = Matrix{Float64}(undef,4,1+nsteps)
+    utvt_history = Matrix{Float64}(undef,2*N_tot,1+nsteps)
 
-    RHSu::Vector{Float64} = zeros(2)
-    RHSv::Vector{Float64} = zeros(2)
-    RHS::Vector{Float64} = zeros(4)
+    RHSu::Vector{Float64} = zeros(N_tot)
+    RHSv::Vector{Float64} = zeros(N_tot)
+    RHS::Vector{Float64} = zeros(2*N_tot)
 
     u = copy(u0)
     v = copy(v0)
-    ut = zeros(2)
-    vt = zeros(2)
+    ut = zeros(N_tot)
+    vt = zeros(N_tot)
 
     # Order 2
     for n in 0:nsteps-1
@@ -46,8 +50,8 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
               Ks, Ss, a_plus_adag, a_minus_adag,
               p, q, t, α)
 
-        utvt_history[1:2,1+n] .= ut
-        utvt_history[3:4,1+n] .= vt
+        utvt_history[1:N_tot, 1+n] .= ut
+        utvt_history[1+N_tot:end, 1+n] .= vt
 
         copy!(RHSu,u)
         axpy!(0.5*dt,ut,RHSu)
@@ -55,22 +59,22 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
         copy!(RHSv,v)
         axpy!(0.5*dt,vt,RHSv)
 
-        copyto!(RHS,1,RHSu,1,2)
-        copyto!(RHS,3,RHSv,1,2)
+        copyto!(RHS,1,RHSu,1,N_tot)
+        copyto!(RHS,1+N_tot,RHSv,1,N_tot)
 
         t += dt
 
         LHS_map = LinearMap(
-            uv -> LHS_func(ut, vt, uv[1:2], uv[3:4],
+            uv -> LHS_func(ut, vt, uv[1:N_tot], uv[1+N_tot:end],
                            Ks, Ss, a_plus_adag, a_minus_adag,
                            p, q, t, α, dt),
-            4,4
+            2*N_tot,2*N_tot
         )
 
         gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
         uv_history[:,1+n+1] .= uv
-        u = uv[1:2]
-        v = uv[3:4]
+        u = uv[1:N_tot]
+        v = uv[1+N_tot:end]
     end
 
     # One last time, for utvt history at final time
@@ -78,8 +82,8 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
           Ks, Ss, a_plus_adag, a_minus_adag,
           p, q, t, α)
 
-    utvt_history[1:2,1+nsteps] .= ut
-    utvt_history[3:4,1+nsteps] .= vt
+    utvt_history[1:N_tot,1+nsteps] .= ut
+    utvt_history[1+N_tot:end,1+nsteps] .= vt
 
     if return_time_derivatives
         return cat(uv_history, utvt_history, dims=3)
@@ -89,6 +93,7 @@ end
 
 function eval_forward_order4(prob::SchrodingerProb, α=missing;
         return_time_derivatives=false)
+    # Unpack problem parameters for easy use in function
     Ks = prob.Ks
     Ss = prob.Ss
     a_plus_adag = prob.a_plus_adag
@@ -101,28 +106,31 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
     v0 = prob.v0
     tf = prob.tf
     nsteps = prob.nsteps
+    N_ess = prob.N_ess_levels
+    N_grd = prob.N_guard_levels
+    N_tot = prob.N_tot_levels
 
     t = 0
     dt = tf/nsteps
 
-    uv = zeros(4)
-    copyto!(uv,1,u0,1,2)
-    copyto!(uv,3,v0,1,2)
-    uv_history = Matrix{Float64}(undef,4,1+nsteps)
+    uv = zeros(N_tot*2)
+    copyto!(uv, 1, u0, 1, N_tot)
+    copyto!(uv, 1+N_tot, v0, 1, N_tot)
+    uv_history = Matrix{Float64}(undef,2*N_tot,1+nsteps)
     uv_history[:,1] .= uv
-    utvt_history = Matrix{Float64}(undef,4,1+nsteps)
-    uttvtt_history = Matrix{Float64}(undef,4,1+nsteps)
+    utvt_history = Matrix{Float64}(undef,2*N_tot,1+nsteps)
+    uttvtt_history = Matrix{Float64}(undef,2*N_tot,1+nsteps)
 
-    RHSu::Vector{Float64} = zeros(2)
-    RHSv::Vector{Float64} = zeros(2)
-    RHS::Vector{Float64} = zeros(4)
+    RHSu::Vector{Float64} = zeros(N_tot)
+    RHSv::Vector{Float64} = zeros(N_tot)
+    RHS::Vector{Float64} = zeros(2*N_tot)
 
     u = copy(u0)
     v = copy(v0)
-    ut = zeros(2)
-    vt = zeros(2)
-    utt = zeros(2)
-    vtt = zeros(2)
+    ut  = zeros(N_tot)
+    vt  = zeros(N_tot)
+    utt = zeros(N_tot)
+    vtt = zeros(N_tot)
 
     # Order 4
     for n in 0:nsteps-1
@@ -133,10 +141,10 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
                 Ks, Ss, a_plus_adag, a_minus_adag,
                 p, q, dpdt, dqdt, t, α)
 
-        utvt_history[1:2,1+n] .= ut
-        utvt_history[3:4,1+n] .= vt
-        uttvtt_history[1:2,1+n] .= utt
-        uttvtt_history[3:4,1+n] .= vtt
+        utvt_history[1:N_tot, 1+n] .= ut
+        utvt_history[1+N_tot:end, 1+n] .= vt
+        uttvtt_history[1:N_tot, 1+n] .= utt
+        uttvtt_history[1+N_tot:end, 1+n] .= vtt
 
         weights = [1,1/3]
         copy!(RHSu,u)
@@ -147,22 +155,22 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
         axpy!(0.5*dt*weights[1],vt,RHSv)
         axpy!(0.25*dt^2*weights[2],vtt,RHSv)
 
-        copyto!(RHS,1,RHSu,1,2)
-        copyto!(RHS,3,RHSv,1,2)
+        copyto!(RHS, 1, RHSu, 1, N_tot)
+        copyto!(RHS, 1+N_tot, RHSv, 1, N_tot)
 
         t += dt
 
         LHS_map = LinearMap(
-            uv -> LHS_func_order4(utt, vtt, ut, vt, uv[1:2], uv[3:4],
+            uv -> LHS_func_order4(utt, vtt, ut, vt, uv[1:N_tot], uv[1+N_tot:end],
                                   Ks, Ss, a_plus_adag, a_minus_adag,
                                   p, q, dpdt, dqdt, t, α, dt),
-            4,4
+            2*N_tot, 2*N_tot
         )
 
         gmres!(uv, LHS_map, RHS)
         uv_history[:,1+n+1] .= uv
-        u = uv[1:2]
-        v = uv[3:4]
+        u = uv[1:N_tot]
+        v = uv[1+N_tot:end]
     end
 
     # One last time, for utvt history at final time
@@ -173,10 +181,10 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
             Ks, Ss, a_plus_adag, a_minus_adag,
             p, q, dpdt, dqdt, t, α)
 
-    utvt_history[1:2,1+nsteps] .= ut
-    utvt_history[3:4,1+nsteps] .= vt
-    uttvtt_history[1:2,1+nsteps] .= utt
-    uttvtt_history[3:4,1+nsteps] .= vtt
+    utvt_history[1:N_tot, 1+nsteps] .= ut
+    utvt_history[1+N_tot:end, 1+nsteps] .= vt
+    uttvtt_history[1:N_tot, 1+nsteps] .= utt
+    uttvtt_history[1+N_tot:end, 1+nsteps] .= vtt
 
     if return_time_derivatives
         return cat(uv_history, utvt_history, uttvtt_history, dims=3)

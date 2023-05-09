@@ -2,12 +2,17 @@
 Construct a 'SchrodingerProb' corresponding to a Rabi Oscillator, with default
 time corresponding to a pi/2 pulse.
 """
-function rabi_osc(Ω::ComplexF64=1.0+0.0im, tf::Float64=NaN; nsteps::Int64=100)
-    #Ks::Matrix{Float64} = [0 0; 0 1]
-    Ks::Matrix{Float64} = [0 0; 0 0] # Rotating frame
-    Ss::Matrix{Float64} = [0 0; 0 0]
-    a_plus_adag::Matrix{Float64} = [0.0 1.0; 1.0 0.0]
-    a_minus_adag::Matrix{Float64} = [0.0 1.0; -1.0 0.0]
+function rabi_osc(N_ess, N_guard, Ω::ComplexF64=1.0+0.0im, tf::Float64=NaN; nsteps::Int64=100)
+    N_tot = N_ess+N_guard
+    Ks = zeros(N_tot, N_tot) # Rotating frame, should add detuning in higher levels
+    Ss = zeros(N_tot, N_tot) # Rotating frame
+    a_plus_adag = zeros(N_tot, N_tot)
+    a_minus_adag = zeros(N_tot, N_tot)
+    a_plus_adag[1,2] = 1
+    a_plus_adag[2,1] = 1
+    a_minus_adag[1,2] = 1
+    a_minus_adag[2,1] = -1
+
     p(t,α) = α*real(Ω)
     q(t,α) = α*imag(Ω)
     dpdt(t,α) = 0.0
@@ -16,15 +21,16 @@ function rabi_osc(Ω::ComplexF64=1.0+0.0im, tf::Float64=NaN; nsteps::Int64=100)
     dqda(t,α) = imag(Ω)
     d2p_dta(t,α) = 0.0
     d2q_dta(t,α) = 0.0
-    u0::Vector{Float64} = [1,0]
-    v0::Vector{Float64} = [0,0]
+    u0 = zeros(N_tot)
+    u0[1] = 1
+    v0 = zeros(N_tot)
     # Default time to pi/2 pulse
     if isnan(tf)
         tf = pi/(2*abs(Ω))
     end
     return SchrodingerProb(Ks,Ss,a_plus_adag, a_minus_adag,
                            p,q,dpdt,dqdt,dpda,dqda,d2p_dta,d2q_dta,
-                           u0,v0,tf,nsteps)
+                           u0,v0,tf,nsteps, N_ess, N_guard)
 end
 
 
