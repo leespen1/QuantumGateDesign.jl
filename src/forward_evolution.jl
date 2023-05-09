@@ -67,7 +67,7 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
         LHS_map = LinearMap(
             uv -> LHS_func(ut, vt, uv[1:N_tot], uv[1+N_tot:end],
                            Ks, Ss, a_plus_adag, a_minus_adag,
-                           p, q, t, α, dt),
+                           p, q, t, α, dt, N_tot),
             2*N_tot,2*N_tot
         )
 
@@ -163,7 +163,7 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
         LHS_map = LinearMap(
             uv -> LHS_func_order4(utt, vtt, ut, vt, uv[1:N_tot], uv[1+N_tot:end],
                                   Ks, Ss, a_plus_adag, a_minus_adag,
-                                  p, q, dpdt, dqdt, t, α, dt),
+                                  p, q, dpdt, dqdt, t, α, dt, N_tot),
             2*N_tot, 2*N_tot
         )
 

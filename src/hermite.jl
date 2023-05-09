@@ -43,7 +43,7 @@ function uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q
 end
 
 
-function LHS_func(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α, dt)
+function LHS_func(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α, dt, N_tot)
     utvt!(ut, vt, u, v,
           Ks, Ss, a_plus_adag, a_minus_adag,
           p, q, t, α)
@@ -53,16 +53,16 @@ function LHS_func(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α, 
     LHSv = copy(v)
     axpy!(-0.5*dt,vt,LHSv)
 
-    LHS_uv = zeros(4)
-    copyto!(LHS_uv,1,LHSu,1,2)
-    copyto!(LHS_uv,3,LHSv,1,2)
+    LHS_uv = zeros(2*N_tot)
+    copyto!(LHS_uv,1,LHSu,1,N_tot)
+    copyto!(LHS_uv,1+N_tot,LHSv,1,N_tot)
 
     return LHS_uv
 end
 
 function LHS_func_order4(utt, vtt, ut, vt, u, v,
         Ks, Ss, a_plus_adag, a_minus_adag,
-        p, q, dpdt, dqdt, t, α, dt)
+        p, q, dpdt, dqdt, t, α, dt, N_tot)
 
     utvt!(ut, vt, u, v,
           Ks, Ss, a_plus_adag, a_minus_adag,
@@ -80,9 +80,9 @@ function LHS_func_order4(utt, vtt, ut, vt, u, v,
     axpy!(-0.5*dt*weights[1],vt,LHSv)
     axpy!(-0.25*dt^2*weights[2],vtt,LHSv)
 
-    LHS = zeros(4)
-    copyto!(LHS,1,LHSu,1,2)
-    copyto!(LHS,3,LHSv,1,2)
+    LHS = zeros(2*N_tot)
+    copyto!(LHS,1,LHSu,1,N_tot)
+    copyto!(LHS,1+N_tot,LHSv,1,N_tot)
 
     return LHS
 end
