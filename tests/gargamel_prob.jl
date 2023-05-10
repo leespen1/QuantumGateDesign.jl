@@ -13,9 +13,11 @@ function gargamel_prob(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
     d2q_dta(t,α) = 0.0
     u0::Vector{Float64} = [1,0]
     v0::Vector{Float64} = [0,0]
+    N_essential = 2
+    N_guard = 0
     return SchrodingerProb(Ks,Ss, a_plus_adag, a_minus_adag,
                            p,q,dpdt,dqdt,dpda,dqda,d2p_dta,d2q_dta,
-                           u0,v0,tf,nsteps)
+                           u0,v0,tf,nsteps,N_essential,N_guard)
 end
 
 
