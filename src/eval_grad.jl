@@ -27,16 +27,15 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
     R = copy(target)
     T = vcat(R[1+N_tot:end], -R[1:N_tot])
 
-    # For adjoint evolution, need transposes 
-    #Ks_t = Matrix(transpose(Ks))
-    #Ss_t = Matrix(transpose(Ss))
-    #a_plus_adag_t = Matrix(transpose(a_plus_adag))
-    #a_minus_adag_t = Matrix(transpose(a_minus_adag))
-    Ks_t = Matrix(transpose(-Ks)) # NOTE THAT K changes sign!
-    Ss_t = Matrix(transpose(Ss))
-    a_plus_adag_t = Matrix(transpose(-a_plus_adag)) # NOTE THAT K changes sign!
-    a_minus_adag_t = Matrix(transpose(a_minus_adag))
+    # For adjoint evolution. Take transpose of entire matrix -> antisymmetric blocks change sign
+    Ks_adj = Matrix(transpose(-Ks)) # NOTE THAT K changes sign!
+    Ss_adj = Matrix(transpose(Ss))
+    a_plus_adag_adj = Matrix(transpose(-a_plus_adag)) # NOTE THAT K changes sign!
+    a_minus_adag_adj = Matrix(transpose(a_minus_adag))
     
+    a_plus_adag_transpose = Matrix(transpose(a_plus_adag)) # NOTE THAT K changes sign!
+    a_minus_adag_transpose = Matrix(transpose(a_minus_adag))
+
     dt = tf/nsteps
 
     lambda = zeros(2*N_tot)
@@ -64,7 +63,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
 
         LHS_map = LinearMap(
             x -> LHS_func(lambda_ut, lambda_vt, x[1:N_tot], x[1+N_tot:end],
-                          Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+                          Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
                           p, q, t, α, dt, N_tot),
             2*N_tot,2*N_tot
         )
@@ -78,7 +77,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         for n in nsteps-1:-1:1
             t -= dt
             utvt!(lambda_ut, lambda_vt, lambda_u, lambda_v,
-                  Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+                  Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
                   p, q, t, α)
             copy!(RHS_lambda_u,lambda_u)
             axpy!(0.5*dt,lambda_ut,RHS_lambda_u)
@@ -93,7 +92,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
 
             LHS_map = LinearMap(
                 x -> LHS_func(lambda_ut, lambda_vt, x[1:N_tot], x[1+N_tot:end],
-                              Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+                              Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
                               p, q, t, α, dt, N_tot),
                 2*N_tot,2*N_tot
             )
@@ -177,10 +176,10 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             lambda_u = lambda_history[1:N_tot,1+n+1]
             lambda_v = lambda_history[1+N_tot:end,1+n+1]
 
-            mul!(MT_lambda_11, a_minus_adag_t, lambda_u)
-            mul!(MT_lambda_12, a_plus_adag_t, lambda_v)
-            mul!(MT_lambda_21, a_plus_adag_t, lambda_u)
-            mul!(MT_lambda_22, a_minus_adag_t, lambda_v)
+            mul!(MT_lambda_11, a_minus_adag_transpose, lambda_u)
+            mul!(MT_lambda_12, a_plus_adag_transpose, lambda_v)
+            mul!(MT_lambda_21, a_plus_adag_transpose, lambda_u)
+            mul!(MT_lambda_22, a_minus_adag_transpose, lambda_v)
 
             #grad .+= grad_q .* (dot(u, MT_lambda_11)
             #                    + dot(v, MT_lambda_22)
@@ -221,7 +220,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         LHS_map = LinearMap(
             x -> LHS_func_order4(lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
                                  x[1:N_tot], x[1+N_tot:end],
-                          Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+                          Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
                           p, q, dpdt, dqdt, t, α, dt, N_tot),
             2*N_tot,2*N_tot
         )
@@ -237,10 +236,10 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         for n in nsteps-1:-1:1
             t -= dt
             utvt!(lambda_ut, lambda_vt, lambda_u, lambda_v,
-                  Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+                  Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
                   p, q, t, α)
             uttvtt!(lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u, lambda_v,
-                Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+                Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
                 p, q, dpdt, dqdt, t, α)
 
             copy!(RHS_lambda_u,lambda_u)
@@ -259,7 +258,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             LHS_map = LinearMap(
                 x -> LHS_func_order4(lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
                               x[1:N_tot], x[1+N_tot:end],
-                              Ks_t, Ss_t, a_plus_adag_t, a_minus_adag_t,
+                              Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
                               p, q, dpdt, dqdt, t, α, dt, N_tot),
                 2*N_tot,2*N_tot
             )
