@@ -18,6 +18,7 @@ mutable struct SchrodingerProb
     N_ess_levels::Int64
     N_guard_levels::Int64
     N_tot_levels::Int64
+    nCoeff::Int64
     function SchrodingerProb(
             Ks::AbstractMatrix{Float64},
             Ss::AbstractMatrix{Float64},
@@ -36,7 +37,8 @@ mutable struct SchrodingerProb
             tf::Float64,
             nsteps::Int64,
             N_ess_levels::Int64,
-            N_guard_levels::Int64
+            N_guard_levels::Int64,
+            nCoeff::Int64=2
         )
         N_tot_levels = N_ess_levels + N_guard_levels
         # Check dimensions of all matrices and vectors
@@ -51,7 +53,7 @@ mutable struct SchrodingerProb
             p, q, dpdt, dqdt, dpda, dqda, d2p_dta, d2q_dta,
             copy(u0), copy(v0),
             tf, nsteps,
-            N_ess_levels, N_guard_levels, N_tot_levels)
+            N_ess_levels, N_guard_levels, N_tot_levels, nCoeff)
     end
 end
 
@@ -63,7 +65,7 @@ function Base.copy(prob::SchrodingerProb)
                            prob.dpda, prob.dqda, prob.d2p_dta, prob.d2q_dta,
                            prob.u0, prob.v0,
                            prob.tf, prob.nsteps,
-                           prob.N_ess_levels, prob.N_guard_levels)
+                           prob.N_ess_levels, prob.N_guard_levels, prob.nCoeff)
 end
 
 

@@ -116,6 +116,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         dummy = zeros(2*N_tot)
 
         # Accumulate Gradient
+        #=
         grad = 0.0
         for n in 0:nsteps-1
             u = history[1:N_tot,1+n]
@@ -156,7 +157,54 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
 
             grad += dot(dummy, lambda_history[:,1+n+1])
         end
-        grad *= -1.0
+        =#
+        MT_lambda_11 = zeros(N_tot)
+        MT_lambda_12 = zeros(N_tot)
+        MT_lambda_21 = zeros(N_tot)
+        MT_lambda_22 = zeros(N_tot)
+
+        len_α = length(α)
+        grad = zeros(len_α)
+        for n in 0:nsteps-1
+            u = history[1:N_tot,1+n]
+            v = history[1+N_tot:end,1+n]
+            t = n*dt
+            # Note that system matrices go to zero
+
+            grad_p = dpda(t,α)
+            grad_q = dqda(t,α)
+
+            lambda_u = lambda_history[1:N_tot,1+n+1]
+            lambda_v = lambda_history[1+N_tot:end,1+n+1]
+
+            mul!(MT_lambda_11, a_minus_adag_t, lambda_u)
+            mul!(MT_lambda_12, a_plus_adag_t, lambda_v)
+            mul!(MT_lambda_21, a_plus_adag_t, lambda_u)
+            mul!(MT_lambda_22, a_minus_adag_t, lambda_v)
+
+            #grad .+= grad_q .* (dot(u, MT_lambda_11)
+            #                    + dot(v, MT_lambda_22)
+            #                   )
+            grad .+= grad_p .* (dot(u, MT_lambda_12)
+                                - dot(v, MT_lambda_21)
+                               )
+
+
+            u = history[1:N_tot,1+n+1]
+            v = history[1+N_tot:end,1+n+1]
+            t = (n+1)*dt
+
+            grad_p = dpda(t,α)
+            grad_q = dqda(t,α)
+
+            #grad .+= grad_q .* (dot(u, MT_lambda_11)
+            #                    + dot(v, MT_lambda_22)
+            #                   )
+            grad .+= grad_p .* (dot(u, MT_lambda_12)
+                                - dot(v, MT_lambda_21)
+                               )
+        end
+        grad *= -0.5*dt
 
     elseif order == 4
         # Terminal Condition
@@ -487,26 +535,33 @@ end
 # In the future, will need to updat to allow dα to work for vector-valued α
 # (i.e., compute a whole vector gradient)
 function eval_grad_finite_difference(prob::SchrodingerProb, target, α, dα=1e-5; order=2, cost_type=:Infidelity)
-    # Centered Difference Approximation
-    history_r = eval_forward(prob, α+dα, order=order)
-    history_l = eval_forward(prob, α-dα, order=order)
-    ψf_r = history_r[:,end]
-    ψf_l = history_l[:,end]
-    if cost_type == :Infidelity
-        cost_r = infidelity(ψf_r, target)
-        cost_l = infidelity(ψf_l, target)
-    elseif cost_type == :Tracking
-        cost_r = 0.5*norm(ψf_r - target)^2
-        cost_l = 0.5*norm(ψf_l - target)^2
-    elseif cost_type == :Norm
-        cost_r = 0.5*norm(ψf_r)^2
-        cost_l = 0.5*norm(ψf_l)^2
-    else
-        throw("Invalid cost type: $cost_type")
+    grad = zeros(length(α))
+    for i in 1:length(α)
+        # Centered Difference Approximation
+        α_r = copy(α)
+        α_r[i] += dα
+        α_l = copy(α)
+        α_l[i] -= dα
+        history_r = eval_forward(prob, α_r, order=order)
+        history_l = eval_forward(prob, α_l, order=order)
+        ψf_r = history_r[:,end]
+        ψf_l = history_l[:,end]
+        if cost_type == :Infidelity
+            cost_r = infidelity(ψf_r, target)
+            cost_l = infidelity(ψf_l, target)
+        elseif cost_type == :Tracking
+            cost_r = 0.5*norm(ψf_r - target)^2
+            cost_l = 0.5*norm(ψf_l - target)^2
+        elseif cost_type == :Norm
+            cost_r = 0.5*norm(ψf_r)^2
+            cost_l = 0.5*norm(ψf_l)^2
+        else
+            throw("Invalid cost type: $cost_type")
+        end
+        grad[i] = (cost_r - cost_l)/(2*dα)
     end
 
-    gradient = (cost_r - cost_l)/(2*dα)
-    return gradient
+    return grad
 end
 
 

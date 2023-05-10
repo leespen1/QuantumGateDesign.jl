@@ -1,16 +1,56 @@
-function gargamel_prob(;ω::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
-    Ks::Matrix{Float64} = [0 0; 0 1]
+function my_p(t,α,β)
+    return α[1] + α[2]*cos(t*β)
+end
+
+function my_dpdt(t,α,β)
+    return  -β*α[2]*sin(t*β)
+end
+
+function my_dpda(t,α,β)
+    n = length(α)
+    ret = zeros(n)
+    ret[1] = 1.0
+    ret[2] = cos(t*β)
+    return ret
+end
+
+function my_d2pdta(t,α,β)
+    n = length(α)
+    ret = zeros(n)
+    ret[1] = 0.0
+    ret[2] = -β*sin(t*β)
+    return ret
+end
+
+function my_q(t,α,β)
+    return 0.0
+end
+
+function my_dqdt(t,α,β)
+    return 0.0
+end
+
+function my_dqda(t,α,β)
+    return zeros(length(α))
+end
+
+function my_d2qdta(t,α,β)
+    return zeros(length(α))
+end
+
+function gargamel_prob(;β::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
+    Ks::Matrix{Float64} = [0 0; 0 0]
     Ss::Matrix{Float64} = [0 0; 0 0]
     a_plus_adag::Matrix{Float64} = [0.0 1.0; 1.0 0.0]
     a_minus_adag::Matrix{Float64} = [0.0 1.0; -1.0 0.0]
-    p(t,α) = α*cos(ω*t)
-    q(t,α) = 0.0
-    dpdt(t,α) = -α*ω*sin(ω*t)
-    dqdt(t,α) = 0.0
-    dpda(t,α) = cos(ω*t)
-    dqda(t,α) = 0.0
-    d2p_dta(t,α) = -ω*sin(ω*t)
-    d2q_dta(t,α) = 0.0
+    p(t,α) = my_p(t,α,β)
+    q(t,α) = my_q(t,α,β)
+    dpdt(t,α) = my_dpdt(t,α,β)
+    dqdt(t,α) = my_dqdt(t,α,β)
+    dpda(t,α) = my_dpda(t,α,β)
+    dqda(t,α) = my_dqda(t,α,β)
+    d2p_dta(t,α) = my_d2pdta(t,α,β)
+    d2q_dta(t,α) = my_d2qdta(t,α,β)
     u0::Vector{Float64} = [1,0]
     v0::Vector{Float64} = [0,0]
     N_essential = 2
