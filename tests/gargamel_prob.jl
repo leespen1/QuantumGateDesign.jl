@@ -7,7 +7,7 @@ function my_dpdt(t,α,β)
 end
 
 function my_dpda(t,α,β)
-    n = length(α)
+    n = div(length(α),2)
     ret = zeros(n)
     ret[1] = 1.0
     ret[2] = cos(t*β)
@@ -15,7 +15,7 @@ function my_dpda(t,α,β)
 end
 
 function my_d2pdta(t,α,β)
-    n = length(α)
+    n = div(length(α),2)
     ret = zeros(n)
     ret[1] = 0.0
     ret[2] = -β*sin(t*β)
@@ -23,19 +23,26 @@ function my_d2pdta(t,α,β)
 end
 
 function my_q(t,α,β)
-    return 0.0
+    return -α[3] + α[4]*sin(t*β)
 end
 
 function my_dqdt(t,α,β)
-    return 0.0
+    return β*α[4]*cos(t*β)
 end
 
 function my_dqda(t,α,β)
-    return zeros(length(α))
+    n = div(length(α),2)
+    ret = zeros(n)
+    ret[1] = -1.0
+    ret[2] = sin(t*β)
+    return ret
 end
 
 function my_d2qdta(t,α,β)
-    return zeros(length(α))
+    n = div(length(α),2)
+    ret = zeros(n)
+    ret[1] = 0.0
+    ret[2] = β*cos(t*β)
 end
 
 function gargamel_prob(;β::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)

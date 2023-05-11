@@ -114,79 +114,37 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         dummy_v = zeros(N_tot)
         dummy = zeros(2*N_tot)
 
-        # Accumulate Gradient
-        #=
-        grad = 0.0
-        for n in 0:nsteps-1
-            u = history[1:N_tot,1+n]
-            v = history[1+N_tot:end,1+n]
-            t = n*dt
-            # Note that system matrices go to zero
-            utvt!(ut, vt, u, v,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-                  dpda, dqda, t, α)
-
-            dummy_u .= 0.0
-            dummy_v .= 0.0
-
-            axpy!(0.5*dt,ut,dummy_u)
-            axpy!(0.5*dt,vt,dummy_v)
-
-            dummy[1:N_tot] .= dummy_u
-            dummy[1+N_tot:2*N_tot] .= dummy_v
-
-            grad += dot(dummy, lambda_history[:,1+n+1])
-
-            u = history[1:N_tot,1+n+1]
-            v = history[1+N_tot:end,1+n+1]
-            t = (n+1)*dt
-            # Note that system matrices go to zero
-            utvt!(ut, vt, u, v,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag,
-                  dpda, dqda, t, α)
-
-            dummy_u .= 0.0
-            dummy_v .= 0.0
-
-            axpy!(0.5*dt,ut,dummy_u)
-            axpy!(0.5*dt,vt,dummy_v)
-
-            dummy[1:N_tot] .= dummy_u
-            dummy[1+N_tot:end] .= dummy_v
-
-            grad += dot(dummy, lambda_history[:,1+n+1])
-        end
-        =#
         MT_lambda_11 = zeros(N_tot)
         MT_lambda_12 = zeros(N_tot)
         MT_lambda_21 = zeros(N_tot)
         MT_lambda_22 = zeros(N_tot)
 
         len_α = length(α)
+        len_α_half = div(len_α, 2)
         grad = zeros(len_α)
         for n in 0:nsteps-1
+            lambda_u = lambda_history[1:N_tot,1+n+1]
+            lambda_v = lambda_history[1+N_tot:end,1+n+1]
+
             u = history[1:N_tot,1+n]
             v = history[1+N_tot:end,1+n]
             t = n*dt
-            # Note that system matrices go to zero
 
             grad_p = dpda(t,α)
             grad_q = dqda(t,α)
 
-            lambda_u = lambda_history[1:N_tot,1+n+1]
-            lambda_v = lambda_history[1+N_tot:end,1+n+1]
 
             mul!(MT_lambda_11, a_minus_adag_transpose, lambda_u)
             mul!(MT_lambda_12, a_plus_adag_transpose, lambda_v)
             mul!(MT_lambda_21, a_plus_adag_transpose, lambda_u)
             mul!(MT_lambda_22, a_minus_adag_transpose, lambda_v)
 
-            #grad .+= grad_q .* (dot(u, MT_lambda_11)
-            #                    + dot(v, MT_lambda_22)
-            #                   )
-            grad .+= grad_p .* (dot(u, MT_lambda_12)
-                                - dot(v, MT_lambda_21)
-                               )
+            grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
+                                                    + dot(v, MT_lambda_22)
+                                                   )
+            grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
+                                              - dot(v, MT_lambda_21)
+                                             )
 
 
             u = history[1:N_tot,1+n+1]
@@ -196,12 +154,12 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             grad_p = dpda(t,α)
             grad_q = dqda(t,α)
 
-            #grad .+= grad_q .* (dot(u, MT_lambda_11)
-            #                    + dot(v, MT_lambda_22)
-            #                   )
-            grad .+= grad_p .* (dot(u, MT_lambda_12)
-                                - dot(v, MT_lambda_21)
-                               )
+            grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
+                                                    + dot(v, MT_lambda_22)
+                                                   )
+            grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
+                                              - dot(v, MT_lambda_21)
+                                             )
         end
         grad *= -0.5*dt
 
@@ -269,122 +227,209 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             lambda_v = lambda[1+N_tot:2*N_tot]
         end
 
-        # Need different gradient calculation for 4th order!!!
         zero_mat = zeros(N_tot,N_tot)
         uv = zeros(2*N_tot)
         u = zeros(N_tot)
         v = zeros(N_tot)
-        # Won't actually hold ut and vt, but rather real/imag parts of dH/dα*ψ
-        ut = zeros(N_tot)
-        vt = zeros(N_tot)
-        utt = zeros(N_tot)
-        vtt = zeros(N_tot)
-        dummy_u = zeros(N_tot)
-        dummy_v = zeros(N_tot)
-        dummy = zeros(2*N_tot)
+
+        MT_lambda_11 = zeros(N_tot)
+        MT_lambda_12 = zeros(N_tot)
+        MT_lambda_21 = zeros(N_tot)
+        MT_lambda_22 = zeros(N_tot)
+
+        Ap = zeros(N_tot, N_tot)
+        Bp = zeros(N_tot, N_tot)
+        Am = zeros(N_tot, N_tot)
+        Bm = zeros(N_tot, N_tot)
+
+        Cu = zeros(N_tot)
+        Cv = zeros(N_tot)
+        Du = zeros(N_tot)
+        Dv = zeros(N_tot)
+
+        K_full =  Ks .+ a_plus_adag
+        S_full =  Ss .+ a_minus_adag
+
 
         # Accumulate Gradient
-        grad = 0.0
+        len_α = length(α)
+        len_α_half = div(len_α, 2)
+        grad = zeros(len_α)
+
         #weights_n = [1,-1/3]
         #weights_np1 = [1,1/3]
-        weights_n = [1,1/3]
-        weights_np1 = [1,-1/3]
+        weights_n = [1,dt/6]
+        weights_np1 = [1,-dt/6]
         for n in 0:nsteps-1
+            lambda_u = lambda_history[1:N_tot,1+n+1]
+            lambda_v = lambda_history[1+N_tot:end,1+n+1]
+
+            mul!(MT_lambda_11, a_minus_adag_transpose, lambda_u)
+            mul!(MT_lambda_12, a_plus_adag_transpose, lambda_v)
+            mul!(MT_lambda_21, a_plus_adag_transpose, lambda_u)
+            mul!(MT_lambda_22, a_minus_adag_transpose, lambda_v)
+
             # Qn contribution
             u = history[1:N_tot,1+n]
             v = history[1+N_tot:end,1+n]
             t = n*dt
 
-            dummy_u .= 0.0
-            dummy_v .= 0.0
+            grad_p = dpda(t,α)
+            grad_q = dqda(t,α)
+            grad_pt = d2p_dta(t,α)
+            grad_qt = d2q_dta(t,α)
 
-            # Second Order Corrections
-            utvt!(ut, vt, u, v,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-                  dpda, dqda, t, α)
+            # H_α
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[1]*(
+                dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
+            )
+            grad[1:len_α_half] .+= grad_p .* weights_n[1]*(
+                dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
+            )
 
-            axpy!(0.5*dt*weights_n[1],ut,dummy_u)
-            axpy!(0.5*dt*weights_n[1],vt,dummy_v)
+            # 4th order Correction
+            # H_αt
+            grad[1+len_α_half:len_α] .+= grad_qt .* weights_n[2]*(
+                dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
+            )
+            grad[1:len_α_half] .+= grad_pt .* weights_n[2]*(
+                dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
+            )
+            
+            # H_α*H
+            #A .= Ks .+ a_plus_adag
+            #B .= Ss .+ a_minus_adag
+            mul!(Ap, a_plus_adag, K_full)
+            mul!(Bp, a_plus_adag, S_full)
 
-            # Fourth Order Corrections
-            utvt!(utt, vtt, ut, vt,
-                  Ks, Ss, a_plus_adag, a_minus_adag, 
-                  p, q, t, α)
-            axpy!(0.25*dt^2*weights_n[2],utt,dummy_u)
-            axpy!(0.25*dt^2*weights_n[2],vtt,dummy_v)
+            mul!(Cu, Ap, u)
+            mul!(Cu, Bp, v, -1, -1)
+            mul!(Cv, Bp, u)
+            mul!(Cv, Ap, v, -1, 1)
 
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*(
+                dot(Cu, lambda_u) + dot(Cv, lambda_v)
+            )
 
-            utvt!(ut, vt, u, v,
-                  Ks, Ss, a_plus_adag, a_minus_adag, 
-                  p, q, t, α)
-            utvt!(utt, vtt, ut, vt,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-                  dpda, dqda, t, α)
-            axpy!(0.25*dt^2*weights_n[2],utt,dummy_u)
-            axpy!(0.25*dt^2*weights_n[2],vtt,dummy_v)
+            mul!(Am, a_minus_adag, K_full)
+            mul!(Bm, a_minus_adag, S_full)
 
+            mul!(Du, Bm, u)
+            mul!(Du, Am, v, -1, 1)
+            mul!(Dv, Am, u)
+            mul!(Dv, Bm, v, 1, 1)
 
-            utvt!(utt, vtt, u, v,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-                  d2p_dta, d2q_dta, t, α)
+            grad[1:len_α_half] .+= grad_p .* weights_n[2]*(
+                dot(Du, lambda_u) + dot(Dv, lambda_v)
+            )
 
-            axpy!(0.25*dt^2*weights_n[2],utt,dummy_u)
-            axpy!(0.25*dt^2*weights_n[2],vtt,dummy_v)
+            # H*H_α - Note similarity to above, may be ways to reuse comps
+            mul!(Ap, K_full, a_plus_adag)
+            mul!(Bp, S_full, a_plus_adag)
 
-            dummy[1:N_tot] .= dummy_u
-            dummy[1+N_tot:end] .= dummy_v
+            mul!(Cu, Ap, u)
+            mul!(Cu, Bp, v, -1, -1)
+            mul!(Cv, Bp, u)
+            mul!(Cv, Ap, v, -1, 1)
 
-            grad += dot(dummy, lambda_history[:,1+n+1])
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*(
+                dot(Cu, lambda_u) + dot(Cv, lambda_v)
+            )
 
+            mul!(Am, K_full, a_minus_adag)
+            mul!(Bm, S_full, a_minus_adag)
 
+            mul!(Du, Bm, u)
+            mul!(Du, Am, v, -1, 1)
+            mul!(Dv, Am, u)
+            mul!(Dv, Bm, v, 1, 1)
+
+            grad[1:len_α_half] .+= grad_p .* weights_n[2]*(
+                dot(Du, lambda_u) + dot(Dv, lambda_v)
+            )
+
+            # uv n+1 contribution
 
             u = history[1:N_tot,1+n+1]
             v = history[1+N_tot:end,1+n+1]
             t = (n+1)*dt
 
-            dummy_u .= 0.0
-            dummy_v .= 0.0
+            grad_p = dpda(t,α)
+            grad_q = dqda(t,α)
+            grad_pt = d2p_dta(t,α)
+            grad_qt = d2q_dta(t,α)
 
+            # H_α
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[1]*(
+                dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
+            )
+            grad[1:len_α_half] .+= grad_p .* weights_n[1]*(
+                dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
+            )
 
-            # Second Order Corrections
-            utvt!(ut, vt, u, v,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-                  dpda, dqda, t, α)
+            # 4th order Correction
+            # H_αt
+            grad[1+len_α_half:len_α] .+= grad_qt .* weights_n[2]*(
+                dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
+            )
+            grad[1:len_α_half] .+= grad_pt .* weights_n[2]*(
+                dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
+            )
+            
+            # H_α*H
+            #A .= Ks .+ a_plus_adag
+            #B .= Ss .+ a_minus_adag
+            mul!(Ap, a_plus_adag, K_full)
+            mul!(Bp, a_plus_adag, S_full)
 
-            axpy!(0.5*dt*weights_np1[1],ut,dummy_u)
-            axpy!(0.5*dt*weights_np1[1],vt,dummy_v)
+            mul!(Cu, Ap, u)
+            mul!(Cu, Bp, v, -1, -1)
+            mul!(Cv, Bp, u)
+            mul!(Cv, Ap, v, -1, 1)
 
-            # Fourth Order Corrections
-            utvt!(utt, vtt, ut, vt,
-                  Ks, Ss, a_plus_adag, a_minus_adag, 
-                  p, q, t, α)
-            axpy!(0.25*dt^2*weights_np1[2],utt,dummy_u)
-            axpy!(0.25*dt^2*weights_np1[2],vtt,dummy_v)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*(
+                dot(Cu, lambda_u) + dot(Cv, lambda_v)
+            )
 
+            mul!(Am, a_minus_adag, K_full)
+            mul!(Bm, a_minus_adag, S_full)
 
-            utvt!(ut, vt, u, v,
-                  Ks, Ss, a_plus_adag, a_minus_adag, 
-                  p, q, t, α)
-            utvt!(utt, vtt, ut, vt,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-                  dpda, dqda, t, α)
-            axpy!(0.25*dt^2*weights_np1[2],utt,dummy_u)
-            axpy!(0.25*dt^2*weights_np1[2],vtt,dummy_v)
+            mul!(Du, Bm, u)
+            mul!(Du, Am, v, -1, 1)
+            mul!(Dv, Am, u)
+            mul!(Dv, Bm, v, 1, 1)
 
+            grad[1:len_α_half] .+= grad_p .* weights_n[2]*(
+                dot(Du, lambda_u) + dot(Dv, lambda_v)
+            )
 
-            utvt!(utt, vtt, u, v,
-                  zero_mat, zero_mat, a_plus_adag, a_minus_adag, 
-                  d2p_dta, d2q_dta, t, α)
+            # H*H_α - Note similarity to above, may be ways to reuse comps
+            mul!(Ap, K_full, a_plus_adag)
+            mul!(Bp, S_full, a_plus_adag)
 
-            axpy!(0.25*dt^2*weights_np1[2],utt,dummy_u)
-            axpy!(0.25*dt^2*weights_np1[2],vtt,dummy_v)
+            mul!(Cu, Ap, u)
+            mul!(Cu, Bp, v, -1, -1)
+            mul!(Cv, Bp, u)
+            mul!(Cv, Ap, v, -1, 1)
 
-            dummy[1:N_tot] .= dummy_u
-            dummy[1+N_tot:end] .= dummy_v
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*(
+                dot(Cu, lambda_u) + dot(Cv, lambda_v)
+            )
 
-            grad += dot(dummy, lambda_history[:,1+n+1])
+            mul!(Am, K_full, a_minus_adag)
+            mul!(Bm, S_full, a_minus_adag)
+
+            mul!(Du, Bm, u)
+            mul!(Du, Am, v, -1, 1)
+            mul!(Dv, Am, u)
+            mul!(Dv, Bm, v, 1, 1)
+
+            grad[1:len_α_half] .+= grad_p .* weights_n[2]*(
+                dot(Du, lambda_u) + dot(Dv, lambda_v)
+            )
+
         end
-        grad *= -1.0
+        grad *= -0.5*dt
     else
         throw("Invalid order: $order")
     end

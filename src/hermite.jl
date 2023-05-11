@@ -90,21 +90,3 @@ function LHS_func_order4(utt, vtt, ut, vt, u, v,
 
     return LHS
 end
-
-#=
-function accumulate_helper_2(ut, vt, u, v, a_plus_adag, a_minus_adag)
-    mul!(ut, a_minus_adag, u, 1, 1)
-    mul!(ut, a_plus_adag, v, -1, 1)
-
-    mul!(vt, a_minus_adag, v)
-    mul!(vt, a_plus_adag,  u, 1, 1)
-
-    #mul!(ut, a_minus_adag, u, q(t,α), 1)
-    #mul!(ut, a_plus_adag, v, -p(t,α), 1)
-
-    #mul!(vt, a_minus_adag, v, q(t,α), 1)
-    #mul!(vt, a_plus_adag,  u, p(t,α), 1)
-
-    return nothing
-end
-=#
