@@ -262,8 +262,8 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         len_α_half = div(len_α, 2)
         grad = zeros(len_α)
 
-        #weights_n = [1,-1/3]
-        #weights_np1 = [1,1/3]
+
+        # Efficient way, possibly incorrect
         weights_n = [1,dt/6]
         weights_np1 = [1,-dt/6]
         for n in 0:nsteps-1
@@ -428,7 +428,6 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             mul!(C, Hp, A)
             mul!(C, Hq, B, -1, 1)
             grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(C, lambda_v)
-
         end
         grad *= -0.5*dt
     else

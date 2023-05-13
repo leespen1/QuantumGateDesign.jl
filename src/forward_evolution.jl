@@ -25,7 +25,7 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
     N_grd = prob.N_guard_levels
     N_tot = prob.N_tot_levels
 
-    t = 0
+    t = 0.0
     dt = tf/nsteps
 
     uv = zeros(2*N_tot)

@@ -1,50 +1,72 @@
-function utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
-    #Should I provide the functions p and q? or the values at (t,α)?
+function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
+        a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
+        p::Function, q::Function, t, α)
+    # Call the version of utvt! which uses the values of p and q
+    utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p(t,α), q(t,α))
 
-    #mul!(Y, A, B) -> Y
-    #Calculates the matrix-matrix or matrix-vector product AB and stores the result in Y, overwriting the existing value of Y. Note that Y must not be aliased with either A or B.
-    #mul!(C, A, B, α, β) -> C
-    #Combined inplace matrix-matrix or matrix-vector multiply-add A B α + C β. The result is stored in C by overwriting it. Note that C must not be aliased with either A or B.
-    
+    return nothing
+end
+
+"""
+Values of p(t,α) and q(t,α) provided
+"""
+function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
+        a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
+        p::Float64, q::Float64)
     # Non-Memory-Allocating Version (test performance)
     # ut = (Ss + q(t)(a-a†))u - (Ks + p(t)(a+a†))v
     mul!(ut, Ss, u)
-    mul!(ut, a_minus_adag, u, q(t,α), 1)
+    mul!(ut, a_minus_adag, u, q, 1)
     mul!(ut, Ks, v, -1, 1)
-    mul!(ut, a_plus_adag, v, -p(t,α), 1)
+    mul!(ut, a_plus_adag, v, -p, 1)
 
     # vt = (Ss + q(t)(a-a†))v + (Ks + p(t)(a+a†))u
     mul!(vt, Ss, v)
-    mul!(vt, a_minus_adag, v, q(t,α), 1)
+    mul!(vt, a_minus_adag, v, q, 1)
     mul!(vt, Ks, u, 1, 1)
-    mul!(vt, a_plus_adag,  u, p(t,α), 1)
+    mul!(vt, a_plus_adag,  u, p, 1)
 
     return nothing
 end
 
-function uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, dpdt, dqdt, t, α)
+function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
+        ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
+        a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
+        p::Function, q::Function,
+        dpdt::Function, dqdt::Function,
+        t, α)
+    uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag,
+            p(t,α), q(t,α), dpdt(t,α), dqdt(t,α))
+
+    return nothing
+end
+
+function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
+        ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
+        a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
+        p::Float64, q::Float64,
+        dpdt::Float64, dqdt::Float64
+        )
     ## Make use of utvt!
-    utvt!(utt, vtt, ut, vt, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α)
-    ## Replicate utvt! explicitly 
-    #mul!(utt, Ss, ut)
-    #mul!(utt, a_minus_adag, ut, q(t,α), 1)
-    #mul!(utt, Ks, vt, -1, 1)
-    #mul!(utt, a_plus_adag, vt, -p(t,α), 1)
+    utvt!(utt, vtt, ut, vt, Ks, Ss, a_plus_adag, a_minus_adag, p, q)
 
-    mul!(utt, a_minus_adag, u, dqdt(t,α), 1)
-    mul!(utt, a_plus_adag, v, -dpdt(t,α), 1)
+    mul!(utt, a_minus_adag, u, dqdt, 1)
+    mul!(utt, a_plus_adag, v, -dpdt, 1)
 
-    ### Replicate utvt! explicitly 
-    #mul!(vtt, Ss, vt)
-    #mul!(vtt, a_minus_adag, vt, q(t,α), 1)
-    #mul!(vtt, Ks, ut, 1, 1)
-    #mul!(vtt, a_plus_adag, ut, p(t,α), 1)
-
-    mul!(vtt, a_plus_adag,  u, dpdt(t,α), 1)
-    mul!(vtt, a_minus_adag, v, dqdt(t,α), 1)
+    mul!(vtt, a_plus_adag,  u, dpdt, 1)
+    mul!(vtt, a_minus_adag, v, dqdt, 1)
 
     return nothing
 end
+
 
 
 function LHS_func(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α, dt, N_tot)

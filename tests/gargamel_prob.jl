@@ -43,6 +43,7 @@ function my_d2qdta(t,α,β)
     ret = zeros(n)
     ret[1] = 0.0
     ret[2] = β*cos(t*β)
+    return ret
 end
 
 function gargamel_prob(;β::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
