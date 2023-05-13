@@ -25,8 +25,8 @@ function main2(;nsteps=100, cost_type=:Infidelity, order=2, β=0.3)
         for j in 1:N
             α[3] = a[i]
             α[4] = a[j]
-            grad_da = discrete_adjoint(prob,target,α,cost_type=cost_type)
-            grad_fd = eval_grad_finite_difference(prob,target,α,cost_type=cost_type)
+            grad_da = discrete_adjoint(prob,target,α,cost_type=cost_type, order=order)
+            grad_fd = eval_grad_finite_difference(prob,target,α,cost_type=cost_type, order=order)
             errors[i,j] = log10(norm(grad_da - grad_fd))
         end
     end
@@ -46,8 +46,8 @@ function main3(;nsteps=100, cost_type=:Infidelity, order=2, β=0.3)
     for i in 1:N
         dα = rand()
         new_α = α .+ dα
-        grad_da = discrete_adjoint(prob, target, new_α, cost_type=cost_type)
-        grad_fd = eval_grad_finite_difference(prob, target, new_α, cost_type=cost_type)
+        grad_da = discrete_adjoint(prob, target, new_α, cost_type=cost_type, order=order)
+        grad_fd = eval_grad_finite_difference(prob, target, new_α, cost_type=cost_type, order=order)
         errors[i] = log10(norm(grad_da - grad_fd))
     end
     return errors

@@ -237,6 +237,10 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         MT_lambda_21 = zeros(N_tot)
         MT_lambda_22 = zeros(N_tot)
 
+        A = zeros(N_tot)
+        B = zeros(N_tot)
+        C = zeros(N_tot)
+
         Ap = zeros(N_tot, N_tot)
         Bp = zeros(N_tot, N_tot)
         Am = zeros(N_tot, N_tot)
@@ -250,6 +254,8 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         K_full =  Ks .+ a_plus_adag
         S_full =  Ss .+ a_minus_adag
 
+        Hq = zeros(N_tot,N_tot)
+        Hp = zeros(N_tot,N_tot)
 
         # Accumulate Gradient
         len_α = length(α)
@@ -297,56 +303,54 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             )
             
             # H_α*H
-            #A .= Ks .+ a_plus_adag
-            #B .= Ss .+ a_minus_adag
-            mul!(Ap, a_plus_adag, K_full)
-            mul!(Bp, a_plus_adag, S_full)
+            # part 1
+            Hq .= Ss .+ q(t,α) .* a_minus_adag
+            Hp .= Ks .+ p(t,α) .* a_plus_adag
 
-            mul!(Cu, Ap, u)
-            mul!(Cu, Bp, v, -1, -1)
-            mul!(Cv, Bp, u)
-            mul!(Cv, Ap, v, -1, 1)
+            mul!(A, Hq, u)
+            mul!(A, Hp, v, -1, 1)
+            mul!(B, a_minus_adag, A)
 
-            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*(
-                dot(Cu, lambda_u) + dot(Cv, lambda_v)
-            )
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(B, lambda_u)
+            mul!(B, a_plus_adag, A)
+            grad[1:len_α_half] .+= grad_p .* weights_n[2]*dot(B, lambda_v)
 
-            mul!(Am, a_minus_adag, K_full)
-            mul!(Bm, a_minus_adag, S_full)
+            # part 2
+            mul!(A, Hp, u)
+            mul!(A, Hq, v, 1, 1)
+            mul!(B, a_plus_adag, A)
 
-            mul!(Du, Bm, u)
-            mul!(Du, Am, v, -1, 1)
-            mul!(Dv, Am, u)
-            mul!(Dv, Bm, v, 1, 1)
+            grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(B, lambda_u)
+            mul!(B, a_minus_adag, A)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(B, lambda_v)
 
-            grad[1:len_α_half] .+= grad_p .* weights_n[2]*(
-                dot(Du, lambda_u) + dot(Dv, lambda_v)
-            )
 
-            # H*H_α - Note similarity to above, may be ways to reuse comps
-            mul!(Ap, K_full, a_plus_adag)
-            mul!(Bp, S_full, a_plus_adag)
+            # H*H_α
+            # part 1
+            mul!(A, a_minus_adag, u)
+            mul!(B, a_minus_adag, v)
 
-            mul!(Cu, Ap, u)
-            mul!(Cu, Bp, v, -1, -1)
-            mul!(Cv, Bp, u)
-            mul!(Cv, Ap, v, -1, 1)
+            mul!(C, Hq, A)
+            mul!(C, Hp, B, -1, 1)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(C, lambda_u)
 
-            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*(
-                dot(Cu, lambda_u) + dot(Cv, lambda_v)
-            )
+            mul!(C, Hp, A)
+            mul!(C, Hq, B, 1, 1)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(C, lambda_v)
 
-            mul!(Am, K_full, a_minus_adag)
-            mul!(Bm, S_full, a_minus_adag)
 
-            mul!(Du, Bm, u)
-            mul!(Du, Am, v, -1, 1)
-            mul!(Dv, Am, u)
-            mul!(Dv, Bm, v, 1, 1)
+            # part 2
+            mul!(A, a_plus_adag, v)
+            mul!(B, a_plus_adag, u)
 
-            grad[1:len_α_half] .+= grad_p .* weights_n[2]*(
-                dot(Du, lambda_u) + dot(Dv, lambda_v)
-            )
+            mul!(C, Hq, A)
+            mul!(C, Hp, B, 1, 1)
+            grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(C, lambda_u)
+
+            mul!(C, Hp, A)
+            mul!(C, Hq, B, -1, 1)
+            grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(C, lambda_v)
+            
 
             # uv n+1 contribution
 
@@ -360,73 +364,70 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             grad_qt = d2q_dta(t,α)
 
             # H_α
-            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[1]*(
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[1]*(
                 dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
             )
-            grad[1:len_α_half] .+= grad_p .* weights_n[1]*(
+            grad[1:len_α_half] .+= grad_p .* weights_np1[1]*(
                 dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
             )
 
             # 4th order Correction
             # H_αt
-            grad[1+len_α_half:len_α] .+= grad_qt .* weights_n[2]*(
+            grad[1+len_α_half:len_α] .+= grad_qt .* weights_np1[2]*(
                 dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
             )
-            grad[1:len_α_half] .+= grad_pt .* weights_n[2]*(
+            grad[1:len_α_half] .+= grad_pt .* weights_np1[2]*(
                 dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
             )
             
             # H_α*H
-            #A .= Ks .+ a_plus_adag
-            #B .= Ss .+ a_minus_adag
-            mul!(Ap, a_plus_adag, K_full)
-            mul!(Bp, a_plus_adag, S_full)
+            # part 1
+            Hq .= Ss .+ q(t,α) .* a_minus_adag
+            Hp .= Ks .+ p(t,α) .* a_plus_adag
 
-            mul!(Cu, Ap, u)
-            mul!(Cu, Bp, v, -1, -1)
-            mul!(Cv, Bp, u)
-            mul!(Cv, Ap, v, -1, 1)
+            mul!(A, Hq, u)
+            mul!(A, Hp, v, -1, 1)
+            mul!(B, a_minus_adag, A)
 
-            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*(
-                dot(Cu, lambda_u) + dot(Cv, lambda_v)
-            )
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(B, lambda_u)
+            mul!(B, a_plus_adag, A)
+            grad[1:len_α_half] .+= grad_p .* weights_np1[2]*dot(B, lambda_v)
 
-            mul!(Am, a_minus_adag, K_full)
-            mul!(Bm, a_minus_adag, S_full)
+            # part 2
+            mul!(A, Hp, u)
+            mul!(A, Hq, v, 1, 1)
+            mul!(B, a_plus_adag, A)
 
-            mul!(Du, Bm, u)
-            mul!(Du, Am, v, -1, 1)
-            mul!(Dv, Am, u)
-            mul!(Dv, Bm, v, 1, 1)
+            grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(B, lambda_u)
+            mul!(B, a_minus_adag, A)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(B, lambda_v)
 
-            grad[1:len_α_half] .+= grad_p .* weights_n[2]*(
-                dot(Du, lambda_u) + dot(Dv, lambda_v)
-            )
 
-            # H*H_α - Note similarity to above, may be ways to reuse comps
-            mul!(Ap, K_full, a_plus_adag)
-            mul!(Bp, S_full, a_plus_adag)
+            # H*H_α
+            # part 1
+            mul!(A, a_minus_adag, u)
+            mul!(B, a_minus_adag, v)
 
-            mul!(Cu, Ap, u)
-            mul!(Cu, Bp, v, -1, -1)
-            mul!(Cv, Bp, u)
-            mul!(Cv, Ap, v, -1, 1)
+            mul!(C, Hq, A)
+            mul!(C, Hp, B, -1, 1)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(C, lambda_u)
 
-            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*(
-                dot(Cu, lambda_u) + dot(Cv, lambda_v)
-            )
+            mul!(C, Hp, A)
+            mul!(C, Hq, B, 1, 1)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(C, lambda_v)
 
-            mul!(Am, K_full, a_minus_adag)
-            mul!(Bm, S_full, a_minus_adag)
 
-            mul!(Du, Bm, u)
-            mul!(Du, Am, v, -1, 1)
-            mul!(Dv, Am, u)
-            mul!(Dv, Bm, v, 1, 1)
+            # part 2
+            mul!(A, a_plus_adag, v)
+            mul!(B, a_plus_adag, u)
 
-            grad[1:len_α_half] .+= grad_p .* weights_n[2]*(
-                dot(Du, lambda_u) + dot(Dv, lambda_v)
-            )
+            mul!(C, Hq, A)
+            mul!(C, Hp, B, 1, 1)
+            grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(C, lambda_u)
+
+            mul!(C, Hp, A)
+            mul!(C, Hq, B, -1, 1)
+            grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(C, lambda_v)
 
         end
         grad *= -0.5*dt
