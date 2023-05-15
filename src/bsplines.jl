@@ -172,7 +172,9 @@ struct bcparams
     baseIndex::Vector{Int64}
 
     # New constructor to allow defining number of symmetric Hamiltonian terms
-    function bcparams(T::Float64, D1::Int64, Ncoupled::Int64, Nunc::Int64, Nfreq::Vector{Int64}, omega::Vector{Vector{Float64}}, pcof::Array{Float64,1})
+    function bcparams(T::Float64, D1::Int64, Ncoupled::Int64, Nunc::Int64,
+            Nfreq::Vector{Int64}, omega::Vector{Vector{Float64}},
+            pcof::Array{Float64,1})
         @assert Ncoupled + Nunc == length(omega)
 
         # make sure Nfreq[c] is consistent with omega[c]
@@ -610,5 +612,326 @@ since the controls are linear in them)
     #     f += fbs * cos(bcpar.omega[ind+1][freq]*t) # spl is 0-based
     #   end # for
 
+    return f
+end
+
+
+function gradbcarrier2_dt!(t::Float64, bcpar::bcparams, func::Int64, g::Array{Float64,1})
+
+    # compute basic offset: func 0 and 1 use the same spline coefficients, but combined in a different way
+    osc = div(func, 2)
+    q_func = func % 2 # q_func = 0 for p and q_func=1 for q
+    ctrlFunc = osc + 1 # osc is 0-based, ctrlFunc is 1-based
+
+    # allocate array for returning the results
+    # g = zeros(length(bcpar.pcof)) # cos and sin parts 
+
+    g .= 0.0
+
+    dtknot = bcpar.dtknot
+    width = 3*dtknot
+
+    k = max.(3, ceil.(Int64,t./dtknot .+ 2)) # t_knot(k-1) < t <= t_knot(k), but t=0 needs to give k=3
+    k = min.(k, bcpar.D1) # protect agains roundoff that sometimes makes t/dt > N_nurbs-2
+    
+    if func < 2*(bcpar.Ncoupled + bcpar.Nunc)
+        #@fastmath @inbounds @simd for freq in 1:bcpar.Nfreq[ctrlFunc]
+        @fastmath @simd for freq in 1:bcpar.Nfreq[ctrlFunc]
+
+            offset1 = bcpar.baseIndex[ctrlFunc] + (freq-1)*2*bcpar.D1 
+            offset2 = offset1 + bcpar.D1
+
+            # offset in parameter array (osc = 0,1,2,...
+            # Vary freq first, then osc
+            # offset1 = 2*osc*bcpar.Nfreq*bcpar.D1 + (freq-1)*2*bcpar.D1
+            # offset2 = 2*osc*bcpar.Nfreq*bcpar.D1 + (freq-1)*2*bcpar.D1 + bcpar.D1
+
+            #1st segment of nurb k
+            tc = bcpar.tcenter[k]
+            tau = (t .- tc)./width
+            bk = (9/8 .+ 4.5.*tau .+ 4.5 .* tau.^2)
+            bk_prime = (4.5 .+ 9.0.* tau) ./ width
+            if q_func==1
+                g[offset1 .+ k] = (bk_prime * sin(bcpar.omega[osc+1][freq]*t)
+                                   + bk * bcpar.omega[osc+1][freq]*cos(bcpar.omega[osc+1][freq]*t)
+                                  )
+                g[offset2 .+ k] = (bk_prime * cos(bcpar.omega[osc+1][freq]*t) 
+                                   - bk * bcpar.omega[osc+1][freq]*sin(bcpar.omega[osc+1][freq]*t)
+                                  )
+            else # p-func
+                g[offset1 .+ k] = (bk_prime * cos(bcpar.omega[osc+1][freq]*t)
+                                   - bk * bcpar.omega[osc+1][freq]*sin(bcpar.omega[osc+1][freq]*t)
+                                  )
+                g[offset2 .+ k] = -(bk_prime * sin(bcpar.omega[osc+1][freq]*t) 
+                                    + bk * bcpar.omega[osc+1][freq]*cos(bcpar.omega[osc+1][freq]*t)
+                                   )
+            end          
+
+            #2nd segment of nurb k-1
+            tc = bcpar.tcenter[k.-1]
+            tau = (t .- tc)./width
+            bk = (0.75 .- 9 .*tau.^2)
+            bk_prime = -(18 .* tau) ./ width
+            if q_func==1
+                g[offset1 .+ (k-1)] = (bk_prime * sin(bcpar.omega[osc+1][freq]*t)
+                                       + bk * bcpar.omega[osc+1][freq] * cos(bcpar.omega[osc+1][freq]*t)
+                                      )
+                g[offset2 .+ (k-1)] = (bk_prime * cos(bcpar.omega[osc+1][freq]*t) 
+                                       - bk * bcpar.omega[osc+1][freq] * sin(bcpar.omega[osc+1][freq]*t)
+                                      )
+            else # p-func
+                g[offset1 .+ (k-1)] = (bk_prime * cos(bcpar.omega[osc+1][freq]*t)
+                                       - bk * bcpar.omega[osc+1][freq] * sin(bcpar.omega[osc+1][freq]*t)
+                                      )
+                g[offset2 .+ (k-1)] = -(bk_prime * sin(bcpar.omega[osc+1][freq]*t) 
+                                        + bk * bcpar.omega[osc+1][freq] * cos(bcpar.omega[osc+1][freq]*t)
+                                       )
+            end
+      
+            # 3rd segment og nurb k-2
+            tc = bcpar.tcenter[k.-2]
+            tau = (t .- tc)./width
+            bk = (9/8 .- 4.5.*tau .+ 4.5.*tau.^2)
+            bk_prime = (-4.5 .+ 9.0.* tau) ./ width
+            if q_func==1
+                g[offset1 .+ (k-2)] = (bk_prime * sin(bcpar.omega[osc+1][freq]*t)
+                                       + bk * bcpar.omega[osc+1][freq] * cos(bcpar.omega[osc+1][freq]*t)
+                                      )
+                g[offset2 .+ (k-2)] = (bk_prime * cos(bcpar.omega[osc+1][freq]*t) 
+                                       - bk * bcpar.omega[osc+1][freq] * sin(bcpar.omega[osc+1][freq]*t)
+                                      )
+            else # p-func
+                g[offset1 .+ (k-2)] = (bk_prime * cos(bcpar.omega[osc+1][freq]*t)
+                                       - bk * bcpar.omega[osc+1][freq] * sin(bcpar.omega[osc+1][freq]*t)
+                                      )
+                g[offset2 .+ (k-2)] = -(bk_prime * sin(bcpar.omega[osc+1][freq]*t) 
+                                        + bk * bcpar.omega[osc+1][freq] * cos(bcpar.omega[osc+1][freq]*t)
+                                       )
+            end
+
+        end #for freq
+    # else
+    #     # uncoupled control case 
+    #   @fastmath @inbounds @simd for freq in 1:bcpar.Nfreq
+
+    #     # offset
+    #     offset = func*bcpar.D1*bcpar.Nfreq  +  (freq-1)*bcpar.D1
+    #     ind = func - 2*bcpar.Ncoupled
+
+    #     #1st segment of nurb k
+    #     if k <= bcpar.D1  # could do the if statement outside the for-loop instead
+    #       tc = bcpar.tcenter[k]
+    #       tau = (t .- tc)./width
+    #       g[offset .+ k] = (9/8 .+ 4.5.*tau .+ 4.5.*tau.^2)*cos(bcpar.omega[ind+1][freq]*t)
+    #     end
+
+    #     #2nd segment of nurb k-1
+    #     if k >= 2 && k <= bcpar.D1 + 1
+    #       tc = bcpar.tcenter[k.-1]
+    #       tau = (t .- tc)./width
+    #       g[offset .+ k.-1] = (0.75 .- 9 .*tau.^2)*cos(bcpar.omega[ind+1][freq]*t)
+    #     end
+      
+    #     # 3rd segment og nurb k-2
+    #     if k >= 3 && k <= bcpar.D1 + 2
+    #       tc = bcpar.tcenter[k.-2]
+    #       tau = (t .- tc)./width
+    #       g[offset .+ k.-2] = (9/8 .- 4.5.*tau .+ 4.5.*tau.^2)*cos(bcpar.omega[ind+1][freq]*t)
+    #     end
+      
+    #   end #for freq
+
+       end #if
+    return nothing
+ end
+
+
+
+###############################################################################
+#
+# Alternate calls with pcof provided
+#
+###############################################################################
+"""
+    f = bcarrier2(t, params, func)
+
+Evaluate a B-spline function with carrier waves. See also the `bcparams` constructor.
+
+# Arguments
+- `t::Float64`: Evaluate spline at parameter t ∈ [0, param.T]
+- `param::params`: Parameters for the spline
+- `func::Int64`: Spline function index ∈ [0, param.Nseg-1]
+"""
+@inline function bcarrier2(t::Float64, bcpar::bcparams, func::Int64, pcof::Vector{Float64})
+    # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
+    # in general, 0 <= func < 2*(Ncoupled + Nunc)
+
+    # compute basic offset: func 0 and 1 use the same spline coefficients, but combined in a different way
+    osc = div(func, 2) # osc is base 0; 0 <= osc < Ncoupled
+    q_func = func % 2 # q_func = 0 for p and q_func=1 for q
+    ctrlFunc = osc + 1 # osc is 0-based, ctrlFunc is 1-based
+    f = 0.0 # initialize
+    
+    dtknot = bcpar.dtknot
+    width = 3*dtknot
+    
+    k = max.(3, ceil.(Int64,t./dtknot + 2)) # pick out the index of the last basis function corresponding to t
+    k = min.(k, bcpar.D1) #  Make sure we don't access outside the array
+    
+    if func < 2*(bcpar.Ncoupled + bcpar.Nunc)
+        # Coupled and uncoupled controls
+        #@fastmath @inbounds @simd for freq in 1:bcpar.Nfreq[ctrlFunc] # bcpar.Nfreq[osc+1]
+        @fastmath @simd for freq in 1:bcpar.Nfreq[ctrlFunc] # bcpar.Nfreq[osc+1]
+            fbs1 = 0.0 # initialize
+            fbs2 = 0.0 # initialize
+            
+            offset1 = bcpar.baseIndex[ctrlFunc] + (freq-1)*2*bcpar.D1 
+            offset2 = offset1 + bcpar.D1
+            #println("bcarrier2: func = ", func, " ctrlFunc = ", ctrlFunc, " freq = ", freq, " offset1 = ", offset1, " offset2 = ", offset2)
+            
+            # Vary freq first, then osc
+            # offset in parameter array (osc = 0,1,2,...
+            #offset1 = 2*osc*bcpar.Nfreq*bcpar.D1 + (freq-1)*2*bcpar.D1 # offset1 & 2 need updating
+            #offset2 = 2*osc*bcpar.Nfreq*bcpar.D1 + (freq-1)*2*bcpar.D1 + bcpar.D1
+
+            # 1st segment of nurb k
+            tc = bcpar.tcenter[k]
+            tau = (t .- tc)./width
+            fbs1 += pcof[offset1+k] * (9/8 .+ 4.5*tau + 4.5*tau^2)
+            fbs2 += pcof[offset2+k] * (9/8 .+ 4.5*tau + 4.5*tau^2)
+            
+            # 2nd segment of nurb k-1
+            tc = bcpar.tcenter[k-1]
+            tau = (t - tc)./width
+            fbs1 += pcof[offset1+k.-1] .* (0.75 - 9 *tau^2)
+            fbs2 += pcof[offset2+k.-1] .* (0.75 - 9 *tau^2)
+            
+            # 3rd segment of nurb k-2
+            tc = bcpar.tcenter[k.-2]
+            tau = (t .- tc)./width
+            fbs1 += pcof[offset1+k-2] * (9/8 - 4.5*tau + 4.5*tau.^2)
+            fbs2 += pcof[offset2+k-2] * (9/8 - 4.5*tau + 4.5*tau.^2)
+
+            #    end # for carrier phase
+            # p(t)
+            if q_func==1
+                f += fbs1 * sin(bcpar.omega[osc+1][freq]*t) + fbs2 * cos(bcpar.omega[osc+1][freq]*t) # q-func
+            else
+                f += fbs1 * cos(bcpar.omega[osc+1][freq]*t) - fbs2 * sin(bcpar.omega[osc+1][freq]*t) # p-func
+            end
+        end # for freq
+    end # if
+    # else 
+
+    return f
+end
+
+
+"""
+    f = bcarrier2_dt(t, params, func)
+
+Evaluate a B-spline function with carrier waves. See also the `bcparams` constructor.
+
+# Arguments
+- `t::Float64`: Evaluate spline at parameter t ∈ [0, param.T]
+- `param::params`: Parameters for the spline
+- `func::Int64`: Spline function index ∈ [0, param.Nseg-1]
+
+
+SPENCER: To get cross derivative (d2/dtda, just remove the pcofs in the below,
+since the controls are linear in them)
+"""
+@inline function bcarrier2_dt(t::Float64, bcpar::bcparams, func::Int64, pcof::Vector{Float64})
+    # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
+    # in general, 0 <= func < 2*(Ncoupled + Nunc)
+
+    # compute basic offset: func 0 and 1 use the same spline coefficients, but combined in a different way
+    osc = div(func, 2) # osc is base 0; 0 <= osc < Ncoupled
+    q_func = func % 2 # q_func = 0 for p and q_func=1 for q
+    ctrlFunc = osc + 1 # osc is 0-based, ctrlFunc is 1-based
+    f = 0.0 # initialize
+    
+    dtknot = bcpar.dtknot
+    width = 3*dtknot
+    
+    k = max.(3, ceil.(Int64,t./dtknot + 2)) # pick out the index of the last basis function corresponding to t
+    k = min.(k, bcpar.D1) #  Make sure we don't access outside the array
+    
+    if func < 2*(bcpar.Ncoupled + bcpar.Nunc)
+        # Coupled and uncoupled controls
+        #@fastmath @inbounds @simd for freq in 1:bcpar.Nfreq[ctrlFunc] # bcpar.Nfreq[osc+1]
+        @fastmath @simd for freq in 1:bcpar.Nfreq[ctrlFunc] # bcpar.Nfreq[osc+1]
+            fbs1 = 0.0 # initialize
+            fbs2 = 0.0 # initialize
+            fbs1_prime = 0.0 # initialize
+            fbs2_prime = 0.0 # initialize
+            
+            offset1 = bcpar.baseIndex[ctrlFunc] + (freq-1)*2*bcpar.D1 
+            offset2 = offset1 + bcpar.D1
+            #println("bcarrier2: func = ", func, " ctrlFunc = ", ctrlFunc, " freq = ", freq, " offset1 = ", offset1, " offset2 = ", offset2)
+            
+            # Vary freq first, then osc
+            # offset in parameter array (osc = 0,1,2,...
+            #offset1 = 2*osc*bcpar.Nfreq*bcpar.D1 + (freq-1)*2*bcpar.D1 # offset1 & 2 need updating
+            #offset2 = 2*osc*bcpar.Nfreq*bcpar.D1 + (freq-1)*2*bcpar.D1 + bcpar.D1
+
+            # 1st segment of nurb k
+            tc = bcpar.tcenter[k]
+            tau = (t .- tc)./width
+            fbs1_prime += pcof[offset1+k] * (4.5 + 9*tau)/width
+            fbs2_prime += pcof[offset2+k] * (4.5 + 9*tau)/width
+            
+            # 2nd segment of nurb k-1
+            tc = bcpar.tcenter[k-1]
+            tau = (t - tc)./width
+            fbs1_prime += pcof[offset1+k.-1] .* (-18*tau)/width
+            fbs2_prime += pcof[offset2+k.-1] .* (-18*tau)/width
+            
+            # 3rd segment of nurb k-2
+            tc = bcpar.tcenter[k.-2]
+            tau = (t .- tc)./width
+            fbs1_prime += pcof[offset1+k-2] * (-4.5 + 9*tau)/width
+            fbs2_prime += pcof[offset2+k-2] * (-4.5 + 9*tau)/width
+
+            # 1st segment of nurb k
+            tc = bcpar.tcenter[k]
+            tau = (t .- tc)./width
+            fbs1 += pcof[offset1+k] * (9/8 .+ 4.5*tau + 4.5*tau^2)
+            fbs2 += pcof[offset2+k] * (9/8 .+ 4.5*tau + 4.5*tau^2)
+            
+            # 2nd segment of nurb k-1
+            tc = bcpar.tcenter[k-1]
+            tau = (t - tc)./width
+            fbs1 += pcof[offset1+k.-1] .* (0.75 - 9 *tau^2)
+            fbs2 += pcof[offset2+k.-1] .* (0.75 - 9 *tau^2)
+            
+            # 3rd segment of nurb k-2
+            tc = bcpar.tcenter[k.-2]
+            tau = (t .- tc)./width
+            fbs1 += pcof[offset1+k-2] * (9/8 - 4.5*tau + 4.5*tau.^2)
+            fbs2 += pcof[offset2+k-2] * (9/8 - 4.5*tau + 4.5*tau.^2)
+
+
+
+            #    end # for carrier phase
+            # p(t)
+            if q_func==1
+                #f += fbs1 * sin(bcpar.omega[osc+1][freq]*t) + fbs2 * cos(bcpar.omega[osc+1][freq]*t) # q-func
+                f += (fbs1_prime * sin(bcpar.omega[osc+1][freq]*t)
+                      +fbs1 * cos(bcpar.omega[osc+1][freq]*t)*bcpar.omega[osc+1][freq]
+                      +fbs2_prime * cos(bcpar.omega[osc+1][freq]*t) # q-func
+                      -fbs2 * sin(bcpar.omega[osc+1][freq]*t)*bcpar.omega[osc+1][freq] # q-func
+                     )
+            else
+                #f += fbs1 * cos(bcpar.omega[osc+1][freq]*t) - fbs2 * sin(bcpar.omega[osc+1][freq]*t) # p-func
+                f += (fbs1_prime * cos(bcpar.omega[osc+1][freq]*t)
+                      -fbs1 * sin(bcpar.omega[osc+1][freq]*t)*bcpar.omega[osc+1][freq]
+                      -fbs2_prime * sin(bcpar.omega[osc+1][freq]*t) # q-func
+                      -fbs2 * cos(bcpar.omega[osc+1][freq]*t)*bcpar.omega[osc+1][freq] # q-func
+                     )
+            end
+        end # for freq
+    end # if
+    # else 
     return f
 end
