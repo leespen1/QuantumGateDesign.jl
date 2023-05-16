@@ -59,6 +59,8 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             RHS = -(history[:,end] - target)
         elseif cost_type == :Norm
             RHS = -history[:,end]
+        else
+            throw("Invalid cost type: $cost_type")
         end
 
         LHS_map = LinearMap(
@@ -173,6 +175,8 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             RHS = -(history[:,end] - target)
         elseif cost_type == :Norm
             RHS = -history[:,end]
+        else
+            throw("Invalid cost type: $cost_type")
         end
 
         LHS_map = LinearMap(
