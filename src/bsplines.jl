@@ -179,7 +179,8 @@ struct bcparams
 
         # make sure Nfreq[c] is consistent with omega[c]
         NfreqTot = 0
-        for c = Ncoupled+Nunc
+        #for c = Ncoupled+Nunc # Pretty sure they meant to iterate here
+        for c = 1:Ncoupled+Nunc
             @assert length(omega[c]) == Nfreq[c] "length(omega[c]) != Nfreq[c]"
         end
 
@@ -271,7 +272,8 @@ Evaluate a B-spline function with carrier waves. See also the `bcparams` constru
     
     if func < 2*(bcpar.Ncoupled + bcpar.Nunc)
         # Coupled and uncoupled controls
-        @fastmath @inbounds @simd for freq in 1:bcpar.Nfreq[ctrlFunc] # bcpar.Nfreq[osc+1]
+        #@fastmath @inbounds @simd for freq in 1:bcpar.Nfreq[ctrlFunc] # bcpar.Nfreq[osc+1]
+        for freq in 1:bcpar.Nfreq[ctrlFunc] # bcpar.Nfreq[osc+1]
             fbs1 = 0.0 # initialize
             fbs2 = 0.0 # initialize
             

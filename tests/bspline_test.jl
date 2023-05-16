@@ -9,7 +9,7 @@ function main(;coupled=true)
     if coupled
         T = 1.0
         D1 = 4 # Number of B-spline coefficients per control function
-        omega = [[1.0]] # 1 frequency for 1 pair of coupled controls (p and q)
+        omega = [[0.0]] # 1 frequency for 1 pair of coupled controls (p and q)
         pcof = ones(2*D1)
         # Use simplest constructor
         b = bcparams(T, D1,omega, pcof) 
@@ -60,13 +60,18 @@ function main(;coupled=true)
         pt_fd[i]= (bcarrier2(t[i]+dt, b, 0, pcof) - bcarrier2(t[i]-dt, b, 0, pcof))/(2*dt)
         qt_fd[i]= (bcarrier2(t[i]+dt, b, 1, pcof) - bcarrier2(t[i]-dt, b, 1, pcof))/(2*dt)
 
+
+        grad .= 0
         gradbcarrier2!(t[i], b, 0, grad)
         grad_p_hist[:,i] .= grad
+        grad .= 0
         gradbcarrier2!(t[i], b, 1, grad)
         grad_q_hist[:,i] .= grad
 
+        grad .= 0
         gradbcarrier2_dt!(t[i], b, 0, grad)
         grad_pt_hist[:,i] .= grad
+        grad .= 0
         gradbcarrier2_dt!(t[i], b, 1, grad)
         grad_qt_hist[:,i] .= grad
 
@@ -118,6 +123,32 @@ function main(;coupled=true)
     #plot!(pl, t, q)
 end
 
-#
-# Need to test the pcof gradients as well as the time derivatives
-#
+function main2(i=1)
+    T = 1.0
+    D1 = 8 # Number of B-spline coefficients per control function
+    omega = [[1.0]] # 1 frequency for 1 pair of coupled controls (p and q)
+    pcof = zeros(2*D1)
+    #pcof[i] = 1
+    # Use simplest constructor
+    b = bcparams(T, D1,omega, pcof) 
+
+    N = 1001
+    t = LinRange(0,T,N)
+    p = zeros(N)
+    q = zeros(N)
+    pt = zeros(N)
+    qt = zeros(N)
+    for i in 1:N
+        p[i] = bcarrier2(t[i], b, 0)
+        q[i] = bcarrier2(t[i], b, 1)
+        pt[i] = bcarrier2_dt(t[i], b, 0)
+        qt[i] = bcarrier2_dt(t[i], b, 1)
+    end
+    pl = plot(xlabel="t")
+    plot!(pl, t, p,  label="p(t)")
+    plot!(pl, t, q,  label="q(t)")
+    #plot!(pl, t, pt, label="pt(t)")
+    #plot!(pl, t, qt, label="qt(t)")
+    #@infiltrate
+    return pl
+end
