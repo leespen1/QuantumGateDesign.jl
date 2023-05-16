@@ -224,7 +224,7 @@ function eval_forward_forced_order2(prob::SchrodingerProb, forcing_ary::Abstract
     N_grd = prob.N_guard_levels
     N_tot = prob.N_tot_levels
 
-    t = 0
+    t = 0.0
     dt = tf/nsteps
 
     uv = zeros(2*N_tot)
@@ -297,7 +297,7 @@ function eval_forward_forced_order4(prob::SchrodingerProb, forcing_ary::Array{Fl
     N_grd = prob.N_guard_levels
     N_tot = prob.N_tot_levels
 
-    t = 0
+    t = 0.0
     dt = tf/nsteps
 
     uv = zeros(2*N_tot)
