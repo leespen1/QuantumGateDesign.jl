@@ -126,8 +126,9 @@ end
 function main2(i=1)
     T = 1.0
     D1 = 8 # Number of B-spline coefficients per control function
-    omega = [[1.0]] # 1 frequency for 1 pair of coupled controls (p and q)
-    pcof = zeros(2*D1)
+    omega = [[0.0]] # 1 frequency for 1 pair of coupled controls (p and q)
+    pcof = ones(2*D1)
+    #pcof = zeros(2*D1)
     #pcof[i] = 1
     # Use simplest constructor
     b = bcparams(T, D1,omega, pcof) 
@@ -152,3 +153,5 @@ function main2(i=1)
     #@infiltrate
     return pl
 end
+
+
