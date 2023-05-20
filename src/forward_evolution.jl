@@ -28,66 +28,77 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
     t = 0.0
     dt = tf/nsteps
 
-    uv = zeros(2*N_tot)
-    copyto!(uv,1,u0,1,N_tot)
-    copyto!(uv,1+N_tot,v0,1,N_tot)
-    uv_history = Matrix{Float64}(undef,2*N_tot,1+nsteps)
-    uv_history[:,1] .= uv
-    utvt_history = Matrix{Float64}(undef,2*N_tot,1+nsteps)
+    uv_history = Array{Float64, 3}(undef,2*N_tot, 1+nsteps, N_ess)
+    utvt_history = Array{Float64, 3}(undef, 2*N_tot, 1+nsteps, N_ess)
 
-    RHSu::Vector{Float64} = zeros(N_tot)
-    RHSv::Vector{Float64} = zeros(N_tot)
-    RHS::Vector{Float64} = zeros(2*N_tot)
+    # Do forward solve for each element of basis
+    for basis_index in 1:N_ess
+        # Allocate storage
+        uv = zeros(2*N_tot)
+        u = zeros(N_tot)
+        v = zeros(N_tot)
+        ut = zeros(N_tot)
+        vt = zeros(N_tot)
 
-    u = copy(u0)
-    v = copy(v0)
-    ut = zeros(N_tot)
-    vt = zeros(N_tot)
+        RHSu::Vector{Float64} = zeros(N_tot)
+        RHSv::Vector{Float64} = zeros(N_tot)
+        RHS::Vector{Float64} = zeros(2*N_tot)
 
-    # Order 2
-    for n in 0:nsteps-1
+        # Set initial condition
+        u .= u0[:,basis_index]
+        v .= v0[:,basis_index]
+
+        uv[1:N_tot] .= u
+        uv[1+N_tot:2*N_tot] .= v
+        uv_history[:,1,basis_index] .= uv
+
+        # Order 2
+        for n in 0:nsteps-1
+            utvt!(ut, vt, u, v,
+                  Ks, Ss, a_plus_adag, a_minus_adag,
+                  p, q, t, α)
+
+            utvt_history[1:N_tot, 1+n, basis_index] .= ut
+            utvt_history[1+N_tot:end, 1+n, basis_index] .= vt
+
+            copy!(RHSu,u)
+            axpy!(0.5*dt,ut,RHSu)
+
+            copy!(RHSv,v)
+            axpy!(0.5*dt,vt,RHSv)
+
+            copyto!(RHS,1,RHSu,1,N_tot)
+            copyto!(RHS,1+N_tot,RHSv,1,N_tot)
+
+            t += dt
+
+            LHS_map = LinearMap(
+                uv -> LHS_func(ut, vt, uv[1:N_tot], uv[1+N_tot:end],
+                               Ks, Ss, a_plus_adag, a_minus_adag,
+                               p, q, t, α, dt, N_tot),
+                2*N_tot,2*N_tot
+            )
+
+            gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+            uv_history[:,1+n+1, basis_index] .= uv
+            u = uv[1:N_tot]
+            v = uv[1+N_tot:end]
+        end
+
+        # One last time, for utvt history at final time
         utvt!(ut, vt, u, v,
               Ks, Ss, a_plus_adag, a_minus_adag,
               p, q, t, α)
 
-        utvt_history[1:N_tot, 1+n] .= ut
-        utvt_history[1+N_tot:end, 1+n] .= vt
+        utvt_history[1:N_tot,1+nsteps, basis_index] .= ut
+        utvt_history[1+N_tot:end,1+nsteps, basis_index] .= vt
 
-        copy!(RHSu,u)
-        axpy!(0.5*dt,ut,RHSu)
-
-        copy!(RHSv,v)
-        axpy!(0.5*dt,vt,RHSv)
-
-        copyto!(RHS,1,RHSu,1,N_tot)
-        copyto!(RHS,1+N_tot,RHSv,1,N_tot)
-
-        t += dt
-
-        LHS_map = LinearMap(
-            uv -> LHS_func(ut, vt, uv[1:N_tot], uv[1+N_tot:end],
-                           Ks, Ss, a_plus_adag, a_minus_adag,
-                           p, q, t, α, dt, N_tot),
-            2*N_tot,2*N_tot
-        )
-
-        gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
-        uv_history[:,1+n+1] .= uv
-        u = uv[1:N_tot]
-        v = uv[1+N_tot:end]
     end
-
-    # One last time, for utvt history at final time
-    utvt!(ut, vt, u, v,
-          Ks, Ss, a_plus_adag, a_minus_adag,
-          p, q, t, α)
-
-    utvt_history[1:N_tot,1+nsteps] .= ut
-    utvt_history[1+N_tot:end,1+nsteps] .= vt
 
     if return_time_derivatives
-        return cat(uv_history, utvt_history, dims=3)
+        return cat(uv_history, utvt_history, dims=4)
     end
+
     return uv_history
 end
 

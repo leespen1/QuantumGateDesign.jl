@@ -1,4 +1,4 @@
-function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
+function discrete_adjoint(prob::SchrodingerProb, target_tot::AbstractMatrix{Float64},
         α=missing; order=2, cost_type=:Infidelity, return_lambda_history=false)
 
     # Get state vector history
@@ -24,8 +24,8 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
     N_grd = prob.N_guard_levels
     N_tot = prob.N_tot_levels
 
-    R = copy(target)
-    T = vcat(R[1+N_tot:end], -R[1:N_tot])
+    R_tot = copy(target_tot)
+    T_tot = vcat(R_tot[1+N_tot:end,:], -R_tot[1:N_tot,:])
 
     # For adjoint evolution. Take transpose of entire matrix -> antisymmetric blocks change sign
     Ks_adj = Matrix(transpose(-Ks)) # NOTE THAT K changes sign!
@@ -38,8 +38,14 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
 
     dt = tf/nsteps
 
+    lambda_history = Array{Float64, 3}(undef, 2*N_tot,1+nsteps, N_ess)
+    len_α = length(α)
+    len_α_half = div(len_α, 2)
+    grad = zeros(len_α)
+
+    for basis_index in 1:N_ess
+
     lambda = zeros(2*N_tot)
-    lambda_history = zeros(2*N_tot,1+nsteps)
     lambda_ut  = zeros(N_tot)
     lambda_vt  = zeros(N_tot)
     lambda_utt = zeros(N_tot)
@@ -49,16 +55,22 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
     RHS_lambda_v::Vector{Float64} = zeros(N_tot)
     RHS::Vector{Float64} = zeros(2*N_tot)
 
+    R = R_tot[:,basis_index]
+    T = T_tot[:,basis_index]
+    target = target_tot[:,basis_index]
+
+
     if order == 2
         # Terminal Condition
         t = tf
 
         if cost_type == :Infidelity
-            RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
+            RHS = 2*(dot(history[:,end,basis_index],R)*R 
+                     + dot(history[:,end,basis_index],T)*T)
         elseif cost_type == :Tracking
-            RHS = -(history[:,end] - target)
+            RHS = -(history[:,end,basis_index] - target)
         elseif cost_type == :Norm
-            RHS = -history[:,end]
+            RHS = -history[:,end,basis_index]
         else
             throw("Invalid cost type: $cost_type")
         end
@@ -71,7 +83,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         )
         gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
-        lambda_history[:,1+nsteps] .= lambda
+        lambda_history[:,1+nsteps,basis_index] .= lambda
         lambda_u = copy(lambda[1:N_tot])
         lambda_v = copy(lambda[1+N_tot:2*N_tot])
         
@@ -100,7 +112,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             )
 
             gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
-            lambda_history[:,1+n] .= lambda
+            lambda_history[:,1+n,basis_index] .= lambda
             lambda_u = lambda[1:N_tot]
             lambda_v = lambda[1+N_tot:end]
         end
@@ -121,15 +133,12 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
         MT_lambda_21 = zeros(N_tot)
         MT_lambda_22 = zeros(N_tot)
 
-        len_α = length(α)
-        len_α_half = div(len_α, 2)
-        grad = zeros(len_α)
         for n in 0:nsteps-1
-            lambda_u = lambda_history[1:N_tot,1+n+1]
-            lambda_v = lambda_history[1+N_tot:end,1+n+1]
+            lambda_u .= lambda_history[1:N_tot,1+n+1, basis_index]
+            lambda_v .= lambda_history[1+N_tot:end,1+n+1, basis_index]
 
-            u = history[1:N_tot,1+n]
-            v = history[1+N_tot:end,1+n]
+            u .= history[1:N_tot,1+n, basis_index]
+            v .= history[1+N_tot:end,1+n, basis_index]
             t = n*dt
 
             grad_p = dpda(t,α)
@@ -155,8 +164,8 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
                                              )
 
 
-            u = history[1:N_tot,1+n+1]
-            v = history[1+N_tot:end,1+n+1]
+            u .= history[1:N_tot,1+n+1, basis_index]
+            v .= history[1+N_tot:end,1+n+1, basis_index]
             t = (n+1)*dt
 
             grad_p = dpda(t,α)
@@ -489,6 +498,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
     else
         throw("Invalid order: $order")
     end
+    end # for basis_index in 1:N_ess
 
     if return_lambda_history
         return grad, history, lambda_history
@@ -524,8 +534,8 @@ function eval_grad_forced(prob::SchrodingerProb, target, α=1.0; order=2, cost_t
     for i in 1:length(α)
         dpda(t,pcof) = prob.dpda(t,pcof)[i]
         dqda(t,pcof) = prob.dqda(t,pcof)[i]
-        d2p_dta(t, pcof) = prob.d2p_dt(t,pcof)[i]
-        d2q_dta(t, pcof) = prob.d2q_dt(t,pcof)[i]
+        d2p_dta(t, pcof) = prob.d2p_dta(t,pcof)[i]
+        d2q_dta(t, pcof) = prob.d2q_dta(t,pcof)[i]
         if order == 2
             forcing_ary = zeros(2*N_tot,1+prob.nsteps,1)
             forcing_vec = zeros(2*N_tot)
