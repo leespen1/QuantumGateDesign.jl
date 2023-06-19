@@ -141,19 +141,12 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             mul!(MT_lambda_21, a_plus_adag_transpose, lambda_u)
             mul!(MT_lambda_22, a_minus_adag_transpose, lambda_v)
 
-            #grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
-            #                                        + dot(v, MT_lambda_22)
-            #                                       )
-            #grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
-            #                                  - dot(v, MT_lambda_21)
-            #                                 )
-            grad .+= grad_q .* (dot(u, MT_lambda_11)
+            grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
                                                     + dot(v, MT_lambda_22)
                                                    )
-            grad .+= grad_p .* (dot(u, MT_lambda_12)
+            grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
                                               - dot(v, MT_lambda_21)
                                              )
-
 
             u = history[1:N_tot,1+n+1]
             v = history[1+N_tot:end,1+n+1]
@@ -162,16 +155,10 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             grad_p = dpda(t,α)
             grad_q = dqda(t,α)
 
-            #grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
-            #                                        + dot(v, MT_lambda_22)
-            #                                       )
-            #grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
-            #                                  - dot(v, MT_lambda_21)
-            #                                 )
-            grad .+= grad_q .* (dot(u, MT_lambda_11)
+            grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
                                                     + dot(v, MT_lambda_22)
                                                    )
-            grad .+= grad_p .* (dot(u, MT_lambda_12)
+            grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
                                               - dot(v, MT_lambda_21)
                                              )
         end
@@ -302,31 +289,19 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             grad_qt = d2q_dta(t,α)
 
             # H_α
-            #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[1]*(
-            #    dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
-            #)
-            #grad[1:len_α_half] .+= grad_p .* weights_n[1]*(
-            #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
-            #)
-            grad .+= grad_q .* weights_n[1]*(
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[1]*(
                 dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
             )
-            grad .+= grad_p .* weights_n[1]*(
+            grad[1:len_α_half] .+= grad_p .* weights_n[1]*(
                 dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
             )
 
             # 4th order Correction
             # H_αt
-            #grad[1+len_α_half:len_α] .+= grad_qt .* weights_n[2]*(
-            #    dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
-            #)
-            #grad[1:len_α_half] .+= grad_pt .* weights_n[2]*(
-            #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
-            #)
-            grad .+= grad_qt .* weights_n[2]*(
+            grad[1+len_α_half:len_α] .+= grad_qt .* weights_n[2]*(
                 dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
             )
-            grad .+= grad_pt .* weights_n[2]*(
+            grad[1:len_α_half] .+= grad_pt .* weights_n[2]*(
                 dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
             )
             
@@ -339,22 +314,18 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             mul!(A, Hp, v, -1, 1)
             mul!(B, a_minus_adag, A)
 
-            #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(B, lambda_u)
-            grad .+= grad_q .* weights_n[2]*dot(B, lambda_u)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(B, lambda_u)
             mul!(B, a_plus_adag, A)
-            #grad[1:len_α_half] .+= grad_p .* weights_n[2]*dot(B, lambda_v)
-            grad .+= grad_p .* weights_n[2]*dot(B, lambda_v)
+            grad[1:len_α_half] .+= grad_p .* weights_n[2]*dot(B, lambda_v)
 
             # part 2
             mul!(A, Hp, u)
             mul!(A, Hq, v, 1, 1)
             mul!(B, a_plus_adag, A)
 
-            #grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(B, lambda_u)
-            grad .-= grad_p .* weights_n[2]*dot(B, lambda_u)
+            grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(B, lambda_u)
             mul!(B, a_minus_adag, A)
-            #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(B, lambda_v)
-            grad .+= grad_q .* weights_n[2]*dot(B, lambda_v)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(B, lambda_v)
 
 
             # H*H_α
@@ -364,13 +335,11 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
 
             mul!(C, Hq, A)
             mul!(C, Hp, B, -1, 1)
-            #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(C, lambda_u)
-            grad .+= grad_q .* weights_n[2]*dot(C, lambda_u)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(C, lambda_u)
 
             mul!(C, Hp, A)
             mul!(C, Hq, B, 1, 1)
-            #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(C, lambda_v)
-            grad .+= grad_q .* weights_n[2]*dot(C, lambda_v)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(C, lambda_v)
 
 
             # part 2
@@ -379,13 +348,11 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
 
             mul!(C, Hq, A)
             mul!(C, Hp, B, 1, 1)
-            #grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(C, lambda_u)
-            grad .-= grad_p .* weights_n[2]*dot(C, lambda_u)
+            grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(C, lambda_u)
 
             mul!(C, Hp, A)
             mul!(C, Hq, B, -1, 1)
-            #grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(C, lambda_v)
-            grad .-= grad_p .* weights_n[2]*dot(C, lambda_v)
+            grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(C, lambda_v)
             
 
             # uv n+1 contribution
@@ -400,31 +367,19 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             grad_qt = d2q_dta(t,α)
 
             # H_α
-            #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[1]*(
-            #    dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
-            #)
-            #grad[1:len_α_half] .+= grad_p .* weights_np1[1]*(
-            #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
-            #)
-            grad .+= grad_q .* weights_np1[1]*(
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[1]*(
                 dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
             )
-            grad .+= grad_p .* weights_np1[1]*(
+            grad[1:len_α_half] .+= grad_p .* weights_np1[1]*(
                 dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
             )
 
             # 4th order Correction
             # H_αt
-            #grad[1+len_α_half:len_α] .+= grad_qt .* weights_np1[2]*(
-            #    dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
-            #)
-            #grad[1:len_α_half] .+= grad_pt .* weights_np1[2]*(
-            #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
-            #)
-            grad .+= grad_qt .* weights_np1[2]*(
+            grad[1+len_α_half:len_α] .+= grad_qt .* weights_np1[2]*(
                 dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
             )
-            grad .+= grad_pt .* weights_np1[2]*(
+            grad[1:len_α_half] .+= grad_pt .* weights_np1[2]*(
                 dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
             )
             
@@ -437,22 +392,18 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             mul!(A, Hp, v, -1, 1)
             mul!(B, a_minus_adag, A)
 
-            #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(B, lambda_u)
-            grad .+= grad_q .* weights_np1[2]*dot(B, lambda_u)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(B, lambda_u)
             mul!(B, a_plus_adag, A)
-            #grad[1:len_α_half] .+= grad_p .* weights_np1[2]*dot(B, lambda_v)
-            grad .+= grad_p .* weights_np1[2]*dot(B, lambda_v)
+            grad[1:len_α_half] .+= grad_p .* weights_np1[2]*dot(B, lambda_v)
 
             # part 2
             mul!(A, Hp, u)
             mul!(A, Hq, v, 1, 1)
             mul!(B, a_plus_adag, A)
 
-            #grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(B, lambda_u)
-            grad .-= grad_p .* weights_np1[2]*dot(B, lambda_u)
+            grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(B, lambda_u)
             mul!(B, a_minus_adag, A)
-            #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(B, lambda_v)
-            grad .+= grad_q .* weights_np1[2]*dot(B, lambda_v)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(B, lambda_v)
 
 
             # H*H_α
@@ -462,13 +413,11 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
 
             mul!(C, Hq, A)
             mul!(C, Hp, B, -1, 1)
-            #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(C, lambda_u)
-            grad .+= grad_q .* weights_np1[2]*dot(C, lambda_u)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(C, lambda_u)
 
             mul!(C, Hp, A)
             mul!(C, Hq, B, 1, 1)
-            #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(C, lambda_v)
-            grad .+= grad_q .* weights_np1[2]*dot(C, lambda_v)
+            grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(C, lambda_v)
 
 
             # part 2
@@ -477,13 +426,11 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
 
             mul!(C, Hq, A)
             mul!(C, Hp, B, 1, 1)
-            #grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(C, lambda_u)
-            grad .-= grad_p .* weights_np1[2]*dot(C, lambda_u)
+            grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(C, lambda_u)
 
             mul!(C, Hp, A)
             mul!(C, Hq, B, -1, 1)
-            #grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(C, lambda_v)
-            grad .-= grad_p .* weights_np1[2]*dot(C, lambda_v)
+            grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(C, lambda_v)
         end
         grad *= -0.5*dt
     else
