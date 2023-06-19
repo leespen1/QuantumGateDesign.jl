@@ -1,3 +1,4 @@
+using HermiteOptimalControl
 using Test
 
 nsteps = 5 # Use a small number of steps for these correctness tests, to lower computational cost
