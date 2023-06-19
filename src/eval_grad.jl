@@ -1,5 +1,26 @@
+#==============================================================================
+#
+# eval_grad.jl
+#
+# This file defines functions for evaluating the gradient of a problem.
+#
+# These methods include:
+# 1. discrete_adjoint
+# 2. eval_grad_forced
+# 3. eval_grad_finite_difference
+#
+# 1 and 3 are self-explanatory. eval_grad_forced is the "forward differentiation"
+# method of evaluating the gradient. In this method, we directly take the
+# derivative/gradient of the objective function with respect to the control
+# variable/vector. The resulting expression will depend on the
+# derivative/gradient of the state vector at the final time wrt the control. To
+# obtain this, we differentiate Schrodinger's equation wrt the control, and
+# then evolve it to the final time (the initial condition is all zeros). The 
+# state vector from the original Schrodinger equation will appear as a forcing
+# term in the differentiated equation, hence the name "eval_grad_forced."
+=#############################################################################
 function discrete_adjoint(prob::SchrodingerProb, target_tot::AbstractMatrix{Float64},
-        α=missing; order=2, cost_type=:Infidelity, return_lambda_history=false)
+        α::AbstractVector{Float64}; order=2, cost_type=:Infidelity, return_lambda_history=false)
 
     # Get state vector history
     history = eval_forward(prob, α, order=order)
@@ -150,18 +171,20 @@ function discrete_adjoint(prob::SchrodingerProb, target_tot::AbstractMatrix{Floa
             mul!(MT_lambda_21, a_plus_adag_transpose, lambda_u)
             mul!(MT_lambda_22, a_minus_adag_transpose, lambda_v)
 
-            #grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
-            #                                        + dot(v, MT_lambda_22)
-            #                                       )
-            #grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
-            #                                  - dot(v, MT_lambda_21)
-            #                                 )
+            grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
+                                                    + dot(v, MT_lambda_22)
+                                                   )
+            grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
+                                              - dot(v, MT_lambda_21)
+                                             )
+            #=
             grad .+= grad_q .* (dot(u, MT_lambda_11)
                                                     + dot(v, MT_lambda_22)
                                                    )
             grad .+= grad_p .* (dot(u, MT_lambda_12)
                                               - dot(v, MT_lambda_21)
                                              )
+            =#
 
 
             u .= history[1:N_tot,1+n+1, basis_index]
@@ -171,18 +194,20 @@ function discrete_adjoint(prob::SchrodingerProb, target_tot::AbstractMatrix{Floa
             grad_p = dpda(t,α)
             grad_q = dqda(t,α)
 
-            #grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
-            #                                        + dot(v, MT_lambda_22)
-            #                                       )
-            #grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
-            #                                  - dot(v, MT_lambda_21)
-            #                                 )
+            grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
+                                                    + dot(v, MT_lambda_22)
+                                                   )
+            grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
+                                              - dot(v, MT_lambda_21)
+                                             )
+            #=
             grad .+= grad_q .* (dot(u, MT_lambda_11)
                                                     + dot(v, MT_lambda_22)
                                                    )
             grad .+= grad_p .* (dot(u, MT_lambda_12)
                                               - dot(v, MT_lambda_21)
                                              )
+            =#
         end
         grad *= -0.5*dt
 
@@ -508,7 +533,7 @@ end
 
 
 
-function eval_grad_forced(prob::SchrodingerProb, target, α=1.0; order=2, cost_type=:Infidelity)
+function eval_grad_forced(prob::SchrodingerProb, target, α; order=2, cost_type=:Infidelity)
     # Get state vector history
     history = eval_forward(prob, α, order=order, return_time_derivatives=true)
 
@@ -662,11 +687,11 @@ function eval_grad_finite_difference(prob::SchrodingerProb, target, α, dα=1e-5
         α_l[i] -= dα
         history_r = eval_forward(prob, α_r, order=order)
         history_l = eval_forward(prob, α_l, order=order)
-        ψf_r = history_r[:,end]
-        ψf_l = history_l[:,end]
+        ψf_r = history_r[:,end,:]
+        ψf_l = history_l[:,end,:]
         if cost_type == :Infidelity
-            cost_r = infidelity(ψf_r, target)
-            cost_l = infidelity(ψf_l, target)
+            cost_r = infidelity(ψf_r, target, prob.N_ess_levels)
+            cost_l = infidelity(ψf_l, target, prob.N_ess_levels)
         elseif cost_type == :Tracking
             cost_r = 0.5*norm(ψf_r - target)^2
             cost_l = 0.5*norm(ψf_l - target)^2
@@ -683,9 +708,9 @@ function eval_grad_finite_difference(prob::SchrodingerProb, target, α, dα=1e-5
 end
 
 
-function infidelity(ψ::Vector{Float64}, target::Vector{Float64})
+function infidelity(ψf, target, N_ess::Int64)
     R = copy(target)
     N_tot = size(target,1)÷2
-    T = vcat(R[1+N_tot:end], -R[1:N_tot])
-    return 1 - (dot(ψ,R)^2 + dot(ψ,T)^2)
+    T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
+    return 1 - ((tr(ψf'*R)^2 + tr(ψf'*T)^2) / (N_ess^2))
 end
