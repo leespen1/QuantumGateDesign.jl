@@ -1,5 +1,3 @@
-include("../Daniel/da_test.jl")
-
 # The equation we solve is
 # du/dt = (a*cos(t)-1)*u
 # u(0) = 1
