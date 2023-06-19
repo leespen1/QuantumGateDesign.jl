@@ -40,8 +40,8 @@ function daniel_prob(;tf::Float64=1.2, nsteps::Int64=100)
     dqda(t,α) = cos(t)
     d2p_dta(t,α) = 0.0
     d2q_dta(t,α) = -sin(t)
-    u0::Matrix{Float64} = [1 0; 0 1]
-    v0::Matrix{Float64} = [0 0; 0 1]
+    u0::Vector{Float64} = [1,0]
+    v0::Vector{Float64} = [0,0]
 
     # I should rename these to something else. Maybe hermitian/anti-hermitian_control? 
     a_plus_adag = [0 0; 0 0]  

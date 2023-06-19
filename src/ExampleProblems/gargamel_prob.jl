@@ -59,8 +59,8 @@ function gargamel_prob(;β::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
     dqda(t,α) = my_dqda(t,α,β)
     d2p_dta(t,α) = my_d2pdta(t,α,β)
     d2q_dta(t,α) = my_d2qdta(t,α,β)
-    u0::Matrix{Float64} = [1 0; 0 1]
-    v0::Matrix{Float64} = [0 0; 0 0]
+    u0::Vector{Float64} = [1,0]
+    v0::Vector{Float64} = [0,0]
     N_essential = 2
     N_guard = 0
     return SchrodingerProb(Ks,Ss, a_plus_adag, a_minus_adag,
