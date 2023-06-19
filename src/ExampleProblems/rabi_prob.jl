@@ -21,9 +21,8 @@ function rabi_osc(N_ess, N_guard, Ω::ComplexF64=1.0+0.0im, tf::Float64=NaN; nst
     dqda(t,α) = imag(Ω)
     d2p_dta(t,α) = 0.0
     d2q_dta(t,α) = 0.0
-    u0 = zeros(N_tot)
-    u0[1] = 1
-    v0 = zeros(N_tot)
+    u0::Matrix{Float64} = [1 0; 0 1]
+    v0::Matrix{Float64} = [0 0; 0 0]
     # Default time to pi/2 pulse
     if isnan(tf)
         tf = pi/(2*abs(Ω))
