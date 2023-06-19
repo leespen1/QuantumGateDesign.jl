@@ -14,3 +14,5 @@ Julia package for quantum optimal control using Hermite methods.
       it matches the problem)
 - [X] Add (automatic) test comparing discrete adjoint and forward
       differentiation gradients to nearly machine precision
+- [ ] Break code into smaller functions where appropriate (discrete adjoint is
+      probably too long)
