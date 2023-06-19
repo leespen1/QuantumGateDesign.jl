@@ -7,7 +7,8 @@ function my_dpdt(t,α,β)
 end
 
 function my_dpda(t,α,β)
-    n = div(length(α),2)
+    #n = div(length(α),2)
+    n = length(α)
     ret = zeros(n)
     ret[1] = 1.0
     ret[2] = cos(t*β)
@@ -15,7 +16,8 @@ function my_dpda(t,α,β)
 end
 
 function my_d2pdta(t,α,β)
-    n = div(length(α),2)
+    #n = div(length(α),2)
+    n = length(α)
     ret = zeros(n)
     ret[1] = 0.0
     ret[2] = -β*sin(t*β)
@@ -31,18 +33,22 @@ function my_dqdt(t,α,β)
 end
 
 function my_dqda(t,α,β)
-    n = div(length(α),2)
+    #n = div(length(α),2)
+    n = length(α)
     ret = zeros(n)
-    ret[1] = -1.0
-    ret[2] = sin(t*β)
+    #ret[1] = -1.0
+    #ret[2] = sin(t*β)
+    ret[3] = -1.0
+    ret[4] = sin(t*β)
     return ret
 end
 
 function my_d2qdta(t,α,β)
-    n = div(length(α),2)
+    #n = div(length(α),2)
+    n = length(α)
     ret = zeros(n)
-    ret[1] = 0.0
-    ret[2] = β*cos(t*β)
+    ret[3] = 0.0
+    ret[4] = β*cos(t*β)
     return ret
 end
 
