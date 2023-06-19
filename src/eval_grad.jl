@@ -65,12 +65,12 @@ function discrete_adjoint(prob::SchrodingerProb, target_tot::AbstractMatrix{Floa
         t = tf
 
         if cost_type == :Infidelity
-            RHS .= 2*(dot(history[:,end,basis_index],R)*R 
+            RHS = 2*(dot(history[:,end,basis_index],R)*R 
                      + dot(history[:,end,basis_index],T)*T)
         elseif cost_type == :Tracking
-            RHS .= -(history[:,end,basis_index] - target)
+            RHS = -(history[:,end,basis_index] - target)
         elseif cost_type == :Norm
-            RHS .= -history[:,end,basis_index]
+            RHS = -history[:,end,basis_index]
         else
             throw("Invalid cost type: $cost_type")
         end
