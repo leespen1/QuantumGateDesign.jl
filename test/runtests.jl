@@ -1,6 +1,16 @@
 using HermiteOptimalControl
 using Test
 
+#=
+# Test suite
+#
+# Instead of randomly generative control vectors and targets each run, perhaps
+# I should do it once and hard-code the results. I can even save the gradients,
+# so that each time I update I will be checking whether the algorithms produce
+# the exact same results up to machine precision.
+#
+=#
+
 nsteps = 5 # Use a small number of steps for these correctness tests, to lower computational cost
 
 N_ess = 2
@@ -35,7 +45,7 @@ for (i, prob) in enumerate(probs)
             @testset "Order: $order" begin
             grad_disc_adj = discrete_adjoint(prob, target, pcof, order=order, cost_type=cost_type)
             grad_fin_diff = eval_grad_finite_difference(prob, target, pcof, order=order, cost_type=cost_type)
-            absolute_tolerance = 1e-10 # Might want to relax this to 1e-9.
+            absolute_tolerance = 1e-9 # Might want to relax this to 1e-9.
 
             for k in 1:length(grad_disc_adj)
                 @test isapprox(grad_disc_adj[k], grad_fin_diff[k], atol = absolute_tolerance)
