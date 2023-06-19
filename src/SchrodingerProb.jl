@@ -11,8 +11,8 @@ mutable struct SchrodingerProb
     dqda::Function
     d2p_dta::Function
     d2q_dta::Function
-    u0::AbstractVecOrMat{Float64}
-    v0::AbstractVecOrMat{Float64}
+    u0::AbstractVector{Float64}
+    v0::AbstractVector{Float64}
     tf::Float64
     nsteps::Int64
     N_ess_levels::Int64
@@ -32,8 +32,8 @@ mutable struct SchrodingerProb
             dqda::Function,
             d2p_dta::Function,
             d2q_dta::Function,
-            u0::AbstractVecOrMat{Float64},
-            v0::AbstractVecOrMat{Float64},
+            u0::AbstractVector{Float64},
+            v0::AbstractVector{Float64},
             tf::Float64,
             nsteps::Int64,
             N_ess_levels::Int64,
@@ -42,8 +42,7 @@ mutable struct SchrodingerProb
         )
         N_tot_levels = N_ess_levels + N_guard_levels
         # Check dimensions of all matrices and vectors
-        @assert size(u0,1) == size(v0,1) == N_tot_levels
-        #@assert size(u0,2) == size(v0,2) == N_ess_levels
+        @assert length(u0) == length(v0) == N_tot_levels
         @assert size(Ks,1) == size(Ks,2) == N_tot_levels
         @assert size(Ss,1) == size(Ss,2) == N_tot_levels
         @assert size(a_plus_adag,1) == size(a_plus_adag,2) == N_tot_levels
