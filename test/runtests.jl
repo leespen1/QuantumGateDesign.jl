@@ -49,8 +49,7 @@ end #@testset "Discrete Adjoint Vs Finite Difference"
 
 # Check agreement between discrete adjoint and forward differentiation
 @testset "Discrete Adjoint Vs Forward Differentiation" begin
-for i in 2:length(probs) # Omitting bspline prob for now because 4th order isnt ready for that problem
-    prob = probs[i]
+for (i, prob) in enumerate(probs)
     prob_str = probs_strs[i]
     pcof = pcofs[i]
     @testset "Problem: $prob_str" begin
@@ -59,8 +58,8 @@ for i in 2:length(probs) # Omitting bspline prob for now because 4th order isnt 
         for order in orders
             @testset "Order: $order" begin
             grad_disc_adj = discrete_adjoint(prob, target, pcof, order=order, cost_type=cost_type)
-            grad_fwd_diff = eval_grad_finite_difference(prob, target, pcof, order=order, cost_type=cost_type)
-            absolute_tolerance = 1e-1 # Might want to relax this to 1e-9.
+            grad_fwd_diff = eval_grad_forced(prob, target, pcof, order=order, cost_type=cost_type)
+            absolute_tolerance = 1e-14 # Might want to relax this
 
             for k in 1:length(grad_disc_adj)
                 @test isapprox(grad_disc_adj[k], grad_fwd_diff[k], atol = absolute_tolerance)

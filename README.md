@@ -2,7 +2,7 @@
 Julia package for quantum optimal control using Hermite methods.
 
 ## To Do
-- [ ] Fix 4th order discrete adjoint
+- [X] Fix 4th order discrete adjoint
 - [ ] Implement arbitrarily high order evolution and gradient calculation using
       Hermite
 - [ ] Implement larger systems:
@@ -12,6 +12,5 @@ Julia package for quantum optimal control using Hermite methods.
 - [ ] Incorporate guard level population penalty
 - [ ] Add check on the size of control vector when doing forward eval (make sure
       it matches the problem)
-- [ ] Add (automatic) test comparing discrete adjoint and forward
+- [X] Add (automatic) test comparing discrete adjoint and forward
       differentiation gradients to nearly machine precision
-- [ ] Add higher order derivates for bsplines
