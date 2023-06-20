@@ -7,3 +7,6 @@ makedocs(
     sitename = "HermiteOptimalControl.jl",
     doctest = true
 )
+deploydocs(
+    repo = "github.com/leespen1/HermiteOptimalControl.jl.git",
+)
