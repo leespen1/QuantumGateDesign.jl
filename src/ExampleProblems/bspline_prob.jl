@@ -40,6 +40,14 @@ end
 
 
 # Expects pcof/α of length 8
+"""
+    prob = bspline_prob(ω::Float64; tf, nsteps)
+
+Construct a problem for a 2-level qubit in the rotating frame with a B-spline
+control using a real-valued control vector of length 8 (the first half is the
+real part and the second half is the imaginary part in the
+complex-formulation).
+"""
 function bspline_prob(ω::Float64=0.0; tf::Float64=1.0, nsteps::Int64=10)
     Ks::Matrix{Float64} = [0 0; 0 1]
     Ss::Matrix{Float64} = [0 0; 0 0]

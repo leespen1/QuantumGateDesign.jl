@@ -14,6 +14,8 @@ export convergence_test!, plot_convergence_test
 # Export specific problem definitions
 export rabi_osc, gargamel_prob, bspline_prob
 
+export infidelity
+
 include("SchrodingerProb.jl")
 include("hermite.jl")
 include("forward_evolution.jl")

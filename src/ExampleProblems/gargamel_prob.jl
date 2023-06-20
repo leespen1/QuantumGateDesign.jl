@@ -52,6 +52,11 @@ function my_d2qdta(t,α,β)
     return ret
 end
 
+"""
+    prob = gargamel_prob(;β::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
+
+Construct a "gargamel problem".
+"""
 function gargamel_prob(;β::Float64=1.0, tf::Float64=1.0, nsteps::Int64=10)
     Ks::Matrix{Float64} = [0 0; 0 0]
     Ss::Matrix{Float64} = [0 0; 0 0]

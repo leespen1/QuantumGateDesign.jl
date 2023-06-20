@@ -1,4 +1,6 @@
 """
+    prob = rabi_osc(N_ess, N_guard, Ω::ComplexF64, tf::Float64; nsteps::Int64)
+
 Construct a 'SchrodingerProb' corresponding to a Rabi Oscillator, with default
 time corresponding to a pi/2 pulse.
 """

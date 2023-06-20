@@ -1,5 +1,15 @@
+
+"""
+
+    gradient = discrete_adjoint(prob, target, pcof; order=order, cost_type=cost_type, return_lambda_history=false)
+
+Evaluates gradient of the provided Schrodinger problem with the given target
+gate and control parameter(s) α using the discrete adjoint method. 
+
+Returns: gradient
+"""
 function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
-        α=missing; order=2, cost_type=:Infidelity, return_lambda_history=false)
+        α; order=2, cost_type=:Infidelity, return_lambda_history=false)
 
     # Get state vector history
     history = eval_forward(prob, α, order=order)
@@ -510,6 +520,14 @@ end
 
 
 
+"""
+Evaluates gradient of the provided Schrodinger problem with the given target
+gate and control parameter(s) α using the "forward differentiation" method,
+which evolves a differentiated Schrodinger equation, using the state vector
+in the evolution of the original Schrodinger equation as a forcing term.
+
+Returns: gradient
+"""
 function eval_grad_forced(prob::SchrodingerProb, target, α=1.0; order=2, cost_type=:Infidelity)
     # Get state vector history
     history = eval_forward(prob, α, order=order, return_time_derivatives=true)
@@ -652,7 +670,15 @@ end
 
 
 
-# Vector control version
+"""
+Vector control version.
+
+Evaluates gradient of the provided Schrodinger problem with the given target
+gate and control parameter(s) α using a finite difference method, where a step
+size of dα is used when perturbing the components of the control vector α.
+
+Returns: gradient
+"""
 function eval_grad_finite_difference(prob::SchrodingerProb, target::AbstractVector{Float64},
         α::AbstractVector{Float64}, dα=1e-5; order=2, cost_type=:Infidelity)
 
@@ -685,7 +711,15 @@ function eval_grad_finite_difference(prob::SchrodingerProb, target::AbstractVect
     return grad
 end
 
-# Scalar control version
+"""
+Scalar control version.
+
+Evaluates gradient of the provided Schrodinger problem with the given target
+gate and control parameter(s) α using a finite difference method, where a step
+size of dα is used when perturbing the control scalar α.
+
+Returns: gradient
+"""
 function eval_grad_finite_difference(prob::SchrodingerProb, target::AbstractVector{Float64},
         α::Float64, dα=1e-5; order=2, cost_type=:Infidelity)
 
@@ -714,6 +748,12 @@ function eval_grad_finite_difference(prob::SchrodingerProb, target::AbstractVect
 end
 
 
+"""
+Calculates the infidelity for the given state vector 'ψ' and target gate
+'target.'
+
+Reutrns: Infidelity
+"""
 function infidelity(ψ::Vector{Float64}, target::Vector{Float64})
     R = copy(target)
     N_tot = size(target,1)÷2

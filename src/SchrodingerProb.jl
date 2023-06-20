@@ -1,3 +1,8 @@
+"""
+Struct containing all the necessary information needed (except the value of the
+control vector and target gate) to evolve a state vector according to
+Schrodinger's equation and compute gradients.
+"""
 mutable struct SchrodingerProb
     Ks::AbstractMatrix{Float64}
     Ss::AbstractMatrix{Float64}
@@ -19,6 +24,14 @@ mutable struct SchrodingerProb
     N_guard_levels::Int64
     N_tot_levels::Int64
     nCoeff::Int64
+    """
+    SchrodingerProb inner constructor, for when all necessary information is
+    provided to do forward evolution and gradient calculation to any
+    implemented order.
+
+    Note that a_plus_adag and a_minus_adag don't necessarily have to be those
+    operators. I should think of a name change.
+    """
     function SchrodingerProb(
             Ks::AbstractMatrix{Float64},
             Ss::AbstractMatrix{Float64},
@@ -71,7 +84,10 @@ end
 
 
 """
-Handle when only p and q are given, with no derivatives.
+Constructor for when only p and q, and not their derivatives, are given.
+
+Can choose to assign derivatives as `missing`, or to compute them using
+forward-mode automatic differentiation, using the `auto_diff` keyword.
 """
 function SchrodingerProb(Ks, Ss, a_plus_adag, a_minus_adag,
         p, q, u0, v0,
