@@ -64,5 +64,5 @@ jobs:
             doctest(HermiteOptimalControl)' # change MYPACKAGE to the name of your package
       - run: julia --project=docs docs/make.jl
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+          #GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Using ssh key, not github token
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }} # Using github token, not ssh key
