@@ -3,7 +3,7 @@ Struct containing all the necessary information needed (except the value of the
 control vector and target gate) to evolve a state vector according to
 Schrodinger's equation and compute gradients.
 """
-mutable struct SchrodingerProb
+mutable struct SchrodingerProb{InitialConditionType} 
     Ks::AbstractMatrix{Float64}
     Ss::AbstractMatrix{Float64}
     a_plus_adag::AbstractMatrix{Float64} # a + a^†
@@ -16,8 +16,8 @@ mutable struct SchrodingerProb
     dqda::Function
     d2p_dta::Function
     d2q_dta::Function
-    u0::AbstractVector{Float64}
-    v0::AbstractVector{Float64}
+    u0::InitialConditionType
+    v0::InitialConditionType
     tf::Float64
     nsteps::Int64
     N_ess_levels::Int64
@@ -45,24 +45,25 @@ mutable struct SchrodingerProb
             dqda::Function,
             d2p_dta::Function,
             d2q_dta::Function,
-            u0::AbstractVector{Float64},
-            v0::AbstractVector{Float64},
+            u0::InitialConditionType,
+            v0::InitialConditionType,
             tf::Float64,
             nsteps::Int64,
             N_ess_levels::Int64,
             N_guard_levels::Int64,
             nCoeff::Int64=2
-        )
+        ) where InitialConditionType<:AbstractVecOrMat{Float64}
         N_tot_levels = N_ess_levels + N_guard_levels
         # Check dimensions of all matrices and vectors
-        @assert length(u0) == length(v0) == N_tot_levels
+        @assert size(u0) == size(v0)
+        @assert size(u0,1) == size(v0,1) == N_tot_levels
         @assert size(Ks,1) == size(Ks,2) == N_tot_levels
         @assert size(Ss,1) == size(Ss,2) == N_tot_levels
         @assert size(a_plus_adag,1) == size(a_plus_adag,2) == N_tot_levels
         @assert size(a_minus_adag,1) == size(a_minus_adag,2) == N_tot_levels
 
         # Copy arrays when creating a Schrodinger problem
-        new(copy(Ks), copy(Ss), copy(a_plus_adag), copy(a_minus_adag),
+        new{InitialConditionType}(copy(Ks), copy(Ss), copy(a_plus_adag), copy(a_minus_adag),
             p, q, dpdt, dqdt, dpda, dqda, d2p_dta, d2q_dta,
             copy(u0), copy(v0),
             tf, nsteps,
