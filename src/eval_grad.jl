@@ -72,7 +72,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             t = tf
 
             if cost_type == :Infidelity
-                RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
+                RHS = (2.0/(N_ess^2))*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
             elseif cost_type == :Tracking
                 RHS = -(history[:,end] - target)
             elseif cost_type == :Norm
@@ -209,7 +209,7 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
             t = tf
 
             if cost_type == :Infidelity
-                RHS = 2*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
+                RHS = (2/(N_ess^2))*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
             elseif cost_type == :Tracking
                 RHS = -(history[:,end] - target)
             elseif cost_type == :Norm
@@ -647,7 +647,8 @@ function eval_grad_forced(prob::SchrodingerProb, target, α=1.0; order=2, cost_t
         # Evolve with forcing
         differentiated_prob = copy(prob) 
         # Get history of dψ/dα
-        # Initial conditions for dψ/dα
+        # Initial conditions for dψ/dα, all entries zero (control can't change
+        # initial condition of ψ)
         differentiated_prob.u0 .= 0.0
         differentiated_prob.v0 .= 0.0
 
@@ -660,7 +661,7 @@ function eval_grad_forced(prob::SchrodingerProb, target, α=1.0; order=2, cost_t
         T = vcat(R[1+N_tot:end], -R[1:N_tot])
 
         if cost_type == :Infidelity
-            gradient[i] = -2*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
+            gradient[i] = -(2/(N_ess^2))*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
         elseif cost_type == :Tracking
             gradient[i] = dot(dQda, Q - target)
         elseif cost_type == :Norm
@@ -698,8 +699,8 @@ function eval_grad_finite_difference(prob::SchrodingerProb, target::AbstractVect
         ψf_r = history_r[:,end]
         ψf_l = history_l[:,end]
         if cost_type == :Infidelity
-            cost_r = infidelity(ψf_r, target)
-            cost_l = infidelity(ψf_l, target)
+            cost_r = infidelity(ψf_r, target, N_ess)
+            cost_l = infidelity(ψf_l, target, N_ess)
         elseif cost_type == :Tracking
             cost_r = 0.5*norm(ψf_r - target)^2
             cost_l = 0.5*norm(ψf_l - target)^2
@@ -734,8 +735,8 @@ function eval_grad_finite_difference(prob::SchrodingerProb, target::AbstractVect
     ψf_r = history_r[:,end]
     ψf_l = history_l[:,end]
     if cost_type == :Infidelity
-        cost_r = infidelity(ψf_r, target)
-        cost_l = infidelity(ψf_l, target)
+        cost_r = infidelity(ψf_r, target, prob.N_ess)
+        cost_l = infidelity(ψf_l, target, prob.N_ess)
     elseif cost_type == :Tracking
         cost_r = 0.5*norm(ψf_r - target)^2
         cost_l = 0.5*norm(ψf_l - target)^2
@@ -758,9 +759,9 @@ Calculates the infidelity for the given state vector 'ψ' and target gate
 
 Reutrns: Infidelity
 """
-function infidelity(ψ::Vector{Float64}, target::Vector{Float64})
+function infidelity(ψ::Vector{Float64}, target::Vector{Float64}, N_ess::Int64)
     R = copy(target)
     N_tot = size(target,1)÷2
     T = vcat(R[1+N_tot:end], -R[1:N_tot])
-    return 1 - (dot(ψ,R)^2 + dot(ψ,T)^2)
+    return 1 - (dot(ψ,R)^2 + dot(ψ,T)^2)/(N_ess^2)
 end
