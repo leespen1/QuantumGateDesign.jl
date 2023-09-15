@@ -684,8 +684,9 @@ size of dα is used when perturbing the components of the control vector α.
 
 Returns: gradient
 """
-function eval_grad_finite_difference(prob::SchrodingerProb, target::AbstractVector{Float64},
-        α::AbstractVector{Float64}, dα=1e-5; order=2, cost_type=:Infidelity)
+function eval_grad_finite_difference(prob::SchrodingerProb{M}, target::M,
+        α::AbstractVector{Float64}, dα=1e-5; order=2, cost_type=:Infidelity
+    ) where {M <: AbstractMatrix{Float64}}
 
     grad = zeros(length(α))
     for i in 1:length(α)
@@ -696,11 +697,11 @@ function eval_grad_finite_difference(prob::SchrodingerProb, target::AbstractVect
         α_l[i] -= dα
         history_r = eval_forward(prob, α_r, order=order)
         history_l = eval_forward(prob, α_l, order=order)
-        ψf_r = history_r[:,end]
-        ψf_l = history_l[:,end]
+        ψf_r = history_r[:,end,:]
+        ψf_l = history_l[:,end,:]
         if cost_type == :Infidelity
-            cost_r = infidelity(ψf_r, target, N_ess)
-            cost_l = infidelity(ψf_l, target, N_ess)
+            cost_r = infidelity(ψf_r, target, prob.N_ess_levels)
+            cost_l = infidelity(ψf_l, target, prob.N_ess_levels)
         elseif cost_type == :Tracking
             cost_r = 0.5*norm(ψf_r - target)^2
             cost_l = 0.5*norm(ψf_l - target)^2
@@ -716,52 +717,65 @@ function eval_grad_finite_difference(prob::SchrodingerProb, target::AbstractVect
     return grad
 end
 
-"""
-Scalar control version.
+function eval_grad_finite_difference(prob::SchrodingerProb{V}, target::V,
+        α::AbstractVector{Float64}, dα=1e-5; order=2, cost_type=:Infidelity
+    ) where {V <: AbstractVector{Float64}}
 
-Evaluates gradient of the provided Schrodinger problem with the given target
-gate and control parameter(s) α using a finite difference method, where a step
-size of dα is used when perturbing the control scalar α.
-
-Returns: gradient
-"""
-function eval_grad_finite_difference(prob::SchrodingerProb, target::AbstractVector{Float64},
-        α::Float64, dα=1e-5; order=2, cost_type=:Infidelity)
-
-    α_r = α + dα
-    α_l = α - dα
-    history_r = eval_forward(prob, α_r, order=order)
-    history_l = eval_forward(prob, α_l, order=order)
-    ψf_r = history_r[:,end]
-    ψf_l = history_l[:,end]
-    if cost_type == :Infidelity
-        cost_r = infidelity(ψf_r, target, prob.N_ess)
-        cost_l = infidelity(ψf_l, target, prob.N_ess)
-    elseif cost_type == :Tracking
-        cost_r = 0.5*norm(ψf_r - target)^2
-        cost_l = 0.5*norm(ψf_l - target)^2
-    elseif cost_type == :Norm
-        cost_r = 0.5*norm(ψf_r)^2
-        cost_l = 0.5*norm(ψf_l)^2
-    else
-        throw("Invalid cost type: $cost_type")
+    grad = zeros(length(α))
+    for i in 1:length(α)
+        # Centered Difference Approximation
+        α_r = copy(α)
+        α_r[i] += dα
+        α_l = copy(α)
+        α_l[i] -= dα
+        history_r = eval_forward(prob, α_r, order=order)
+        history_l = eval_forward(prob, α_l, order=order)
+        ψf_r = history_r[:,end]
+        ψf_l = history_l[:,end]
+        if cost_type == :Infidelity
+            cost_r = infidelity(ψf_r, target, prob.N_ess_levels)
+            cost_l = infidelity(ψf_l, target, prob.N_ess_levels)
+        elseif cost_type == :Tracking
+            cost_r = 0.5*norm(ψf_r - target)^2
+            cost_l = 0.5*norm(ψf_l - target)^2
+        elseif cost_type == :Norm
+            cost_r = 0.5*norm(ψf_r)^2
+            cost_l = 0.5*norm(ψf_l)^2
+        else
+            throw("Invalid cost type: $cost_type")
+        end
+        grad[i] = (cost_r - cost_l)/(2*dα)
     end
-    grad = (cost_r - cost_l)/(2*dα)
 
-    # Gradient should always be a vector for compatibility with discrete adjoint
-    return [grad]
+    return grad
 end
 
 
+
 """
-Calculates the infidelity for the given state vector 'ψ' and target gate
+Calculates the infidelity for the given state vector 'ψ' and target state
 'target.'
 
-Reutrns: Infidelity
+Returns: Infidelity
 """
-function infidelity(ψ::Vector{Float64}, target::Vector{Float64}, N_ess::Int64)
+function infidelity(ψ::V, target::V, N_ess::Int64) where {V <: AbstractVector{Float64}}
     R = copy(target)
     N_tot = size(target,1)÷2
     T = vcat(R[1+N_tot:end], -R[1:N_tot])
     return 1 - (dot(ψ,R)^2 + dot(ψ,T)^2)/(N_ess^2)
+end
+
+
+
+"""
+Calculates the infidelity for the given matrix of state vectors 'Q' and matrix
+of target states 'target.'
+
+Returns: Infidelity
+"""
+function infidelity(Q::M, target::M, N_ess::Int64) where {M <: AbstractMatrix{Float64}}
+    R = copy(target)
+    N_tot = size(target,1)÷2
+    T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
+    return 1 - (tr(Q'*R)^2 + tr(Q'*T)^2)/(N_ess^2)
 end
