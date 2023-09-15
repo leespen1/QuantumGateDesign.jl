@@ -1,4 +1,4 @@
-function eval_forward(prob::SchrodingerProb, α=missing; order=2, return_time_derivatives=false)
+function eval_forward(prob::SchrodingerProb, α::AbstractVector{Float64}; order=2, return_time_derivatives=false)
     if order == 2
         return eval_forward_order2(prob, α, return_time_derivatives=return_time_derivatives)
     elseif order == 4
@@ -8,22 +8,31 @@ function eval_forward(prob::SchrodingerProb, α=missing; order=2, return_time_de
 end
 
 
-function eval_forward_order2(prob::SchrodingerProb, α=missing;
+"""
+Wrapper to evolve either single (vector) or multiple (matrix) initial
+conditions with second order trapezoidal method.
+"""
+function eval_forward_order2(prob::SchrodingerProb, α::AbstractVector{Float64};
         return_time_derivatives=false)
-    # Unpack problem parameters for easy use in function
-    Ks = prob.Ks
-    Ss = prob.Ss
-    a_plus_adag = prob.a_plus_adag
-    a_minus_adag = prob.a_minus_adag
-    p = prob.p
-    q = prob.q
-    u0 = prob.u0
-    v0 = prob.v0
-    tf = prob.tf
-    nsteps = prob.nsteps
-    N_ess = prob.N_ess_levels
-    N_grd = prob.N_guard_levels
-    N_tot = prob.N_tot_levels
+    return eval_forward_order2(
+        prob.Ks, prob.Ss, prob.a_plus_adag, prob.a_minus_adag, prob.p, prob.q,
+        prob.u0, prob.v0, prob.tf, prob.nsteps,
+        prob.N_ess_levels, prob.N_guard_levels, prob.N_tot_levels, α,
+        return_time_derivatives=return_time_derivatives
+    )
+end
+
+"""
+Evolve a single initial condition (vector).
+"""
+function eval_forward_order2(
+        Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
+        p::Function, q::Function,
+        u0::V, v0::V, tf::Float64, nsteps::Int64,
+        N_ess::Int64, N_grd::Int64, N_tot::Int64,
+        α::V;
+        return_time_derivatives=false
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     t = 0.0
     dt = tf/nsteps
@@ -91,24 +100,81 @@ function eval_forward_order2(prob::SchrodingerProb, α=missing;
     return uv_history
 end
 
+
+"""
+Evolve a matrix where each column is an iniital condition.
+"""
+function eval_forward_order2(
+        Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
+        p::Function, q::Function,
+        u0::M, v0::M, tf::Float64, nsteps::Int64,
+        N_ess::Int64, N_grd::Int64, N_tot::Int64,
+        α::V;
+        return_time_derivatives=false
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
+
+    N_init_cond = size(u0,2)
+    uv_history = Array{Float64}(undef,2*N_tot,1+nsteps, N_init_cond)
+    uv_utvt_history = Array{Float64}(undef,2*N_tot,1+nsteps, 2, N_init_cond)
+
+    # Handle i-th initial condition (THREADS HERE)
+    for i=1:N_init_cond
+
+        u0_i = u0[:,i]
+        v0_i = v0[:,i]
+
+        # Call vector version of forward evolution
+        if return_time_derivatives
+            uv_utvt_history[:,:,:,i] .= eval_forward_order2(
+                Ks, Ss, a_plus_adag, a_minus_adag, p, q, u0_i, v0_i, tf,
+                nsteps, N_ess, N_grd, N_tot, α,
+                return_time_derivatives=return_time_derivatives
+            )
+        else
+            uv_history[:,:,i] .= eval_forward_order2(
+                Ks, Ss, a_plus_adag, a_minus_adag, p, q, u0_i, v0_i, tf, nsteps, 
+                N_ess, N_grd, N_tot, α,
+                return_time_derivatives=return_time_derivatives
+            )
+        end
+    end
+    
+    if return_time_derivatives
+        return uv_utvt_history
+    else
+        return uv_history
+    end
+end
+
+
+"""
+Wrapper to evolve either single (vector) or multiple (matrix) initial
+conditions with second order trapezoidal method.
+"""
 function eval_forward_order4(prob::SchrodingerProb, α=missing;
         return_time_derivatives=false)
-    # Unpack problem parameters for easy use in function
-    Ks = prob.Ks
-    Ss = prob.Ss
-    a_plus_adag = prob.a_plus_adag
-    a_minus_adag = prob.a_minus_adag
-    p = prob.p
-    q = prob.q
-    dpdt = prob.dpdt
-    dqdt = prob.dqdt
-    u0 = prob.u0
-    v0 = prob.v0
-    tf = prob.tf
-    nsteps = prob.nsteps
-    N_ess = prob.N_ess_levels
-    N_grd = prob.N_guard_levels
-    N_tot = prob.N_tot_levels
+
+    return eval_forward_order4(
+        prob.Ks, prob.Ss, prob.a_plus_adag, prob.a_minus_adag, prob.p,
+        prob.q, prob.dpdt, prob.dqdt, prob.u0, prob.v0, prob.tf,
+        prob.nsteps, prob.N_ess_levels, prob.N_guard_levels,
+        prob.N_tot_levels, α,
+        return_time_derivatives=return_time_derivatives
+    )
+end
+
+
+"""
+Evolve a single initial condition (vector).
+"""
+function eval_forward_order4(
+        Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
+        p::Function, q::Function, dpdt::Function, dqdt::Function,
+        u0::V, v0::V, tf::Float64, nsteps::Int64,
+        N_ess::Int64, N_grd::Int64, N_tot::Int64,
+        α::V;
+        return_time_derivatives=false
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     t = 0.0
     dt = tf/nsteps
@@ -192,6 +258,47 @@ function eval_forward_order4(prob::SchrodingerProb, α=missing;
     return uv_history
 end
 
+function eval_forward_order4(
+        Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
+        p::Function, q::Function, dpdt::Function, dqdt::Function,
+        u0::M, v0::M, tf::Float64, nsteps::Int64,
+        N_ess::Int64, N_grd::Int64, N_tot::Int64,
+        α::AbstractVector{Float64};
+        return_time_derivatives=false
+    ) where {M<:AbstractMatrix{Float64}}
+
+    N_init_cond = size(u0,2)
+    uv_history = Array{Float64}(undef,2*N_tot,1+nsteps, N_init_cond)
+    uv_and_derivatives_history = Array{Float64}(undef,2*N_tot,1+nsteps, 3, N_init_cond)
+
+    # Handle i-th initial condition (THREADS HERE)
+    for i=1:N_init_cond
+
+        u0_i = u0[:,i]
+        v0_i = v0[:,i]
+
+        # Call vector version of forward evolution
+        if return_time_derivatives
+            uv_and_derivatives_history[:,:,:,i] .= eval_forward_order2(
+                Ks, Ss, a_plus_adag, a_minus_adag, p, q, dpdt, dqdt, u0_i,
+                v0_i, tf, nsteps, N_ess, N_grd, N_tot, α,
+                return_time_derivatives=return_time_derivatives
+            )
+        else
+            uv_history[:,:,i] .= eval_forward_order4(
+                Ks, Ss, a_plus_adag, a_minus_adag, p, q, dpdt, dqdt, u0_i,
+                v0_i, tf, nsteps, N_ess, N_grd, N_tot, α,
+                return_time_derivatives=return_time_derivatives
+            )
+        end
+    end
+    
+    if return_time_derivatives
+        return uv_utvt_history
+    else
+        return uv_history
+    end
+end
 
 function eval_forward_forced(prob::SchrodingerProb, forcing_ary::AbstractArray{Float64,3}, α=missing; order=2)
     if order == 2
