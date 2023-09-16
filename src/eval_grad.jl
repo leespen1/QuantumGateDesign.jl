@@ -8,32 +8,33 @@ gate and control parameter(s) α using the discrete adjoint method.
 
 Returns: gradient
 """
-function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
-        α; order=2, cost_type=:Infidelity, return_lambda_history=false)
+function discrete_adjoint(prob::SchrodingerProb{T}, target::T,
+        α::AbstractVector{Float64}; order=2, cost_type=:Infidelity,
+        return_lambda_history=false
+    ) where {T <: AbstractVecOrMat{Float64}}
 
-    # Get state vector history
-    history = eval_forward(prob, α, order=order)
+    history = eval_forward(prob, α; order=order)
+    return discrete_adjoint(
+        prob.Ks, prob.Ss, prob.a_plus_adag, prob.a_minus_adag, prob.p, prob.q,
+        prob.dpdt, prob.dqdt, prob.dpda, prob.dqda, prob.d2p_dta, prob.d2q_dta,
+        prob.u0, prob.v0, prob.tf, prob.nsteps, prob.N_ess_levels,
+        prob.N_guard_levels, prob.N_tot_levels, target, α, history,
+        order=order, cost_type=cost_type, return_lambda_history=return_lambda_history
+    )
+end
 
-    # Unpacking variables is possibly a bad idea
-    Ks = prob.Ks
-    Ss = prob.Ss
-    a_plus_adag = prob.a_plus_adag
-    a_minus_adag = prob.a_minus_adag
-    p = prob.p
-    q = prob.q
-    dpdt = prob.dpdt
-    dqdt = prob.dqdt
-    dpda = prob.dpda
-    dqda = prob.dqda
-    d2p_dta = prob.d2p_dta
-    d2q_dta = prob.d2q_dta
-    u0 = prob.u0
-    v0 = prob.v0
-    tf = prob.tf
-    nsteps = prob.nsteps
-    N_ess = prob.N_ess_levels
-    N_grd = prob.N_guard_levels
-    N_tot = prob.N_tot_levels
+"""
+History is state vector history
+"""
+function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
+        p::Function, q::Function, dpdt::Function, dqdt::Function,
+        dpda::Function, dqda::Function, d2p_dta::Function, d2q_dta::Function,
+        u0::V, v0::V, tf::Float64, nsteps::Int64, N_ess::Int64, N_grd::Int64,
+        N_tot::Int64, target::V, α::V, history::AbstractMatrix{Float64}; order=2, cost_type=:Infidelity,
+        return_lambda_history=false
+    ) where {V<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}}
+
+
 
     R = copy(target)
     T = vcat(R[1+N_tot:end], -R[1:N_tot])
@@ -522,6 +523,38 @@ function discrete_adjoint(prob::SchrodingerProb, target::Vector{Float64},
     return grad
 end
 
+function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
+        p::Function, q::Function, dpdt::Function, dqdt::Function,
+        dpda::Function, dqda::Function, d2p_dta::Function, d2q_dta::Function,
+        u0::M, v0::M, tf::Float64, nsteps::Int64, N_ess::Int64, N_grd::Int64,
+        N_tot::Int64, target::M, α::V, history::AbstractArray{Float64,3}; order=2, cost_type=:Infidelity,
+        return_lambda_history=false
+    ) where {V<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}}
+
+    N_init_cond = size(u0,2)
+    gradient_contributions = Matrix(undef, length(α), N_init_cond)
+    for i=1:N_init_cond
+        u0_i = u0[:,i]
+        v0_i = v0[:,i]
+        target_i = target[:,i]
+        history_i = view(history,:,:,i)
+
+        gradient_contributions[:,i] .= discrete_adjoint(
+            Ks, Ss, a_plus_adag, a_minus_adag, p, q,
+            dpdt, dqdt, dpda, dqda, d2p_dta, d2q_dta,
+            u0_i, v0_i, tf, nsteps, N_ess,
+            N_grd, N_tot, target_i, α, history_i,
+            order=order, cost_type=cost_type, return_lambda_history=return_lambda_history
+        )
+    end
+
+    gradient = zeros(length(α))
+    for i=1:N_init_cond
+        gradient .+= view(gradient_contributions,:,i)
+    end
+
+    return gradient
+end
 
 
 """
