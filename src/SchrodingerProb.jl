@@ -3,11 +3,11 @@ Struct containing all the necessary information needed (except the value of the
 control vector and target gate) to evolve a state vector according to
 Schrodinger's equation and compute gradients.
 """
-mutable struct SchrodingerProb{InitialConditionType} 
-    Ks::AbstractMatrix{Float64}
-    Ss::AbstractMatrix{Float64}
-    a_plus_adag::AbstractMatrix{Float64} # a + a^†
-    a_minus_adag::AbstractMatrix{Float64} # a - a^†
+mutable struct SchrodingerProb{M, VM} 
+    Ks::M
+    Ss::M
+    a_plus_adag::M # a + a^†
+    a_minus_adag::M # a - a^†
     p::Function
     q::Function
     dpdt::Function
@@ -16,8 +16,8 @@ mutable struct SchrodingerProb{InitialConditionType}
     dqda::Function
     d2p_dta::Function
     d2q_dta::Function
-    u0::InitialConditionType
-    v0::InitialConditionType
+    u0::VM
+    v0::VM
     tf::Float64
     nsteps::Int64
     N_ess_levels::Int64
@@ -33,10 +33,10 @@ mutable struct SchrodingerProb{InitialConditionType}
     operators. I should think of a name change.
     """
     function SchrodingerProb(
-            Ks::AbstractMatrix{Float64},
-            Ss::AbstractMatrix{Float64},
-            a_plus_adag::AbstractMatrix{Float64},
-            a_minus_adag::AbstractMatrix{Float64},
+            Ks::M,
+            Ss::M,
+            a_plus_adag::M,
+            a_minus_adag::M,
             p::Function,
             q::Function,
             dpdt::Function,
@@ -45,14 +45,14 @@ mutable struct SchrodingerProb{InitialConditionType}
             dqda::Function,
             d2p_dta::Function,
             d2q_dta::Function,
-            u0::InitialConditionType,
-            v0::InitialConditionType,
+            u0::VM,
+            v0::VM,
             tf::Float64,
             nsteps::Int64,
             N_ess_levels::Int64,
             N_guard_levels::Int64,
             nCoeff::Int64=2
-        ) where InitialConditionType<:AbstractVecOrMat{Float64}
+        ) where {M<:AbstractMatrix{Float64}, VM<:AbstractVecOrMat{Float64}}
         N_tot_levels = N_ess_levels + N_guard_levels
         # Check dimensions of all matrices and vectors
         @assert size(u0) == size(v0)
@@ -63,7 +63,7 @@ mutable struct SchrodingerProb{InitialConditionType}
         @assert size(a_minus_adag,1) == size(a_minus_adag,2) == N_tot_levels
 
         # Copy arrays when creating a Schrodinger problem
-        new{InitialConditionType}(copy(Ks), copy(Ss), copy(a_plus_adag), copy(a_minus_adag),
+        new{M, VM}(copy(Ks), copy(Ss), copy(a_plus_adag), copy(a_minus_adag),
             p, q, dpdt, dqdt, dpda, dqda, d2p_dta, d2q_dta,
             copy(u0), copy(v0),
             tf, nsteps,
@@ -73,7 +73,7 @@ end
 
 
 
-function Base.copy(prob::SchrodingerProb)
+function Base.copy(prob::SchrodingerProb{T}) where T
     return SchrodingerProb(prob.Ks, prob.Ss, prob.a_plus_adag, prob.a_minus_adag,
                            prob.p, prob.q, prob.dpdt, prob.dqdt,
                            prob.dpda, prob.dqda, prob.d2p_dta, prob.d2q_dta,

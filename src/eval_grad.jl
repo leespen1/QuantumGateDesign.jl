@@ -8,10 +8,10 @@ gate and control parameter(s) α using the discrete adjoint method.
 
 Returns: gradient
 """
-function discrete_adjoint(prob::SchrodingerProb{T}, target::T,
+function discrete_adjoint(prob::SchrodingerProb{M, VM}, target::VM,
         α::AbstractVector{Float64}; order=2, cost_type=:Infidelity,
         return_lambda_history=false
-    ) where {T <: AbstractVecOrMat{Float64}}
+    ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
 
     history = eval_forward(prob, α; order=order)
     return discrete_adjoint(
@@ -25,16 +25,15 @@ end
 
 """
 History is state vector history
+
 """
 function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
         p::Function, q::Function, dpdt::Function, dqdt::Function,
         dpda::Function, dqda::Function, d2p_dta::Function, d2q_dta::Function,
-        u0::M, v0::M, tf::Float64, nsteps::Int64, N_ess::Int64, N_grd::Int64,
+        u0::VM, v0::VM, tf::Float64, nsteps::Int64, N_ess::Int64, N_grd::Int64,
         N_tot::Int64, target::M, α::V, history::AbstractArray{Float64,3}; order=2, cost_type=:Infidelity,
         return_lambda_history=false
-    ) where {V<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}}
-
-
+    ) where {V<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}, VM<:AbstractVecOrMat{Float64}}
 
     R = copy(target)
     T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
@@ -526,7 +525,10 @@ in the evolution of the original Schrodinger equation as a forcing term.
 
 Returns: gradient
 """
-function eval_grad_forced(prob::SchrodingerProb, target, α=1.0; order=2, cost_type=:Infidelity)
+function eval_grad_forced(prob::SchrodingerProb{M, VM}, target::VM,
+        α::AbstractVector{Float64}; order=2, cost_type=:Infidelity
+    ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
+
     # Get state vector history
     history = eval_forward(prob, α, order=order, return_time_derivatives=true)
 
@@ -678,7 +680,7 @@ size of dα is used when perturbing the components of the control vector α.
 
 Returns: gradient
 """
-function eval_grad_finite_difference(prob::SchrodingerProb{M}, target::M,
+function eval_grad_finite_difference(prob::SchrodingerProb{M,M}, target::M,
         α::AbstractVector{Float64}, dα=1e-5; order=2, cost_type=:Infidelity
     ) where {M <: AbstractMatrix{Float64}}
 
@@ -711,9 +713,9 @@ function eval_grad_finite_difference(prob::SchrodingerProb{M}, target::M,
     return grad
 end
 
-function eval_grad_finite_difference(prob::SchrodingerProb{V}, target::V,
+function eval_grad_finite_difference(prob::SchrodingerProb{M, V}, target::V,
         α::AbstractVector{Float64}, dα=1e-5; order=2, cost_type=:Infidelity
-    ) where {V <: AbstractVector{Float64}}
+    ) where {M<: AbstractMatrix{Float64}, V <: AbstractVector{Float64}}
 
     grad = zeros(length(α))
     for i in 1:length(α)
