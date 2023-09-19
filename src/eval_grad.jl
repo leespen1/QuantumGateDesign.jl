@@ -29,15 +29,15 @@ History is state vector history
 function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
         p::Function, q::Function, dpdt::Function, dqdt::Function,
         dpda::Function, dqda::Function, d2p_dta::Function, d2q_dta::Function,
-        u0::V, v0::V, tf::Float64, nsteps::Int64, N_ess::Int64, N_grd::Int64,
-        N_tot::Int64, target::V, α::V, history::AbstractMatrix{Float64}; order=2, cost_type=:Infidelity,
+        u0::M, v0::M, tf::Float64, nsteps::Int64, N_ess::Int64, N_grd::Int64,
+        N_tot::Int64, target::M, α::V, history::AbstractArray{Float64,3}; order=2, cost_type=:Infidelity,
         return_lambda_history=false
     ) where {V<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}}
 
 
 
     R = copy(target)
-    T = vcat(R[1+N_tot:end], -R[1:N_tot])
+    T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
 
     # For adjoint evolution. Take transpose of entire matrix -> antisymmetric blocks change sign
     Ks_adj = Matrix(transpose(-Ks)) # NOTE THAT K changes sign!
@@ -54,6 +54,17 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
     len_α_half = div(len_α, 2)
     grad = zeros(len_α)
 
+    # Set up terminal condition RHS
+    if cost_type == :Infidelity
+        terminal_RHS = (2.0/(N_ess^2))*(dot(history[:,end,:],R)*R + dot(history[:,end,:],T)*T)
+    elseif cost_type == :Tracking
+        terminal_RHS = -(history[:,end] - target)
+    elseif cost_type == :Norm
+        terminal_RHS = -history[:,end]
+    else
+        throw("Invalid cost type: $cost_type")
+    end
+
     for initial_condition_index = 1:size(u0,2)
         lambda = zeros(2*N_tot)
         lambda_history = zeros(2*N_tot,1+nsteps)
@@ -66,21 +77,13 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
         RHS_lambda_v::Vector{Float64} = zeros(N_tot)
         RHS::Vector{Float64} = zeros(2*N_tot)
 
-
+        grad_contrib = zeros(len_α)
 
         if order == 2
             # Terminal Condition
             t = tf
 
-            if cost_type == :Infidelity
-                RHS = (2.0/(N_ess^2))*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
-            elseif cost_type == :Tracking
-                RHS = -(history[:,end] - target)
-            elseif cost_type == :Norm
-                RHS = -history[:,end]
-            else
-                throw("Invalid cost type: $cost_type")
-            end
+            RHS .= terminal_RHS[:,initial_condition_index]
 
             LHS_map = LinearMap(
                 x -> LHS_func(lambda_ut, lambda_vt, x[1:N_tot], x[1+N_tot:end],
@@ -156,8 +159,8 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 lambda_u = lambda_history[1:N_tot,1+n+1]
                 lambda_v = lambda_history[1+N_tot:end,1+n+1]
 
-                u = history[1:N_tot,1+n]
-                v = history[1+N_tot:end,1+n]
+                u = history[1:N_tot,     1+n, initial_condition_index]
+                v = history[1+N_tot:end, 1+n, initial_condition_index]
                 t = n*dt
 
                 grad_p = dpda(t,α)
@@ -175,16 +178,16 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 #grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
                 #                                  - dot(v, MT_lambda_21)
                 #                                 )
-                grad .+= grad_q .* (dot(u, MT_lambda_11)
+                grad_contrib .+= grad_q .* (dot(u, MT_lambda_11)
                                                         + dot(v, MT_lambda_22)
                                                        )
-                grad .+= grad_p .* (dot(u, MT_lambda_12)
+                grad_contrib .+= grad_p .* (dot(u, MT_lambda_12)
                                                   - dot(v, MT_lambda_21)
                                                  )
 
 
-                u = history[1:N_tot,1+n+1]
-                v = history[1+N_tot:end,1+n+1]
+                u = history[1:N_tot,     1+n+1, initial_condition_index]
+                v = history[1+N_tot:end, 1+n+1, initial_condition_index]
                 t = (n+1)*dt
 
                 grad_p = dpda(t,α)
@@ -196,28 +199,20 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 #grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
                 #                                  - dot(v, MT_lambda_21)
                 #                                 )
-                grad .+= grad_q .* (dot(u, MT_lambda_11)
+                grad_contrib .+= grad_q .* (dot(u, MT_lambda_11)
                                                         + dot(v, MT_lambda_22)
                                                        )
-                grad .+= grad_p .* (dot(u, MT_lambda_12)
+                grad_contrib .+= grad_p .* (dot(u, MT_lambda_12)
                                                   - dot(v, MT_lambda_21)
                                                  )
             end
-            grad *= -0.5*dt
+            grad .+=  (-0.5*dt) .* grad_contrib
 
         elseif order == 4
             # Terminal Condition
             t = tf
 
-            if cost_type == :Infidelity
-                RHS = (2/(N_ess^2))*(dot(history[:,end],R)*R + dot(history[:,end],T)*T)
-            elseif cost_type == :Tracking
-                RHS = -(history[:,end] - target)
-            elseif cost_type == :Norm
-                RHS = -history[:,end]
-            else
-                throw("Invalid cost type: $cost_type")
-            end
+            RHS .= terminal_RHS[:,initial_condition_index]
 
             LHS_map = LinearMap(
                 x -> LHS_func_order4(lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
@@ -309,8 +304,8 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
             weights_n = [1,dt/6]
             weights_np1 = [1,-dt/6]
             for n in 0:nsteps-1
-                lambda_u = lambda_history[1:N_tot,1+n+1]
-                lambda_v = lambda_history[1+N_tot:end,1+n+1]
+                lambda_u = lambda_history[1:N_tot,     1+n+1]
+                lambda_v = lambda_history[1+N_tot:end, 1+n+1]
 
                 mul!(MT_lambda_11, a_minus_adag_transpose, lambda_u)
                 mul!(MT_lambda_12, a_plus_adag_transpose, lambda_v)
@@ -318,8 +313,8 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 mul!(MT_lambda_22, a_minus_adag_transpose, lambda_v)
 
                 # Qn contribution
-                u = history[1:N_tot,1+n]
-                v = history[1+N_tot:end,1+n]
+                u = history[1:N_tot,     1+n, initial_condition_index]
+                v = history[1+N_tot:end, 1+n, initial_condition_index]
                 t = n*dt
 
                 grad_p = dpda(t,α)
@@ -334,10 +329,10 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 #grad[1:len_α_half] .+= grad_p .* weights_n[1]*(
                 #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
                 #)
-                grad .+= grad_q .* weights_n[1]*(
+                grad_contrib .+= grad_q .* weights_n[1]*(
                     dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
                 )
-                grad .+= grad_p .* weights_n[1]*(
+                grad_contrib .+= grad_p .* weights_n[1]*(
                     dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
                 )
 
@@ -349,10 +344,10 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 #grad[1:len_α_half] .+= grad_pt .* weights_n[2]*(
                 #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
                 #)
-                grad .+= grad_qt .* weights_n[2]*(
+                grad_contrib .+= grad_qt .* weights_n[2]*(
                     dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
                 )
-                grad .+= grad_pt .* weights_n[2]*(
+                grad_contrib .+= grad_pt .* weights_n[2]*(
                     dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
                 )
                 
@@ -366,10 +361,10 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 mul!(B, a_minus_adag, A)
 
                 #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(B, lambda_u)
-                grad .+= grad_q .* weights_n[2]*dot(B, lambda_u)
+                grad_contrib .+= grad_q .* weights_n[2]*dot(B, lambda_u)
                 mul!(B, a_plus_adag, A)
                 #grad[1:len_α_half] .+= grad_p .* weights_n[2]*dot(B, lambda_v)
-                grad .+= grad_p .* weights_n[2]*dot(B, lambda_v)
+                grad_contrib .+= grad_p .* weights_n[2]*dot(B, lambda_v)
 
                 # part 2
                 mul!(A, Hp, u)
@@ -377,10 +372,10 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 mul!(B, a_plus_adag, A)
 
                 #grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(B, lambda_u)
-                grad .-= grad_p .* weights_n[2]*dot(B, lambda_u)
+                grad_contrib .-= grad_p .* weights_n[2]*dot(B, lambda_u)
                 mul!(B, a_minus_adag, A)
                 #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(B, lambda_v)
-                grad .+= grad_q .* weights_n[2]*dot(B, lambda_v)
+                grad_contrib .+= grad_q .* weights_n[2]*dot(B, lambda_v)
 
 
                 # H*H_α
@@ -391,12 +386,12 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 mul!(C, Hq, A)
                 mul!(C, Hp, B, -1, 1)
                 #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(C, lambda_u)
-                grad .+= grad_q .* weights_n[2]*dot(C, lambda_u)
+                grad_contrib .+= grad_q .* weights_n[2]*dot(C, lambda_u)
 
                 mul!(C, Hp, A)
                 mul!(C, Hq, B, 1, 1)
                 #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(C, lambda_v)
-                grad .+= grad_q .* weights_n[2]*dot(C, lambda_v)
+                grad_contrib .+= grad_q .* weights_n[2]*dot(C, lambda_v)
 
 
                 # part 2
@@ -406,18 +401,18 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 mul!(C, Hq, A)
                 mul!(C, Hp, B, 1, 1)
                 #grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(C, lambda_u)
-                grad .-= grad_p .* weights_n[2]*dot(C, lambda_u)
+                grad_contrib .-= grad_p .* weights_n[2]*dot(C, lambda_u)
 
                 mul!(C, Hp, A)
                 mul!(C, Hq, B, -1, 1)
                 #grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(C, lambda_v)
-                grad .-= grad_p .* weights_n[2]*dot(C, lambda_v)
+                grad_contrib .-= grad_p .* weights_n[2]*dot(C, lambda_v)
                 
 
                 # uv n+1 contribution
 
-                u = history[1:N_tot,1+n+1]
-                v = history[1+N_tot:end,1+n+1]
+                u = history[1:N_tot,     1+n+1, initial_condition_index]
+                v = history[1+N_tot:end, 1+n+1, initial_condition_index]
                 t = (n+1)*dt
 
                 grad_p = dpda(t,α)
@@ -432,10 +427,10 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 #grad[1:len_α_half] .+= grad_p .* weights_np1[1]*(
                 #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
                 #)
-                grad .+= grad_q .* weights_np1[1]*(
+                grad_contrib .+= grad_q .* weights_np1[1]*(
                     dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
                 )
-                grad .+= grad_p .* weights_np1[1]*(
+                grad_contrib .+= grad_p .* weights_np1[1]*(
                     dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
                 )
 
@@ -447,10 +442,10 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 #grad[1:len_α_half] .+= grad_pt .* weights_np1[2]*(
                 #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
                 #)
-                grad .+= grad_qt .* weights_np1[2]*(
+                grad_contrib .+= grad_qt .* weights_np1[2]*(
                     dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
                 )
-                grad .+= grad_pt .* weights_np1[2]*(
+                grad_contrib .+= grad_pt .* weights_np1[2]*(
                     dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
                 )
                 
@@ -464,10 +459,10 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 mul!(B, a_minus_adag, A)
 
                 #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(B, lambda_u)
-                grad .+= grad_q .* weights_np1[2]*dot(B, lambda_u)
+                grad_contrib .+= grad_q .* weights_np1[2]*dot(B, lambda_u)
                 mul!(B, a_plus_adag, A)
                 #grad[1:len_α_half] .+= grad_p .* weights_np1[2]*dot(B, lambda_v)
-                grad .+= grad_p .* weights_np1[2]*dot(B, lambda_v)
+                grad_contrib .+= grad_p .* weights_np1[2]*dot(B, lambda_v)
 
                 # part 2
                 mul!(A, Hp, u)
@@ -475,10 +470,10 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 mul!(B, a_plus_adag, A)
 
                 #grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(B, lambda_u)
-                grad .-= grad_p .* weights_np1[2]*dot(B, lambda_u)
+                grad_contrib .-= grad_p .* weights_np1[2]*dot(B, lambda_u)
                 mul!(B, a_minus_adag, A)
                 #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(B, lambda_v)
-                grad .+= grad_q .* weights_np1[2]*dot(B, lambda_v)
+                grad_contrib .+= grad_q .* weights_np1[2]*dot(B, lambda_v)
 
 
                 # H*H_α
@@ -489,12 +484,12 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 mul!(C, Hq, A)
                 mul!(C, Hp, B, -1, 1)
                 #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(C, lambda_u)
-                grad .+= grad_q .* weights_np1[2]*dot(C, lambda_u)
+                grad_contrib .+= grad_q .* weights_np1[2]*dot(C, lambda_u)
 
                 mul!(C, Hp, A)
                 mul!(C, Hq, B, 1, 1)
                 #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(C, lambda_v)
-                grad .+= grad_q .* weights_np1[2]*dot(C, lambda_v)
+                grad_contrib .+= grad_q .* weights_np1[2]*dot(C, lambda_v)
 
 
                 # part 2
@@ -504,14 +499,14 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 mul!(C, Hq, A)
                 mul!(C, Hp, B, 1, 1)
                 #grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(C, lambda_u)
-                grad .-= grad_p .* weights_np1[2]*dot(C, lambda_u)
+                grad_contrib .-= grad_p .* weights_np1[2]*dot(C, lambda_u)
 
                 mul!(C, Hp, A)
                 mul!(C, Hq, B, -1, 1)
                 #grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(C, lambda_v)
-                grad .-= grad_p .* weights_np1[2]*dot(C, lambda_v)
+                grad_contrib .-= grad_p .* weights_np1[2]*dot(C, lambda_v)
             end
-            grad *= -0.5*dt
+            grad .+=  (-0.5*dt) .* grad_contrib
         else
             throw("Invalid order: $order")
         end
@@ -522,40 +517,6 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
     end
     return grad
 end
-
-function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
-        p::Function, q::Function, dpdt::Function, dqdt::Function,
-        dpda::Function, dqda::Function, d2p_dta::Function, d2q_dta::Function,
-        u0::M, v0::M, tf::Float64, nsteps::Int64, N_ess::Int64, N_grd::Int64,
-        N_tot::Int64, target::M, α::V, history::AbstractArray{Float64,3}; order=2, cost_type=:Infidelity,
-        return_lambda_history=false
-    ) where {V<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}}
-
-    N_init_cond = size(u0,2)
-    gradient_contributions = Matrix(undef, length(α), N_init_cond)
-    for i=1:N_init_cond
-        u0_i = u0[:,i]
-        v0_i = v0[:,i]
-        target_i = target[:,i]
-        history_i = view(history,:,:,i)
-
-        gradient_contributions[:,i] .= discrete_adjoint(
-            Ks, Ss, a_plus_adag, a_minus_adag, p, q,
-            dpdt, dqdt, dpda, dqda, d2p_dta, d2q_dta,
-            u0_i, v0_i, tf, nsteps, N_ess,
-            N_grd, N_tot, target_i, α, history_i,
-            order=order, cost_type=cost_type, return_lambda_history=return_lambda_history
-        )
-    end
-
-    gradient = zeros(length(α))
-    for i=1:N_init_cond
-        gradient .+= view(gradient_contributions,:,i)
-    end
-
-    return gradient
-end
-
 
 """
 Evaluates gradient of the provided Schrodinger problem with the given target
