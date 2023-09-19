@@ -31,11 +31,11 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
         p::Function, q::Function, dpdt::Function, dqdt::Function,
         dpda::Function, dqda::Function, d2p_dta::Function, d2q_dta::Function,
         u0::VM, v0::VM, tf::Float64, nsteps::Int64, N_ess::Int64, N_grd::Int64,
-        N_tot::Int64, target::M, α::V, history::AbstractArray{Float64,3}; order=2, cost_type=:Infidelity,
+        N_tot::Int64, target::VM, α::V, history; order=2, cost_type=:Infidelity,
         return_lambda_history=false
     ) where {V<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}, VM<:AbstractVecOrMat{Float64}}
 
-    R = copy(target)
+    R = target[:,:] # Copy target, converting to matrix if vector
     T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
 
     # For adjoint evolution. Take transpose of entire matrix -> antisymmetric blocks change sign
