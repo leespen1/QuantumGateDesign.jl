@@ -9,7 +9,7 @@ Documentation located at: https://leespen1.github.io/HermiteOptimalControl.jl/de
     - [ ] Qubit and cavity
     - [ ] 2 qubits with cross talk
 - [ ] Incorporate guard level population penalty
-- [o] Evolve entire basis, not just a single vector
+- [X] Evolve entire basis, not just a single vector
 - [ ] Add check on the size of control vector when doing forward eval (make sure
       it matches the problem)
 - [ ] Implement arbitrarily high order evolution and gradient calculation using
