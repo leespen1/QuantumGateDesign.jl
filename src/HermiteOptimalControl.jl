@@ -3,7 +3,7 @@ module HermiteOptimalControl
 using LinearAlgebra, LinearMaps, IterativeSolvers, Plots
 
 # Export schrodinger problem definition and forward evolution methods
-export SchrodingerProb, eval_forward, eval_forward_forced
+export SchrodingerProb, VectorSchrodingerProb, eval_forward, eval_forward_forced
 # Export gradient evaulation methods
 export eval_grad_finite_difference, eval_grad_forced, discrete_adjoint
 # Export bspline functions

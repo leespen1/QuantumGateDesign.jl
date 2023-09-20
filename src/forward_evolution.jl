@@ -300,7 +300,10 @@ function eval_forward_order4(
     end
 end
 
-function eval_forward_forced(prob::SchrodingerProb, forcing_ary::AbstractArray{Float64,3}, α=missing; order=2)
+function eval_forward_forced(
+        prob::SchrodingerProb{M, V}, forcing_ary,
+        α::AbstractVector{Float64}; order=2
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     if order == 2
         return eval_forward_forced_order2(prob, forcing_ary, α)
     elseif order == 4
@@ -316,7 +319,10 @@ of forces at each discretized point in time.
 
 Maybe I should also do a one with forcing functions as well.
 """
-function eval_forward_forced_order2(prob::SchrodingerProb, forcing_ary::AbstractArray{Float64,3}, α=missing)
+function eval_forward_forced_order2(
+        prob::SchrodingerProb{M, V}, forcing_ary::AbstractArray{Float64,3}, α::V
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
+
     Ks = prob.Ks
     Ss = prob.Ss
     a_plus_adag = prob.a_plus_adag
@@ -387,7 +393,9 @@ end
 
 
 
-function eval_forward_forced_order4(prob::SchrodingerProb, forcing_ary::Array{Float64,3}, α=missing)
+function eval_forward_forced_order4(
+        prob::SchrodingerProb{M, V}, forcing_ary::AbstractArray{Float64,3}, α::V
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     Ks = prob.Ks
     Ss = prob.Ss
     a_plus_adag = prob.a_plus_adag

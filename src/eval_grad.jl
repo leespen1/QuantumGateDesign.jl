@@ -551,93 +551,95 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, target::VM,
 
     gradient = zeros(length(α))
 
-    for i in 1:length(α)
-        dpda(t,pcof) = prob.dpda(t,pcof)[i]
-        dqda(t,pcof) = prob.dqda(t,pcof)[i]
-        d2p_dta(t, pcof) = prob.d2p_dta(t,pcof)[i]
-        d2q_dta(t, pcof) = prob.d2q_dta(t,pcof)[i]
-        if order == 2
-            forcing_ary = zeros(2*N_tot,1+prob.nsteps,1)
-            forcing_vec = zeros(2*N_tot)
+    forcing_ary = zeros(2*N_tot,1+prob.nsteps,1, size(prob.u0,2))
 
-            u  = zeros(N_tot)
-            v  = zeros(N_tot)
-            ut = zeros(N_tot)
-            vt = zeros(N_tot)
+    for control_param_index in 1:length(α)
+        for initial_condition_index = 1:size(prob.u0,2)
+            dpda(t,pcof) = prob.dpda(t,pcof)[control_param_index]
+            dqda(t,pcof) = prob.dqda(t,pcof)[control_param_index]
+            d2p_dta(t, pcof) = prob.d2p_dta(t,pcof)[control_param_index]
+            d2q_dta(t, pcof) = prob.d2q_dta(t,pcof)[control_param_index]
+            if order == 2
+                forcing_vec = zeros(2*N_tot)
 
-            nsteps = prob.nsteps
-            t = 0.0
-            dt = prob.tf/nsteps
+                u  = zeros(N_tot)
+                v  = zeros(N_tot)
+                ut = zeros(N_tot)
+                vt = zeros(N_tot)
 
-            # Get forcing (dH/dα * ψ)
-            for n in 0:nsteps
-                copyto!(u,history[1:N_tot,1+n,1])
-                copyto!(v,history[1+N_tot:end,1+n,1])
+                nsteps = prob.nsteps
+                t = 0.0
+                dt = prob.tf/nsteps
 
-                utvt!(ut, vt, u, v,
-                      dKs_da, dSs_da, a_plus_adag, a_minus_adag,
-                      dpda, dqda, t, α)
-                copyto!(forcing_vec,1,ut,1,N_tot)
-                copyto!(forcing_vec,1+N_tot,vt,1,N_tot)
+                # Get forcing (dH/dα * ψ)
+                for n in 0:nsteps
+                    copyto!(u,history[1:N_tot    , 1+n, 1, initial_condition_index])
+                    copyto!(v,history[1+N_tot:end, 1+n, 1, initial_condition_index])
 
-                forcing_ary[:,1+n,1] .= forcing_vec
+                    utvt!(ut, vt, u, v,
+                          dKs_da, dSs_da, a_plus_adag, a_minus_adag,
+                          dpda, dqda, t, α)
+                    copyto!(forcing_vec,1,ut,1,N_tot)
+                    copyto!(forcing_vec,1+N_tot,vt,1,N_tot)
 
-                t += dt
-            end
-        elseif order == 4
-            forcing_ary = zeros(2*N_tot,1+prob.nsteps,2)
-            forcing_vec2 = zeros(2*N_tot)
-            forcing_vec4 = zeros(2*N_tot)
+                    forcing_ary[:,1+n,1,initial_condition_index] .= forcing_vec
 
-            u  = zeros(N_tot)
-            v  = zeros(N_tot)
-            ut = zeros(N_tot)
-            vt = zeros(N_tot)
-
-            nsteps = prob.nsteps
-            t = 0.0
-            dt = prob.tf/nsteps
-
-            # Get forcing (dH/dα * ψ)
-            for n in 0:nsteps
-                # Second Order Forcing
-                u .= history[1:N_tot,1+n,1]
-                v .= history[1+N_tot:end,1+n,1]
-
-                utvt!(ut, vt, u, v, 
-                      dKs_da, dSs_da, a_plus_adag, a_minus_adag,
-                      dpda, dqda, t, α)
-                forcing_vec2[1:N_tot] .= ut
-                forcing_vec2[1+N_tot:end] .= vt
-
-                forcing_ary[:,1+n,1] .= forcing_vec2
-
-                # Fourth Order Forcing
+                    t += dt
+                end
+            elseif order == 4
+                forcing_vec2 = zeros(2*N_tot)
                 forcing_vec4 = zeros(2*N_tot)
 
-                utvt!(ut, vt, u, v,
-                      dKs_da, dSs_da, a_plus_adag, a_minus_adag,
-                      d2p_dta, d2q_dta, t, α)
-                forcing_vec4[1:N_tot] += ut
-                forcing_vec4[1+N_tot:end] += vt
+                u  = zeros(N_tot)
+                v  = zeros(N_tot)
+                ut = zeros(N_tot)
+                vt = zeros(N_tot)
 
-                ut .= history[1:N_tot,1+n,2]
-                vt .= history[1+N_tot:end,1+n,2]
+                nsteps = prob.nsteps
+                t = 0.0
+                dt = prob.tf/nsteps
 
-                A = zeros(N_tot) # Placeholders
-                B = zeros(N_tot)
-                utvt!(A, B, ut, vt,
-                      dKs_da, dSs_da, a_plus_adag, a_minus_adag,
-                      dpda, dqda, t, α)
-                forcing_vec4[1:N_tot] += A
-                forcing_vec4[1+N_tot:end] += B
+                # Get forcing (dH/dα * ψ)
+                for n in 0:nsteps
+                    # Second Order Forcing
+                    u .= history[1:N_tot,     1+n, 1, initial_condition_index]
+                    v .= history[1+N_tot:end, 1+n, 1, initial_condition_index]
 
-                forcing_ary[:,1+n,2] .= forcing_vec4
+                    utvt!(ut, vt, u, v, 
+                          dKs_da, dSs_da, a_plus_adag, a_minus_adag,
+                          dpda, dqda, t, α)
+                    forcing_vec2[1:N_tot] .= ut
+                    forcing_vec2[1+N_tot:end] .= vt
 
-                t += dt
+                    forcing_ary[:,1+n,1,initial_condition_index] .= forcing_vec2
+
+                    # Fourth Order Forcing
+                    forcing_vec4 = zeros(2*N_tot)
+
+                    utvt!(ut, vt, u, v,
+                          dKs_da, dSs_da, a_plus_adag, a_minus_adag,
+                          d2p_dta, d2q_dta, t, α)
+                    forcing_vec4[1:N_tot] += ut
+                    forcing_vec4[1+N_tot:end] += vt
+
+                    ut .= history[1:N_tot,     1+n, 2, initial_condition_index]
+                    vt .= history[1+N_tot:end, 1+n, 2, initial_condition_index]
+
+                    A = zeros(N_tot) # Placeholders
+                    B = zeros(N_tot)
+                    utvt!(A, B, ut, vt,
+                          dKs_da, dSs_da, a_plus_adag, a_minus_adag,
+                          dpda, dqda, t, α)
+                    forcing_vec4[1:N_tot] += A
+                    forcing_vec4[1+N_tot:end] += B
+
+                    forcing_ary[:,1+n,2,initial_condition_index] .= forcing_vec4
+
+                    t += dt
+                end
+            else 
+                throw("Invalid Order: $order")
             end
-        else 
-            throw("Invalid Order: $order")
         end
 
         # Evolve with forcing
@@ -648,20 +650,30 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, target::VM,
         differentiated_prob.u0 .= 0.0
         differentiated_prob.v0 .= 0.0
 
-        history_dψdα = eval_forward_forced(differentiated_prob, forcing_ary, α, 
-                                           order=order)
+        Q = history[:,end,1,:]
+        dQda = zeros(size(Q)...)
 
-        dQda = history_dψdα[:,end]
-        Q = history[:,end,1]
+        for initial_condition_index = 1:size(prob.u0,2)
+            vec_prob = VectorSchrodingerProb(prob, initial_condition_index)
+            # Set initial condition to zero for evolution of dψ/dα
+            vec_prob.u0 .= 0.0
+            vec_prob.v0 .= 0.0
+            history_dQi_da = eval_forward_forced(
+                vec_prob, forcing_ary[:,:,:,initial_condition_index], α,
+                order=order
+            )
+            dQda[:,initial_condition_index] .= history_dQi_da[:,end]
+        end
+
         R = copy(target)
-        T = vcat(R[1+N_tot:end], -R[1:N_tot])
+        T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
 
         if cost_type == :Infidelity
-            gradient[i] = -(2/(N_ess^2))*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
+            gradient[control_param_index] = -(2/(N_ess^2))*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
         elseif cost_type == :Tracking
-            gradient[i] = dot(dQda, Q - target)
+            gradient[control_param_index] = dot(dQda, Q - target)
         elseif cost_type == :Norm
-            gradient[i] = dot(dQda,Q)
+            gradient[control_param_index] = dot(dQda,Q)
         else
             throw("Invalid cost type: $cost_type")
         end
