@@ -145,7 +145,6 @@ function SchrodingerProb_AutoDiff(Ks, Ss, a_plus_adag, a_minus_adag,
 end
 
 
-
 function VectorSchrodingerProb(
         prob::SchrodingerProb{M1, M2}, initial_condition_index::Int64
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
@@ -160,19 +159,6 @@ function VectorSchrodingerProb(
     )
 end
 
-function VectorSchrodingerProb(
-        prob::SchrodingerProb{M1, M2}, initial_condition_index::Int64
-    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
-
-    return SchrodingerProb(
-        copy(prob.Ks), copy(prob.Ss), copy(prob.a_plus_adag), copy(prob.a_minus_adag),
-        prob.p, prob.q, prob.dpdt, prob.dqdt,
-        prob.dpda, prob.dqda, prob.d2p_dta, prob.d2q_dta,
-        prob.u0[:,initial_condition_index], prob.v0[:,initial_condition_index],
-        prob.tf, prob.nsteps,
-        prob.N_ess_levels, prob.N_guard_levels, prob.nCoeff
-    )
-end
 
 """
 For compatibility in eval_grad_forced (should refactor code)
@@ -180,13 +166,6 @@ For compatibility in eval_grad_forced (should refactor code)
 function VectorSchrodingerProb(
         prob::SchrodingerProb{M, V}, initial_condition_index::Int64
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
-
-    return SchrodingerProb(
-        copy(prob.Ks), copy(prob.Ss), copy(prob.a_plus_adag), copy(prob.a_minus_adag),
-        prob.p, prob.q, prob.dpdt, prob.dqdt,
-        prob.dpda, prob.dqda, prob.d2p_dta, prob.d2q_dta,
-        copy(prob.u0), copy(prob.v0),
-        prob.tf, prob.nsteps,
-        prob.N_ess_levels, prob.N_guard_levels, prob.nCoeff
-    )
+    @assert initial_condition_index == 1
+    return copy(prob)
 end
