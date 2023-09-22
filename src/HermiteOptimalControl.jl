@@ -1,6 +1,7 @@
 module HermiteOptimalControl
 
 using LinearAlgebra, LinearMaps, IterativeSolvers, Plots
+import Ipopt
 
 # Export schrodinger problem definition and forward evolution methods
 export SchrodingerProb, VectorSchrodingerProb, eval_forward, eval_forward_forced
@@ -11,10 +12,14 @@ export bcparams, bcarrier2, bcarrier2_dt, gradbcarrier2!, gradbcarrier2_dt!
 # Export tests
 export gradient_test, plot_gradients, plot_gradient_deviation
 export convergence_test!, plot_convergence_test
+
 # Export specific problem definitions
 export rabi_osc, gargamel_prob, bspline_prob
 
 export infidelity
+
+export optimize_gate
+
 
 include("SchrodingerProb.jl")
 include("hermite.jl")
@@ -23,6 +28,7 @@ include("eval_grad.jl")
 include("gradient_test.jl")
 include("convergence_test.jl")
 include("bsplines.jl")
+include("ipopt_optimal_control.jl")
 include("ExampleProblems/rabi_prob.jl")
 include("ExampleProblems/gargamel_prob.jl")
 include("ExampleProblems/bspline_prob.jl")
