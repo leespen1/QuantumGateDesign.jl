@@ -19,4 +19,4 @@ Documentation located at: https://leespen1.github.io/HermiteOptimalControl.jl/de
 - [ ] Break code into smaller functions where appropriate (discrete adjoint is
       quite long)
 - [ ] Improve documentation, have documentation pages track project releases
-- [ ] Integrate with an optimization package
+- [X] Integrate with an optimization package
