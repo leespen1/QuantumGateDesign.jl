@@ -8,12 +8,17 @@ function rabi_osc(N_ess, N_guard, Ω::ComplexF64=1.0+0.0im, tf::Float64=NaN; nst
     N_tot = N_ess+N_guard
     Ks = zeros(N_tot, N_tot) # Rotating frame, should add detuning in higher levels
     Ss = zeros(N_tot, N_tot) # Rotating frame
+
+    # Set up raising and lowering operators
     a_plus_adag = zeros(N_tot, N_tot)
     a_minus_adag = zeros(N_tot, N_tot)
-    a_plus_adag[1,2] = 1
-    a_plus_adag[2,1] = 1
-    a_minus_adag[1,2] = 1
-    a_minus_adag[2,1] = -1
+    for i=1:N_tot-1
+        a_plus_adag[i, i+1] = sqrt(i)
+        a_plus_adag[i+1, i]   = sqrt(i)
+
+        a_minus_adag[i, i+1] = sqrt(i)
+        a_minus_adag[i+1, i] = -sqrt(i)
+    end
 
     p(t,α) = α*real(Ω)
     q(t,α) = α*imag(Ω)
