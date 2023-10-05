@@ -15,12 +15,12 @@ function bspline_control(bcpar)
     ]
     # Gradients for bcarrier actually don't depend on pcof.
     grad_p_vec = [
-        (t, pcof) -> grad_bcarrier2(t, bcpar, 0),
-        (t, pcof) -> grad_bcarrier2_dt(t, bcpar, 0)
+        (t, pcof) -> gradbcarrier2(t, bcpar, 0),
+        (t, pcof) -> gradbcarrier2_dt(t, bcpar, 0)
     ]
     grad_q_vec = [
-        (t, pcof) -> grad_bcarrier2(t, bcpar, 1),
-        (t, pcof) -> grad_bcarrier2_dt(t, bcpar, 1)
+        (t, pcof) -> gradbcarrier2(t, bcpar, 1),
+        (t, pcof) -> gradbcarrier2_dt(t, bcpar, 1)
     ]
 
     N_coeff = length(bcpar.pcof)

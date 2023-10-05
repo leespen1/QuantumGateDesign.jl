@@ -4,21 +4,21 @@
     gradient = discrete_adjoint(prob, target, pcof; order=order, cost_type=cost_type, return_lambda_history=false)
 
 Evaluates gradient of the provided Schrodinger problem with the given target
-gate and control parameter(s) α using the discrete adjoint method. 
+gate and control parameter(s) pcof using the discrete adjoint method. 
 
 Returns: gradient
 """
 function discrete_adjoint(prob::SchrodingerProb{M, VM}, target::VM,
-        α::AbstractVector{Float64}; order=2, cost_type=:Infidelity,
+        pcof::AbstractVector{Float64}; order=2, cost_type=:Infidelity,
         return_lambda_history=false
     ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
 
-    history = eval_forward(prob, α; order=order)
+    history = eval_forward(prob, pcof; order=order)
     return discrete_adjoint(
         prob.Ks, prob.Ss, prob.a_plus_adag, prob.a_minus_adag, prob.p, prob.q,
         prob.dpdt, prob.dqdt, prob.dpda, prob.dqda, prob.d2p_dta, prob.d2q_dta,
         prob.u0, prob.v0, prob.tf, prob.nsteps, prob.N_ess_levels,
-        prob.N_guard_levels, prob.N_tot_levels, target, α, history,
+        prob.N_guard_levels, prob.N_tot_levels, target, pcof, history,
         order=order, cost_type=cost_type, return_lambda_history=return_lambda_history
     )
 end
@@ -27,35 +27,36 @@ end
 History is state vector history
 
 """
-function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
-        p::Function, q::Function, dpdt::Function, dqdt::Function,
-        dpda::Function, dqda::Function, d2p_dta::Function, d2q_dta::Function,
-        u0::VM, v0::VM, tf::Float64, nsteps::Int64, N_ess::Int64, N_grd::Int64,
-        N_tot::Int64, target::VM, α::V, history; order=2, cost_type=:Infidelity,
-        return_lambda_history=false
-    ) where {V<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}, VM<:AbstractVecOrMat{Float64}}
+function discrete_adjoint(
+        prob::SchrodingerProb, control::Control{Nderivatives},
+        pcof::AbstractVector{Float64}, target::AbstractMatrix{Float64}; 
+        order=2, cost_type=:Infidelity, return_lambda_history=false
+    ) where {Nderivatives}
+
+    history = eval_forward(prob, control, pcof; order=order)
 
     R = target[:,:] # Copy target, converting to matrix if vector
-    T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
+    T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
 
     # For adjoint evolution. Take transpose of entire matrix -> antisymmetric blocks change sign
-    Ks_adj = Matrix(transpose(-Ks)) # NOTE THAT K changes sign!
-    Ss_adj = Matrix(transpose(Ss))
-    a_plus_adag_adj = Matrix(transpose(-a_plus_adag)) # NOTE THAT K changes sign!
-    a_minus_adag_adj = Matrix(transpose(a_minus_adag))
+    Ks_adj = Matrix(transpose(-prob.Ks)) # NOTE THAT K changes sign!
+    Ss_adj = Matrix(transpose(prob.Ss))
+    p_operator_adj = Matrix(transpose(-prob.p_operator)) # NOTE THAT K changes sign!
+    q_operator_adj = Matrix(transpose(prob.q_operator))
     
-    a_plus_adag_transpose = Matrix(transpose(a_plus_adag)) # NOTE THAT K changes sign!
-    a_minus_adag_transpose = Matrix(transpose(a_minus_adag))
+    p_operator_transpose = Matrix(transpose(prob.p_operator)) # NOTE THAT K changes sign!
+    q_operator_transpose = Matrix(transpose(prob.q_operator))
 
-    dt = tf/nsteps
+    dt = prob.tf/prob.nsteps
 
-    len_α = length(α)
-    len_α_half = div(len_α, 2)
-    grad = zeros(len_α)
+    len_pcof = length(pcof)
+    len_pcof_half = div(len_pcof, 2)
+    grad = zeros(len_pcof)
 
     # Set up terminal condition RHS
     if cost_type == :Infidelity
-        terminal_RHS = (2.0/(N_ess^2))*(dot(history[:,end,:],R)*R + dot(history[:,end,:],T)*T)
+        terminal_RHS = (dot(history[:,end,:],R)*R + dot(history[:,end,:],T)*T)
+        terminal_RHS *= (2.0/(prob.N_ess_levels^2))
     elseif cost_type == :Tracking
         terminal_RHS = -(history[:,end] - target)
     elseif cost_type == :Norm
@@ -64,179 +65,159 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
         throw("Invalid cost type: $cost_type")
     end
 
-    for initial_condition_index = 1:size(u0,2)
-        lambda = zeros(2*N_tot)
-        lambda_history = zeros(2*N_tot,1+nsteps)
-        lambda_ut  = zeros(N_tot)
-        lambda_vt  = zeros(N_tot)
-        lambda_utt = zeros(N_tot)
-        lambda_vtt = zeros(N_tot)
+    for initial_condition_index = 1:size(prob.u0,2)
+        lambda = zeros(2*prob.N_tot_levels)
+        lambda_history = zeros(2*prob.N_tot_levels,1+prob.nsteps)
+        lambda_ut  = zeros(prob.N_tot_levels)
+        lambda_vt  = zeros(prob.N_tot_levels)
+        lambda_utt = zeros(prob.N_tot_levels)
+        lambda_vtt = zeros(prob.N_tot_levels)
 
-        RHS_lambda_u::Vector{Float64} = zeros(N_tot)
-        RHS_lambda_v::Vector{Float64} = zeros(N_tot)
-        RHS::Vector{Float64} = zeros(2*N_tot)
+        RHS_lambda_u::Vector{Float64} = zeros(prob.N_tot_levels)
+        RHS_lambda_v::Vector{Float64} = zeros(prob.N_tot_levels)
+        RHS::Vector{Float64} = zeros(2*prob.N_tot_levels)
 
-        grad_contrib = zeros(len_α)
+        grad_contrib = zeros(len_pcof)
 
         if order == 2
             # Terminal Condition
-            t = tf
+            t = prob.tf
 
             RHS .= terminal_RHS[:,initial_condition_index]
 
             LHS_map = LinearMap(
-                x -> LHS_func(lambda_ut, lambda_vt, x[1:N_tot], x[1+N_tot:end],
-                              Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
-                              p, q, t, α, dt, N_tot),
-                2*N_tot,2*N_tot
+                x -> LHS_func(
+                    lambda_ut, lambda_vt, x[1:prob.N_tot_levels],
+                    x[1+prob.N_tot_levels:end], Ks_adj, Ss_adj, p_operator_adj,
+                    q_operator_adj, control.p[1], control.q[1], t, pcof, dt,
+                    prob.N_tot_levels
+                ),
+                2*prob.N_tot_levels,2*prob.N_tot_levels
             )
             gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
-            lambda_history[:,1+nsteps] .= lambda
-            lambda_u = copy(lambda[1:N_tot])
-            lambda_v = copy(lambda[1+N_tot:2*N_tot])
+            lambda_history[:,1+prob.nsteps] .= lambda
+            lambda_u = copy(lambda[1:prob.N_tot_levels])
+            lambda_v = copy(lambda[1+prob.N_tot_levels:2*prob.N_tot_levels])
             
             # Discrete Adjoint Scheme
-            for n in nsteps-1:-1:1
+            for n in prob.nsteps-1:-1:1
                 t -= dt
-                utvt!(lambda_ut, lambda_vt, lambda_u, lambda_v,
-                      Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
-                      p, q, t, α)
+                utvt!(
+                    lambda_ut, lambda_vt, lambda_u, lambda_v, Ks_adj, Ss_adj,
+                    p_operator_adj, q_operator_adj, control.p[1], control.q[1],
+                    t, pcof
+                )
                 copy!(RHS_lambda_u,lambda_u)
                 axpy!(0.5*dt,lambda_ut,RHS_lambda_u)
 
                 copy!(RHS_lambda_v,lambda_v)
                 axpy!(0.5*dt,lambda_vt,RHS_lambda_v)
 
-                copyto!(RHS,1,RHS_lambda_u,1,N_tot)
-                copyto!(RHS,1+N_tot,RHS_lambda_v,1,N_tot)
+                copyto!(RHS,1,RHS_lambda_u,1,prob.N_tot_levels)
+                copyto!(RHS,1+prob.N_tot_levels,RHS_lambda_v,1,prob.N_tot_levels)
 
                 # NOTE: LHS and RHS Linear transformations use the SAME TIME
 
                 LHS_map = LinearMap(
-                    x -> LHS_func(lambda_ut, lambda_vt, x[1:N_tot], x[1+N_tot:end],
-                                  Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
-                                  p, q, t, α, dt, N_tot),
-                    2*N_tot,2*N_tot
+                    x -> LHS_func(
+                        lambda_ut, lambda_vt, x[1:prob.N_tot_levels],
+                        x[1+prob.N_tot_levels:end], Ks_adj, Ss_adj,
+                        p_operator_adj, q_operator_adj, control.p[1],
+                        control.q[1], t, pcof, dt, prob.N_tot_levels
+                    ),
+                    2*prob.N_tot_levels,2*prob.N_tot_levels
                 )
 
                 gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
                 lambda_history[:,1+n] .= lambda
-                lambda_u = lambda[1:N_tot]
-                lambda_v = lambda[1+N_tot:end]
+                lambda_u = lambda[1:prob.N_tot_levels]
+                lambda_v = lambda[1+prob.N_tot_levels:end]
             end
         
-            zero_mat = zeros(N_tot,N_tot)
-            uv = zeros(2*N_tot)
-            u = zeros(N_tot)
-            v = zeros(N_tot)
+            zero_mat = zeros(prob.N_tot_levels,prob.N_tot_levels)
+            uv = zeros(2*prob.N_tot_levels)
+            u = zeros(prob.N_tot_levels)
+            v = zeros(prob.N_tot_levels)
             # Won't actually hold ut and vt, but rather real/imag parts of dH/dα*ψ
-            ut = zeros(N_tot)
-            vt = zeros(N_tot)
-            dummy_u = zeros(N_tot)
-            dummy_v = zeros(N_tot)
-            dummy = zeros(2*N_tot)
+            ut = zeros(prob.N_tot_levels)
+            vt = zeros(prob.N_tot_levels)
+            dummy_u = zeros(prob.N_tot_levels)
+            dummy_v = zeros(prob.N_tot_levels)
+            dummy = zeros(2*prob.N_tot_levels)
 
-            MT_lambda_11 = zeros(N_tot)
-            MT_lambda_12 = zeros(N_tot)
-            MT_lambda_21 = zeros(N_tot)
-            MT_lambda_22 = zeros(N_tot)
+            MT_lambda_11 = zeros(prob.N_tot_levels)
+            MT_lambda_12 = zeros(prob.N_tot_levels)
+            MT_lambda_21 = zeros(prob.N_tot_levels)
+            MT_lambda_22 = zeros(prob.N_tot_levels)
 
-            #=
-            # Note: the commented out grad[1:len_α_half]'s weer from my original
-            # assumption that the first half of the control vector only affects
-            # p, and the second half only affects q. 
-            #
-            # This is not the case for the bspline controls, so I had to revise the
-            # method such that grad_p and grad_q are the same size as the gradient.
-            #
-            # If it is the case that the first half only affects p, then half of
-            # grad_p will be empty
-            #
-            =#
-            for n in 0:nsteps-1
-                lambda_u = lambda_history[1:N_tot,1+n+1]
-                lambda_v = lambda_history[1+N_tot:end,1+n+1]
+            for n in 0:prob.nsteps-1
+                lambda_u = lambda_history[1:prob.N_tot_levels,1+n+1]
+                lambda_v = lambda_history[1+prob.N_tot_levels:end,1+n+1]
 
-                u = history[1:N_tot,     1+n, initial_condition_index]
-                v = history[1+N_tot:end, 1+n, initial_condition_index]
+                u = history[1:prob.N_tot_levels,     1+n, initial_condition_index]
+                v = history[1+prob.N_tot_levels:end, 1+n, initial_condition_index]
                 t = n*dt
 
-                grad_p = dpda(t,α)
-                grad_q = dqda(t,α)
+                grad_p = control.grad_p[1](t,pcof)
+                grad_q = control.grad_q[1](t,pcof)
 
+                mul!(MT_lambda_11, q_operator_transpose, lambda_u)
+                mul!(MT_lambda_12, p_operator_transpose, lambda_v)
+                mul!(MT_lambda_21, p_operator_transpose, lambda_u)
+                mul!(MT_lambda_22, q_operator_transpose, lambda_v)
 
-                mul!(MT_lambda_11, a_minus_adag_transpose, lambda_u)
-                mul!(MT_lambda_12, a_plus_adag_transpose, lambda_v)
-                mul!(MT_lambda_21, a_plus_adag_transpose, lambda_u)
-                mul!(MT_lambda_22, a_minus_adag_transpose, lambda_v)
+                grad_contrib .+= control.grad_q[1](t, pcof) .* (dot(u, MT_lambda_11) + dot(v, MT_lambda_22))
+                grad_contrib .+= control.grad_p[1](t, pcof) .* (dot(u, MT_lambda_12) - dot(v, MT_lambda_21))
 
-                #grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
-                #                                        + dot(v, MT_lambda_22)
-                #                                       )
-                #grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
-                #                                  - dot(v, MT_lambda_21)
-                #                                 )
-                grad_contrib .+= grad_q .* (dot(u, MT_lambda_11)
-                                                        + dot(v, MT_lambda_22)
-                                                       )
-                grad_contrib .+= grad_p .* (dot(u, MT_lambda_12)
-                                                  - dot(v, MT_lambda_21)
-                                                 )
-
-
-                u = history[1:N_tot,     1+n+1, initial_condition_index]
-                v = history[1+N_tot:end, 1+n+1, initial_condition_index]
+                u = history[1:prob.N_tot_levels,     1+n+1, initial_condition_index]
+                v = history[1+prob.N_tot_levels:end, 1+n+1, initial_condition_index]
                 t = (n+1)*dt
 
-                grad_p = dpda(t,α)
-                grad_q = dqda(t,α)
-
-                #grad[1+len_α_half:len_α] .+= grad_q .* (dot(u, MT_lambda_11)
-                #                                        + dot(v, MT_lambda_22)
-                #                                       )
-                #grad[1:len_α_half] .+= grad_p .* (dot(u, MT_lambda_12)
-                #                                  - dot(v, MT_lambda_21)
-                #                                 )
-                grad_contrib .+= grad_q .* (dot(u, MT_lambda_11)
-                                                        + dot(v, MT_lambda_22)
-                                                       )
-                grad_contrib .+= grad_p .* (dot(u, MT_lambda_12)
-                                                  - dot(v, MT_lambda_21)
-                                                 )
+                grad_contrib .+= control.grad_q[1](t, pcof) .* (dot(u, MT_lambda_11) + dot(v, MT_lambda_22))
+                grad_contrib .+= control.grad_p[1](t, pcof) .* (dot(u, MT_lambda_12) - dot(v, MT_lambda_21))
             end
+
             grad .+=  (-0.5*dt) .* grad_contrib
 
         elseif order == 4
             # Terminal Condition
-            t = tf
+            t = prob.tf
 
             RHS .= terminal_RHS[:,initial_condition_index]
 
             LHS_map = LinearMap(
-                x -> LHS_func_order4(lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
-                                     x[1:N_tot], x[1+N_tot:end],
-                              Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
-                              p, q, dpdt, dqdt, t, α, dt, N_tot),
-                2*N_tot,2*N_tot
+                x -> LHS_func_order4(
+                    lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
+                    x[1:prob.N_tot_levels], x[1+prob.N_tot_levels:end],
+                    Ks_adj, Ss_adj, p_opearator_adj, q_operator_adj,
+                    control.p[1], control.q[1], control.p[2], control.q[2], t,
+                    pcof, dt, prob.N_tot_levels
+                ),
+                2*prob.N_tot_levels,2*prob.N_tot_levels
             )
 
             gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
-            lambda_history[:,1+nsteps] .= lambda
-            lambda_u = copy(lambda[1:N_tot])
-            lambda_v = copy(lambda[1+N_tot:end])
+            lambda_history[:,1+prob.nsteps] .= lambda
+            lambda_u = copy(lambda[1:prob.N_tot_levels])
+            lambda_v = copy(lambda[1+prob.N_tot_levels:end])
             
             weights = [1,1/3]
             # Discrete Adjoint Scheme
-            for n in nsteps-1:-1:1
+            for n in prob.nsteps-1:-1:1
                 t -= dt
-                utvt!(lambda_ut, lambda_vt, lambda_u, lambda_v,
-                      Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
-                      p, q, t, α)
-                uttvtt!(lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u, lambda_v,
-                    Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
-                    p, q, dpdt, dqdt, t, α)
+                utvt!(
+                    lambda_ut, lambda_vt, lambda_u, lambda_v, Ks_adj, Ss_adj,
+                    p_operator_adj, q_operator_adj, control.p[1], control.q[1],
+                    t, pcof
+                )
+                uttvtt!(
+                    lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u,
+                    lambda_v, Ks_adj, Ss_adj, p_operator_adj, q_operator_adj,
+                    control.p[1], control.q[1], control.p[2], control.q[2], t,
+                    pcof
+                )
 
                 copy!(RHS_lambda_u,lambda_u)
                 axpy!(0.5*dt*weights[1],lambda_ut,RHS_lambda_u)
@@ -246,65 +227,68 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 axpy!(0.5*dt*weights[1],lambda_vt,RHS_lambda_v)
                 axpy!(0.25*dt^2*weights[2],lambda_vtt,RHS_lambda_v)
 
-                copyto!(RHS,1,RHS_lambda_u,1,N_tot)
-                copyto!(RHS,1+N_tot,RHS_lambda_v,1,N_tot)
+                copyto!(RHS,1,RHS_lambda_u,1,prob.N_tot_levels)
+                copyto!(RHS,1+prob.N_tot_levels,RHS_lambda_v,1,prob.N_tot_levels)
 
                 # NOTE: LHS and RHS Linear transformations use the SAME TIME
 
                 LHS_map = LinearMap(
-                    x -> LHS_func_order4(lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
-                                  x[1:N_tot], x[1+N_tot:end],
-                                  Ks_adj, Ss_adj, a_plus_adag_adj, a_minus_adag_adj,
-                                  p, q, dpdt, dqdt, t, α, dt, N_tot),
-                    2*N_tot,2*N_tot
+                    x -> LHS_func_order4(
+                        lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
+                        x[1:prob.N_tot_levels], x[1+prob.N_tot_levels:end],
+                        Ks_adj, Ss_adj, p_opearator_adj, q_operator_adj, 
+                        control.p[1], control.q[1], control.p[2], control.q[2],
+                        t, pcof, dt, prob.N_tot_levels
+                    ),
+                    2*prob.N_tot_levels,2*prob.N_tot_levels
                 )
 
                 gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
                 lambda_history[:,1+n] .= lambda
-                lambda_u = lambda[1:N_tot]
-                lambda_v = lambda[1+N_tot:2*N_tot]
+                lambda_u = lambda[1:prob.N_tot_levels]
+                lambda_v = lambda[1+prob.N_tot_levels:2*prob.N_tot_levels]
             end
 
-            zero_mat = zeros(N_tot,N_tot)
-            uv = zeros(2*N_tot)
-            u = zeros(N_tot)
-            v = zeros(N_tot)
+            zero_mat = zeros(prob.N_tot_levels,prob.N_tot_levels)
+            uv = zeros(2*prob.N_tot_levels)
+            u = zeros(prob.N_tot_levels)
+            v = zeros(prob.N_tot_levels)
 
-            MT_lambda_11 = zeros(N_tot)
-            MT_lambda_12 = zeros(N_tot)
-            MT_lambda_21 = zeros(N_tot)
-            MT_lambda_22 = zeros(N_tot)
+            MT_lambda_11 = zeros(prob.N_tot_levels)
+            MT_lambda_12 = zeros(prob.N_tot_levels)
+            MT_lambda_21 = zeros(prob.N_tot_levels)
+            MT_lambda_22 = zeros(prob.N_tot_levels)
 
-            A = zeros(N_tot)
-            B = zeros(N_tot)
-            C = zeros(N_tot)
+            A = zeros(prob.N_tot_levels)
+            B = zeros(prob.N_tot_levels)
+            C = zeros(prob.N_tot_levels)
 
-            Ap = zeros(N_tot, N_tot)
-            Bp = zeros(N_tot, N_tot)
-            Am = zeros(N_tot, N_tot)
-            Bm = zeros(N_tot, N_tot)
+            Ap = zeros(prob.N_tot_levels, prob.N_tot_levels)
+            Bp = zeros(prob.N_tot_levels, prob.N_tot_levels)
+            Am = zeros(prob.N_tot_levels, prob.N_tot_levels)
+            Bm = zeros(prob.N_tot_levels, prob.N_tot_levels)
 
-            Cu = zeros(N_tot)
-            Cv = zeros(N_tot)
-            Du = zeros(N_tot)
-            Dv = zeros(N_tot)
+            Cu = zeros(prob.N_tot_levels)
+            Cv = zeros(prob.N_tot_levels)
+            Du = zeros(prob.N_tot_levels)
+            Dv = zeros(prob.N_tot_levels)
 
-            K_full =  Ks .+ a_plus_adag
-            S_full =  Ss .+ a_minus_adag
+            K_full =  prob.Ks .+ prob.p_operator
+            S_full =  prob.Ss .+ prob.q_operator
 
-            Hq = zeros(N_tot,N_tot)
-            Hp = zeros(N_tot,N_tot)
+            Hq = zeros(prob.N_tot_levels, prob.N_tot_levels)
+            Hp = zeros(prob.N_tot_levels, prob.N_tot_levels)
 
             # Accumulate Gradient
-            len_α = length(α)
-            len_α_half = div(len_α, 2)
+            len_pcof = length(pcof)
+            len_pcof_half = div(len_pcof, 2)
 
             # Efficient way, possibly incorrect
             weights_n = [1,dt/6]
             weights_np1 = [1,-dt/6]
-            for n in 0:nsteps-1
-                lambda_u = lambda_history[1:N_tot,     1+n+1]
-                lambda_v = lambda_history[1+N_tot:end, 1+n+1]
+            for n in 0:prob.nsteps-1
+                lambda_u = lambda_history[1:prob.N_tot_levels,     1+n+1]
+                lambda_v = lambda_history[1+prob.N_tot_levels:end, 1+n+1]
 
                 mul!(MT_lambda_11, a_minus_adag_transpose, lambda_u)
                 mul!(MT_lambda_12, a_plus_adag_transpose, lambda_v)
@@ -312,22 +296,16 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 mul!(MT_lambda_22, a_minus_adag_transpose, lambda_v)
 
                 # Qn contribution
-                u = history[1:N_tot,     1+n, initial_condition_index]
-                v = history[1+N_tot:end, 1+n, initial_condition_index]
+                u = history[1:prob.N_tot_levels,     1+n, initial_condition_index]
+                v = history[1+prob.N_tot_levels:end, 1+n, initial_condition_index]
                 t = n*dt
 
-                grad_p = dpda(t,α)
-                grad_q = dqda(t,α)
-                grad_pt = d2p_dta(t,α)
-                grad_qt = d2q_dta(t,α)
+                grad_p = control.grad_p[1](t, pcof)
+                grad_q = control.grad_q[1](t, pcof)
+                grad_pt = control.grad_p[2](t, pcof)
+                grad_qt = control.grad_q[2](t,pcof)
 
                 # H_α
-                #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[1]*(
-                #    dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
-                #)
-                #grad[1:len_α_half] .+= grad_p .* weights_n[1]*(
-                #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
-                #)
                 grad_contrib .+= grad_q .* weights_n[1]*(
                     dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
                 )
@@ -337,12 +315,6 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
 
                 # 4th order Correction
                 # H_αt
-                #grad[1+len_α_half:len_α] .+= grad_qt .* weights_n[2]*(
-                #    dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
-                #)
-                #grad[1:len_α_half] .+= grad_pt .* weights_n[2]*(
-                #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
-                #)
                 grad_contrib .+= grad_qt .* weights_n[2]*(
                     dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
                 )
@@ -352,80 +324,66 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 
                 # H_α*H
                 # part 1
-                Hq .= Ss .+ q(t,α) .* a_minus_adag
-                Hp .= Ks .+ p(t,α) .* a_plus_adag
+                Hq .= Ss .+ control.q[1](t,pcof) .* prob.q_operator
+                Hp .= Ks .+ control.p[1](t,pcof) .* prob.p_operator
 
                 mul!(A, Hq, u)
                 mul!(A, Hp, v, -1, 1)
-                mul!(B, a_minus_adag, A)
+                mul!(B, prob.q_operator, A)
 
-                #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(B, lambda_u)
                 grad_contrib .+= grad_q .* weights_n[2]*dot(B, lambda_u)
-                mul!(B, a_plus_adag, A)
-                #grad[1:len_α_half] .+= grad_p .* weights_n[2]*dot(B, lambda_v)
+                mul!(B, prob.p_operator, A)
                 grad_contrib .+= grad_p .* weights_n[2]*dot(B, lambda_v)
 
                 # part 2
                 mul!(A, Hp, u)
                 mul!(A, Hq, v, 1, 1)
-                mul!(B, a_plus_adag, A)
+                mul!(B, prob.p_operator, A)
 
-                #grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(B, lambda_u)
                 grad_contrib .-= grad_p .* weights_n[2]*dot(B, lambda_u)
-                mul!(B, a_minus_adag, A)
-                #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(B, lambda_v)
+                mul!(B, prob.q_operator, A)
                 grad_contrib .+= grad_q .* weights_n[2]*dot(B, lambda_v)
 
 
                 # H*H_α
                 # part 1
-                mul!(A, a_minus_adag, u)
-                mul!(B, a_minus_adag, v)
+                mul!(A, prob.q_operator, u)
+                mul!(B, prob.q_operator, v)
 
                 mul!(C, Hq, A)
                 mul!(C, Hp, B, -1, 1)
-                #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(C, lambda_u)
                 grad_contrib .+= grad_q .* weights_n[2]*dot(C, lambda_u)
 
                 mul!(C, Hp, A)
                 mul!(C, Hq, B, 1, 1)
-                #grad[1+len_α_half:len_α] .+= grad_q .* weights_n[2]*dot(C, lambda_v)
                 grad_contrib .+= grad_q .* weights_n[2]*dot(C, lambda_v)
 
 
                 # part 2
-                mul!(A, a_plus_adag, v)
-                mul!(B, a_plus_adag, u)
+                mul!(A, prob.p_operator, v)
+                mul!(B, prob.p_operator, u)
 
                 mul!(C, Hq, A)
                 mul!(C, Hp, B, 1, 1)
-                #grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(C, lambda_u)
                 grad_contrib .-= grad_p .* weights_n[2]*dot(C, lambda_u)
 
                 mul!(C, Hp, A)
                 mul!(C, Hq, B, -1, 1)
-                #grad[1:len_α_half] .-= grad_p .* weights_n[2]*dot(C, lambda_v)
                 grad_contrib .-= grad_p .* weights_n[2]*dot(C, lambda_v)
                 
 
                 # uv n+1 contribution
 
-                u = history[1:N_tot,     1+n+1, initial_condition_index]
-                v = history[1+N_tot:end, 1+n+1, initial_condition_index]
+                u = history[1:prob.N_tot_levels,     1+n+1, initial_condition_index]
+                v = history[1+prob.N_tot_levels:end, 1+n+1, initial_condition_index]
                 t = (n+1)*dt
 
-                grad_p = dpda(t,α)
-                grad_q = dqda(t,α)
-                grad_pt = d2p_dta(t,α)
-                grad_qt = d2q_dta(t,α)
+                grad_p = control.grad_p[1](t,pcof)
+                grad_q = control.grad_q[1](t,pcof)
+                grad_pt = control.grad_p[2](t,pcof)
+                grad_qt = control.grad_q[2](t,pcof)
 
                 # H_α
-                #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[1]*(
-                #    dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
-                #)
-                #grad[1:len_α_half] .+= grad_p .* weights_np1[1]*(
-                #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
-                #)
                 grad_contrib .+= grad_q .* weights_np1[1]*(
                     dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
                 )
@@ -435,12 +393,6 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
 
                 # 4th order Correction
                 # H_αt
-                #grad[1+len_α_half:len_α] .+= grad_qt .* weights_np1[2]*(
-                #    dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
-                #)
-                #grad[1:len_α_half] .+= grad_pt .* weights_np1[2]*(
-                #    dot(u, MT_lambda_12) - dot(v, MT_lambda_21)
-                #)
                 grad_contrib .+= grad_qt .* weights_np1[2]*(
                     dot(u, MT_lambda_11) + dot(v, MT_lambda_22)
                 )
@@ -450,59 +402,51 @@ function discrete_adjoint(Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
                 
                 # H_α*H
                 # part 1
-                Hq .= Ss .+ q(t,α) .* a_minus_adag
-                Hp .= Ks .+ p(t,α) .* a_plus_adag
+                Hq .= Ss .+ control.q[1](t,pcof) .* prob.q_operator
+                Hp .= Ks .+ control.p[1](t,pcof) .* prob.p_operator
 
                 mul!(A, Hq, u)
                 mul!(A, Hp, v, -1, 1)
-                mul!(B, a_minus_adag, A)
+                mul!(B, prob.q_operator, A)
 
-                #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(B, lambda_u)
                 grad_contrib .+= grad_q .* weights_np1[2]*dot(B, lambda_u)
-                mul!(B, a_plus_adag, A)
-                #grad[1:len_α_half] .+= grad_p .* weights_np1[2]*dot(B, lambda_v)
+                mul!(B, prob.p_operator, A)
                 grad_contrib .+= grad_p .* weights_np1[2]*dot(B, lambda_v)
 
                 # part 2
                 mul!(A, Hp, u)
                 mul!(A, Hq, v, 1, 1)
-                mul!(B, a_plus_adag, A)
+                mul!(B, prob.p_operator, A)
 
-                #grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(B, lambda_u)
                 grad_contrib .-= grad_p .* weights_np1[2]*dot(B, lambda_u)
-                mul!(B, a_minus_adag, A)
-                #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(B, lambda_v)
+                mul!(B, prob.q_operator, A)
                 grad_contrib .+= grad_q .* weights_np1[2]*dot(B, lambda_v)
 
 
                 # H*H_α
                 # part 1
-                mul!(A, a_minus_adag, u)
-                mul!(B, a_minus_adag, v)
+                mul!(A, prob.q_operator, u)
+                mul!(B, prob.q_operator, v)
 
                 mul!(C, Hq, A)
                 mul!(C, Hp, B, -1, 1)
-                #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(C, lambda_u)
                 grad_contrib .+= grad_q .* weights_np1[2]*dot(C, lambda_u)
 
                 mul!(C, Hp, A)
                 mul!(C, Hq, B, 1, 1)
-                #grad[1+len_α_half:len_α] .+= grad_q .* weights_np1[2]*dot(C, lambda_v)
                 grad_contrib .+= grad_q .* weights_np1[2]*dot(C, lambda_v)
 
 
                 # part 2
-                mul!(A, a_plus_adag, v)
-                mul!(B, a_plus_adag, u)
+                mul!(A, prob.p_operator, v)
+                mul!(B, prob.p_operator, u)
 
                 mul!(C, Hq, A)
                 mul!(C, Hp, B, 1, 1)
-                #grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(C, lambda_u)
                 grad_contrib .-= grad_p .* weights_np1[2]*dot(C, lambda_u)
 
                 mul!(C, Hp, A)
                 mul!(C, Hq, B, -1, 1)
-                #grad[1:len_α_half] .-= grad_p .* weights_np1[2]*dot(C, lambda_v)
                 grad_contrib .-= grad_p .* weights_np1[2]*dot(C, lambda_v)
             end
             grad .+=  (-0.5*dt) .* grad_contrib
@@ -519,7 +463,7 @@ end
 
 """
 Evaluates gradient of the provided Schrodinger problem with the given target
-gate and control parameter(s) α using the "forward differentiation" method,
+gate and control parameter(s) pcof using the "forward differentiation" method,
 which evolves a differentiated Schrodinger equation, using the state vector
 in the evolution of the original Schrodinger equation as a forcing term.
 

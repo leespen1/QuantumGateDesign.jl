@@ -10,7 +10,7 @@ export SchrodingerProb, VectorSchrodingerProb, eval_forward, eval_forward_forced
 export eval_grad_finite_difference, eval_grad_forced, discrete_adjoint
 
 # Export bspline functions
-export bcparams, bcarrier2, bcarrier2_dt, gradbcarrier2!, gradbcarrier2_dt!
+export bcparams, bcarrier2, bcarrier2_dt, gradbcarrier2, gradbcarrier2_dt, gradbcarrier2!, gradbcarrier2_dt!
 
 # Export tests
 export gradient_test, plot_gradients, plot_gradient_deviation
