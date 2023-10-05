@@ -355,6 +355,14 @@ Evaluate a B-spline function with carrier waves. See also the `bcparams` constru
     return f
 end
 
+"""
+Wrapper for non-mutating version.
+"""
+function gradbcarrier2(t::Float64, bcpar,::bcparams, func::Int64)
+    gradient = Vector{Float64}(undef, bcpar.Ncoeff)
+    gradbcarrier2!(t, bcpar, func, gradient)
+    return gradient
+end
 
 """
     gradbcarrier2!(t, bcpar, func, g) -> g
@@ -617,6 +625,14 @@ since the controls are linear in them)
     return f
 end
 
+"""
+Wrapper for non-mutating version.
+"""
+function gradbcarrier2_dt(t::Float64, bcpar,::bcparams, func::Int64)
+    gradient = Vector{Float64}(undef, bcpar.Ncoeff)
+    gradbcarrier2_dt!(t, bcpar, func, gradient)
+    return gradient
+end
 
 function gradbcarrier2_dt!(t::Float64, bcpar::bcparams, func::Int64, g::Array{Float64,1})
 

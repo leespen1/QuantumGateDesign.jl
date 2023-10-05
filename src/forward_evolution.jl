@@ -1,66 +1,64 @@
-function eval_forward(prob::SchrodingerProb, α::AbstractVector{Float64}; order=2, return_time_derivatives=false)
+"""
+"""
+function eval_forward(
+        prob::SchrodingerProb, control::Control{Nderivatives},
+        pcof::AbstractVector{Float64}; order=2, return_time_derivatives=false
+    ) where Nderivatives
+
+    if div(order, 2) > Nderivatives
+        @warn "Calling method of order $order for control with $Nderivatives given. Obtaining higher order derivatives using automatic differentiation.\n"
+    end
+
     if order == 2
-        return eval_forward_order2(prob, α, return_time_derivatives=return_time_derivatives)
+        return eval_forward_order2(prob, control, pcof, return_time_derivatives=return_time_derivatives)
     elseif order == 4
-        return eval_forward_order4(prob, α, return_time_derivatives=return_time_derivatives)
+        return eval_forward_order4(prob, control, pcof, return_time_derivatives=return_time_derivatives)
     end
     throw("Invalid order: $order")
 end
 
 
-"""
-Wrapper to evolve either single (vector) or multiple (matrix) initial
-conditions with second order trapezoidal method.
-"""
-function eval_forward_order2(prob::SchrodingerProb, α::AbstractVector{Float64};
-        return_time_derivatives=false)
-    return eval_forward_order2(
-        prob.Ks, prob.Ss, prob.a_plus_adag, prob.a_minus_adag, prob.p, prob.q,
-        prob.u0, prob.v0, prob.tf, prob.nsteps,
-        prob.N_ess_levels, prob.N_guard_levels, prob.N_tot_levels, α,
-        return_time_derivatives=return_time_derivatives
-    )
-end
 
 """
 Evolve a single initial condition (vector).
 """
 function eval_forward_order2(
-        Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
-        p::Function, q::Function,
-        u0::V, v0::V, tf::Float64, nsteps::Int64,
-        N_ess::Int64, N_grd::Int64, N_tot::Int64,
-        α::V;
-        return_time_derivatives=false
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
+        prob::SchrodingerProb{M, V}, control::Control{Nderivatives},
+        pcof::AbstractVector{Float64}; return_time_derivatives=false
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, Nderivatives}
+    
+    @assert Nderivatives >= 1
 
     t = 0.0
-    dt = tf/nsteps
+    dt = prob.tf/prob.nsteps
 
-    uv = zeros(2*N_tot)
-    copyto!(uv,1,u0,1,N_tot)
-    copyto!(uv,1+N_tot,v0,1,N_tot)
-    uv_history = Matrix{Float64}(undef,2*N_tot,1+nsteps)
+    uv = zeros(2*prob.N_tot_levels)
+    copyto!(uv,1, prob.u0, 1, prob.N_tot_levels)
+    copyto!(uv, 1+prob.N_tot_levels, prob.v0, 1, prob.N_tot_levels)
+
+    uv_history = Matrix{Float64}(undef, 2*prob.N_tot_levels,1+prob.nsteps)
     uv_history[:,1] .= uv
-    utvt_history = Matrix{Float64}(undef,2*N_tot,1+nsteps)
+    utvt_history = Matrix{Float64}(undef,2*prob.N_tot_levels,1+prob.nsteps)
 
-    RHSu::Vector{Float64} = zeros(N_tot)
-    RHSv::Vector{Float64} = zeros(N_tot)
-    RHS::Vector{Float64} = zeros(2*N_tot)
+    RHSu::Vector{Float64} = zeros(prob.N_tot_levels)
+    RHSv::Vector{Float64} = zeros(prob.N_tot_levels)
+    RHS::Vector{Float64} = zeros(2*prob.N_tot_levels)
 
-    u = copy(u0)
-    v = copy(v0)
-    ut = zeros(N_tot)
-    vt = zeros(N_tot)
+    u = copy(prob.u0)
+    v = copy(prob.v0)
+    ut = zeros(prob.N_tot_levels)
+    vt = zeros(prob.N_tot_levels)
 
     # Order 2
-    for n in 0:nsteps-1
-        utvt!(ut, vt, u, v,
-              Ks, Ss, a_plus_adag, a_minus_adag,
-              p, q, t, α)
+    for n in 0:prob.nsteps-1
+        utvt!(
+            ut, vt, u, v,
+            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
+            control.p[1], control.q[1], t, pcof
+        )
 
-        utvt_history[1:N_tot, 1+n] .= ut
-        utvt_history[1+N_tot:end, 1+n] .= vt
+        utvt_history[1:prob.N_tot_levels,     1+n] .= ut
+        utvt_history[1+prob.N_tot_levels:end, 1+n] .= vt
 
         copy!(RHSu,u)
         axpy!(0.5*dt,ut,RHSu)
@@ -68,31 +66,34 @@ function eval_forward_order2(
         copy!(RHSv,v)
         axpy!(0.5*dt,vt,RHSv)
 
-        copyto!(RHS,1,RHSu,1,N_tot)
-        copyto!(RHS,1+N_tot,RHSv,1,N_tot)
+        copyto!(RHS, 1, RHSu, 1, prob.N_tot_levels)
+        copyto!(RHS, 1+prob.N_tot_levels, RHSv, 1, prob.N_tot_levels)
 
         t += dt
 
         LHS_map = LinearMap(
-            uv -> LHS_func(ut, vt, uv[1:N_tot], uv[1+N_tot:end],
-                           Ks, Ss, a_plus_adag, a_minus_adag,
-                           p, q, t, α, dt, N_tot),
-            2*N_tot,2*N_tot
+            uv -> LHS_func(
+                ut, vt, uv[1:prob.N_tot_levels], uv[1+prob.N_tot_levels:end],
+                prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
+                control.p[1], control.q[1], t, pcof, dt, prob.N_tot_levels
+            ),
+            2*prob.N_tot_levels,
+            2*prob.N_tot_levels
         )
 
         gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
         uv_history[:,1+n+1] .= uv
-        u = uv[1:N_tot]
-        v = uv[1+N_tot:end]
+        u = uv[1:prob.N_tot_levels]
+        v = uv[1+prob.N_tot_levels:end]
     end
 
     # One last time, for utvt history at final time
     utvt!(ut, vt, u, v,
-          Ks, Ss, a_plus_adag, a_minus_adag,
-          p, q, t, α)
+          prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
+          control.p[1], control.q[1], t, pcof)
 
-    utvt_history[1:N_tot,1+nsteps] .= ut
-    utvt_history[1+N_tot:end,1+nsteps] .= vt
+    utvt_history[1:prob.N_tot_levels,1+prob.nsteps] .= ut
+    utvt_history[1+prob.N_tot_levels:end,1+prob.nsteps] .= vt
 
     if return_time_derivatives
         return cat(uv_history, utvt_history, dims=3)
@@ -105,36 +106,26 @@ end
 Evolve a matrix where each column is an iniital condition.
 """
 function eval_forward_order2(
-        Ks::M, Ss::M, a_plus_adag::M, a_minus_adag::M,
-        p::Function, q::Function,
-        u0::M, v0::M, tf::Float64, nsteps::Int64,
-        N_ess::Int64, N_grd::Int64, N_tot::Int64,
-        α::V;
-        return_time_derivatives=false
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
+        prob::SchrodingerProb{M1, M2}, control::Control{Nderivatives},
+        pcof::AbstractVector{Float64}; return_time_derivatives=false
+    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, Nderivatives}
 
-    N_init_cond = size(u0,2)
-    uv_history = Array{Float64}(undef,2*N_tot,1+nsteps, N_init_cond)
-    uv_utvt_history = Array{Float64}(undef,2*N_tot,1+nsteps, 2, N_init_cond)
+    uv_history = Array{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps, prob.N_ess_levels)
+    uv_utvt_history = Array{Float64}(undef,2*prob.N_tot_levels,1+prob.nsteps, 2, prob.N_ess_levels)
 
     # Handle i-th initial condition (THREADS HERE)
-    for i=1:N_init_cond
+    for initial_condition_index=1:prob.N_ess_levels
 
-        u0_i = u0[:,i]
-        v0_i = v0[:,i]
+        vector_prob = VectorSchrodingerProb(prob, initial_condition_index)
 
         # Call vector version of forward evolution
         if return_time_derivatives
-            uv_utvt_history[:,:,:,i] .= eval_forward_order2(
-                Ks, Ss, a_plus_adag, a_minus_adag, p, q, u0_i, v0_i, tf,
-                nsteps, N_ess, N_grd, N_tot, α,
-                return_time_derivatives=return_time_derivatives
+            uv_utvt_history[:,:,:,initial_condition_index] .= eval_forward_order2(
+                vector_prob, control, pcof, return_time_derivatives=true
             )
         else
-            uv_history[:,:,i] .= eval_forward_order2(
-                Ks, Ss, a_plus_adag, a_minus_adag, p, q, u0_i, v0_i, tf, nsteps, 
-                N_ess, N_grd, N_tot, α,
-                return_time_derivatives=return_time_derivatives
+            uv_history[:,:,initial_condition_index] .= eval_forward_order2(
+                vector_prob, control, pcof, return_time_derivatives=false
             )
         end
     end
@@ -151,14 +142,14 @@ end
 Wrapper to evolve either single (vector) or multiple (matrix) initial
 conditions with second order trapezoidal method.
 """
-function eval_forward_order4(prob::SchrodingerProb, α=missing;
+function eval_forward_order4(prob::SchrodingerProb, pcof=missing;
         return_time_derivatives=false)
 
     return eval_forward_order4(
-        prob.Ks, prob.Ss, prob.a_plus_adag, prob.a_minus_adag, prob.p,
+        prob.Ks, prob.Ss, prob.p_operator, prob.q_operator, prob.p,
         prob.q, prob.dpdt, prob.dqdt, prob.u0, prob.v0, prob.tf,
         prob.nsteps, prob.N_ess_levels, prob.N_guard_levels,
-        prob.N_tot_levels, α,
+        prob.N_tot_levels, pcof,
         return_time_derivatives=return_time_derivatives
     )
 end
@@ -172,7 +163,7 @@ function eval_forward_order4(
         p::Function, q::Function, dpdt::Function, dqdt::Function,
         u0::V, v0::V, tf::Float64, nsteps::Int64,
         N_ess::Int64, N_grd::Int64, N_tot::Int64,
-        α::V;
+        pcof::V;
         return_time_derivatives=false
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
@@ -202,10 +193,10 @@ function eval_forward_order4(
     for n in 0:nsteps-1
         utvt!(ut, vt, u, v,
               Ks, Ss, a_plus_adag, a_minus_adag,
-              p, q, t, α)
+              p, q, t, pcof)
         uttvtt!(utt, vtt, ut, vt, u, v,
                 Ks, Ss, a_plus_adag, a_minus_adag,
-                p, q, dpdt, dqdt, t, α)
+                p, q, dpdt, dqdt, t, pcof)
 
         utvt_history[1:N_tot, 1+n] .= ut
         utvt_history[1+N_tot:end, 1+n] .= vt
@@ -229,7 +220,7 @@ function eval_forward_order4(
         LHS_map = LinearMap(
             uv -> LHS_func_order4(utt, vtt, ut, vt, uv[1:N_tot], uv[1+N_tot:end],
                                   Ks, Ss, a_plus_adag, a_minus_adag,
-                                  p, q, dpdt, dqdt, t, α, dt, N_tot),
+                                  p, q, dpdt, dqdt, t, pcof, dt, N_tot),
             2*N_tot, 2*N_tot
         )
 
@@ -242,10 +233,10 @@ function eval_forward_order4(
     # One last time, for utvt history at final time
     utvt!(ut, vt, u, v,
           Ks, Ss, a_plus_adag, a_minus_adag,
-          p, q, t, α)
+          p, q, t, pcof)
     uttvtt!(utt, vtt, ut, vt, u, v,
             Ks, Ss, a_plus_adag, a_minus_adag,
-            p, q, dpdt, dqdt, t, α)
+            p, q, dpdt, dqdt, t, pcof)
 
     utvt_history[1:N_tot, 1+nsteps] .= ut
     utvt_history[1+N_tot:end, 1+nsteps] .= vt
@@ -263,7 +254,7 @@ function eval_forward_order4(
         p::Function, q::Function, dpdt::Function, dqdt::Function,
         u0::M, v0::M, tf::Float64, nsteps::Int64,
         N_ess::Int64, N_grd::Int64, N_tot::Int64,
-        α::AbstractVector{Float64};
+        pcof::AbstractVector{Float64};
         return_time_derivatives=false
     ) where {M<:AbstractMatrix{Float64}}
 
@@ -281,13 +272,13 @@ function eval_forward_order4(
         if return_time_derivatives
             uv_and_derivatives_history[:,:,:,i] .= eval_forward_order2(
                 Ks, Ss, a_plus_adag, a_minus_adag, p, q, dpdt, dqdt, u0_i,
-                v0_i, tf, nsteps, N_ess, N_grd, N_tot, α,
+                v0_i, tf, nsteps, N_ess, N_grd, N_tot, pcof,
                 return_time_derivatives=return_time_derivatives
             )
         else
             uv_history[:,:,i] .= eval_forward_order4(
                 Ks, Ss, a_plus_adag, a_minus_adag, p, q, dpdt, dqdt, u0_i,
-                v0_i, tf, nsteps, N_ess, N_grd, N_tot, α,
+                v0_i, tf, nsteps, N_ess, N_grd, N_tot, pcof,
                 return_time_derivatives=return_time_derivatives
             )
         end
@@ -302,12 +293,12 @@ end
 
 function eval_forward_forced(
         prob::SchrodingerProb{M, V}, forcing_ary,
-        α::AbstractVector{Float64}; order=2
+        pcof::AbstractVector{Float64}; order=2
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     if order == 2
-        return eval_forward_forced_order2(prob, forcing_ary, α)
+        return eval_forward_forced_order2(prob, forcing_ary, pcof)
     elseif order == 4
-        return eval_forward_forced_order4(prob, forcing_ary, α)
+        return eval_forward_forced_order4(prob, forcing_ary, pcof)
     end
 
     throw("Invalid Order: $order")
@@ -320,13 +311,13 @@ of forces at each discretized point in time.
 Maybe I should also do a one with forcing functions as well.
 """
 function eval_forward_forced_order2(
-        prob::SchrodingerProb{M, V}, forcing_ary::AbstractArray{Float64,3}, α::V
+        prob::SchrodingerProb{M, V}, forcing_ary::AbstractArray{Float64,3}, pcof::V
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     Ks = prob.Ks
     Ss = prob.Ss
-    a_plus_adag = prob.a_plus_adag
-    a_minus_adag = prob.a_minus_adag
+    a_plus_adag = prob.p_operator
+    a_minus_adag = prob.q_operator
     p = prob.p
     q = prob.q
     u0 = prob.u0
@@ -360,7 +351,7 @@ function eval_forward_forced_order2(
     for n in 0:nsteps-1
         utvt!(ut, vt, u, v,
               Ks, Ss, a_plus_adag, a_minus_adag,
-              p, q, t, α)
+              p, q, t, pcof)
         copy!(RHSu,u)
         axpy!(0.5*dt,ut,RHSu)
 
@@ -378,7 +369,7 @@ function eval_forward_forced_order2(
         LHS_map = LinearMap(
             uv -> LHS_func(ut, vt, uv[1:N_tot], uv[1+N_tot:end],
                            Ks, Ss, a_plus_adag, a_minus_adag,
-                           p, q, t, α, dt, N_tot),
+                           p, q, t, pcof, dt, N_tot),
             2*N_tot,2*N_tot
         )
 
@@ -394,12 +385,12 @@ end
 
 
 function eval_forward_forced_order4(
-        prob::SchrodingerProb{M, V}, forcing_ary::AbstractArray{Float64,3}, α::V
+        prob::SchrodingerProb{M, V}, forcing_ary::AbstractArray{Float64,3}, pcof::V
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     Ks = prob.Ks
     Ss = prob.Ss
-    a_plus_adag = prob.a_plus_adag
-    a_minus_adag = prob.a_minus_adag
+    a_plus_adag = prob.p_operator
+    a_minus_adag = prob.q_operator
     p = prob.p
     q = prob.q
     dpdt = prob.dpdt
@@ -438,14 +429,14 @@ function eval_forward_forced_order4(
         # First time derivative at current timestep
         utvt!(ut, vt, u, v,
               Ks, Ss, a_plus_adag, a_minus_adag,
-              p, q, t, α)
+              p, q, t, pcof)
         axpy!(1.0,forcing_ary[1:N_tot,1+n,1], ut)
         axpy!(1.0,forcing_ary[1+N_tot:end,1+n,1], vt)
 
         # Second time derivative at current timestep
         uttvtt!(utt, vtt, ut, vt, u, v,
                 Ks, Ss, a_plus_adag, a_minus_adag,
-                p, q, dpdt, dqdt, t, α)
+                p, q, dpdt, dqdt, t, pcof)
         axpy!(1.0,forcing_ary[1:N_tot,1+n,2], utt)
         axpy!(1.0,forcing_ary[1+N_tot:end,1+n,2], vtt)
 
@@ -472,7 +463,7 @@ function eval_forward_forced_order4(
         # Don't forget to differentiate the forcing from the first derivative
         utvt!(ut, vt, forcing_ary[1:N_tot,1+n+1,1], forcing_ary[1+N_tot:end,1+n+1,1],
               Ks, Ss, a_plus_adag, a_minus_adag,
-              p, q, t, α)
+              p, q, t, pcof)
 
         axpy!(0.25*dt^2*weights_LHS[2], ut, RHSu)
         axpy!(0.25*dt^2*weights_LHS[2], vt, RHSv)
@@ -483,7 +474,7 @@ function eval_forward_forced_order4(
         LHS_map = LinearMap(
             uv -> LHS_func_order4(utt, vtt, ut, vt, uv[1:N_tot], uv[1+N_tot:end],
                            Ks, Ss, a_plus_adag, a_minus_adag,
-                           p, q, dpdt, dqdt, t, α, dt, N_tot),
+                           p, q, dpdt, dqdt, t, pcof, dt, N_tot),
             2*N_tot,2*N_tot
         )
 
