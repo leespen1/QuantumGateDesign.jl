@@ -358,7 +358,7 @@ end
 """
 Wrapper for non-mutating version.
 """
-function gradbcarrier2(t::Float64, bcpar,::bcparams, func::Int64)
+function gradbcarrier2(t::Float64, bcpar::bcparams, func::Int64)
     gradient = Vector{Float64}(undef, bcpar.Ncoeff)
     gradbcarrier2!(t, bcpar, func, gradient)
     return gradient
@@ -628,7 +628,7 @@ end
 """
 Wrapper for non-mutating version.
 """
-function gradbcarrier2_dt(t::Float64, bcpar,::bcparams, func::Int64)
+function gradbcarrier2_dt(t::Float64, bcpar::bcparams, func::Int64)
     gradient = Vector{Float64}(undef, bcpar.Ncoeff)
     gradbcarrier2_dt!(t, bcpar, func, gradient)
     return gradient
