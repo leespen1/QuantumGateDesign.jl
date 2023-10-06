@@ -190,7 +190,7 @@ function discrete_adjoint(
                 x -> LHS_func_order4(
                     lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
                     x[1:prob.N_tot_levels], x[1+prob.N_tot_levels:end],
-                    Ks_adj, Ss_adj, p_opearator_adj, q_operator_adj,
+                    Ks_adj, Ss_adj, p_operator_adj, q_operator_adj,
                     control.p[1], control.q[1], control.p[2], control.q[2], t,
                     pcof, dt, prob.N_tot_levels
                 ),
@@ -236,7 +236,7 @@ function discrete_adjoint(
                     x -> LHS_func_order4(
                         lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
                         x[1:prob.N_tot_levels], x[1+prob.N_tot_levels:end],
-                        Ks_adj, Ss_adj, p_opearator_adj, q_operator_adj, 
+                        Ks_adj, Ss_adj, p_operator_adj, q_operator_adj, 
                         control.p[1], control.q[1], control.p[2], control.q[2],
                         t, pcof, dt, prob.N_tot_levels
                     ),
@@ -290,10 +290,10 @@ function discrete_adjoint(
                 lambda_u = lambda_history[1:prob.N_tot_levels,     1+n+1]
                 lambda_v = lambda_history[1+prob.N_tot_levels:end, 1+n+1]
 
-                mul!(MT_lambda_11, a_minus_adag_transpose, lambda_u)
-                mul!(MT_lambda_12, a_plus_adag_transpose, lambda_v)
-                mul!(MT_lambda_21, a_plus_adag_transpose, lambda_u)
-                mul!(MT_lambda_22, a_minus_adag_transpose, lambda_v)
+                mul!(MT_lambda_11, q_operator_transpose, lambda_u)
+                mul!(MT_lambda_12, p_operator_transpose, lambda_v)
+                mul!(MT_lambda_21, p_operator_transpose, lambda_u)
+                mul!(MT_lambda_22, q_operator_transpose, lambda_v)
 
                 # Qn contribution
                 u = history[1:prob.N_tot_levels,     1+n, initial_condition_index]
@@ -324,8 +324,8 @@ function discrete_adjoint(
                 
                 # H_α*H
                 # part 1
-                Hq .= Ss .+ control.q[1](t,pcof) .* prob.q_operator
-                Hp .= Ks .+ control.p[1](t,pcof) .* prob.p_operator
+                Hq .= prob.Ss .+ control.q[1](t,pcof) .* prob.q_operator
+                Hp .= prob.Ks .+ control.p[1](t,pcof) .* prob.p_operator
 
                 mul!(A, Hq, u)
                 mul!(A, Hp, v, -1, 1)
@@ -402,8 +402,8 @@ function discrete_adjoint(
                 
                 # H_α*H
                 # part 1
-                Hq .= Ss .+ control.q[1](t,pcof) .* prob.q_operator
-                Hp .= Ks .+ control.p[1](t,pcof) .* prob.p_operator
+                Hq .= prob.Ss .+ control.q[1](t,pcof) .* prob.q_operator
+                Hp .= prob.Ks .+ control.p[1](t,pcof) .* prob.p_operator
 
                 mul!(A, Hq, u)
                 mul!(A, Hp, v, -1, 1)
