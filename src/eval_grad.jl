@@ -1,31 +1,9 @@
 
 """
-
-    gradient = discrete_adjoint(prob, target, pcof; order=order, cost_type=cost_type, return_lambda_history=false)
-
 Evaluates gradient of the provided Schrodinger problem with the given target
 gate and control parameter(s) pcof using the discrete adjoint method. 
 
 Returns: gradient
-"""
-function discrete_adjoint(prob::SchrodingerProb{M, VM}, target::VM,
-        pcof::AbstractVector{Float64}; order=2, cost_type=:Infidelity,
-        return_lambda_history=false
-    ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
-
-    history = eval_forward(prob, pcof; order=order)
-    return discrete_adjoint(
-        prob.Ks, prob.Ss, prob.a_plus_adag, prob.a_minus_adag, prob.p, prob.q,
-        prob.dpdt, prob.dqdt, prob.dpda, prob.dqda, prob.d2p_dta, prob.d2q_dta,
-        prob.u0, prob.v0, prob.tf, prob.nsteps, prob.N_ess_levels,
-        prob.N_guard_levels, prob.N_tot_levels, target, pcof, history,
-        order=order, cost_type=cost_type, return_lambda_history=return_lambda_history
-    )
-end
-
-"""
-History is state vector history
-
 """
 function discrete_adjoint(
         prob::SchrodingerProb, control::Control{Nderivatives},
@@ -284,8 +262,8 @@ function discrete_adjoint(
             len_pcof_half = div(len_pcof, 2)
 
             # Efficient way, possibly incorrect
-            weights_n = [1,dt/6]
-            weights_np1 = [1,-dt/6]
+            weights_n   = [1, dt/6]
+            weights_np1 = [1, -dt/6]
             for n in 0:prob.nsteps-1
                 lambda_u = lambda_history[1:prob.N_tot_levels,     1+n+1]
                 lambda_v = lambda_history[1+prob.N_tot_levels:end, 1+n+1]
@@ -469,115 +447,118 @@ in the evolution of the original Schrodinger equation as a forcing term.
 
 Returns: gradient
 """
-function eval_grad_forced(prob::SchrodingerProb{M, VM}, target::VM,
-        α::AbstractVector{Float64}; order=2, cost_type=:Infidelity
+function eval_grad_forced(prob::SchrodingerProb{M, VM}, control::Control,
+        pcof::AbstractVector{Float64}, target::VM; order=2, 
+        cost_type=:Infidelity
     ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
+    @assert length(pcof) == control.N_coeff
 
     # Get state vector history
-    history = eval_forward(prob, α, order=order, return_time_derivatives=true)
+    history = eval_forward(prob, control, pcof, order=order, return_time_derivatives=true)
 
-    N_ess = prob.N_ess_levels
-    N_grd = prob.N_guard_levels
-    N_tot = prob.N_tot_levels
-
-    ## Prepare forcing (-idH/dα ψ)
+    ## Compute forcing array (-idH/dα ψ)
     # Prepare dH/dα
     
     # System hamiltonian is constant, falls out when taking derivative
-    dKs_da::Matrix{Float64} = zeros(N_tot,N_tot)
-    dSs_da::Matrix{Float64} = zeros(N_tot,N_tot)
-    a_plus_adag = prob.a_plus_adag
-    a_minus_adag = prob.a_minus_adag
-    dpda = prob.dpda
-    dqda = prob.dqda
-    d2p_dta = prob.d2p_dta
-    d2q_dta = prob.d2q_dta
+    dKs_da::Matrix{Float64} = zeros(prob.N_tot_levels, prob.N_tot_levels)
+    dSs_da::Matrix{Float64} = zeros(prob.N_tot_levels, prob.N_tot_levels)
 
-    gradient = zeros(length(α))
+    gradient = zeros(control.N_coeff)
 
-    forcing_ary = zeros(2*N_tot,1+prob.nsteps,1, size(prob.u0,2))
+    forcing_ary = zeros(2*prob.N_tot_levels, 1+prob.nsteps, div(order, 2), size(prob.u0, 2))
 
-    for control_param_index in 1:length(α)
-        for initial_condition_index = 1:size(prob.u0,2)
-            dpda(t,pcof) = prob.dpda(t,pcof)[control_param_index]
-            dqda(t,pcof) = prob.dqda(t,pcof)[control_param_index]
-            d2p_dta(t, pcof) = prob.d2p_dta(t,pcof)[control_param_index]
-            d2q_dta(t, pcof) = prob.d2q_dta(t,pcof)[control_param_index]
+    for control_param_index in 1:control.N_coeff
+        for initial_condition_index = 1:size(prob.u0, 2)
+            dpda(t, pcof) = partial_p(control, t, pcof, control_param_index, 1)
+            dqda(t, pcof) = partial_q(control, t, pcof, control_param_index, 1)
+            d2p_dta(t, pcof) = partial_p(control, t, pcof, control_param_index, 2)
+            d2q_dta(t, pcof) = partial_q(control, t, pcof, control_param_index, 2)
+
+            # 2nd order version
             if order == 2
-                forcing_vec = zeros(2*N_tot)
+                forcing_vec = zeros(2*prob.N_tot_levels)
 
-                u  = zeros(N_tot)
-                v  = zeros(N_tot)
-                ut = zeros(N_tot)
-                vt = zeros(N_tot)
+                u  = zeros(prob.N_tot_levels)
+                v  = zeros(prob.N_tot_levels)
+                ut = zeros(prob.N_tot_levels)
+                vt = zeros(prob.N_tot_levels)
 
-                nsteps = prob.nsteps
                 t = 0.0
-                dt = prob.tf/nsteps
+                dt = prob.tf/prob.nsteps
 
                 # Get forcing (dH/dα * ψ)
-                for n in 0:nsteps
-                    copyto!(u,history[1:N_tot    , 1+n, 1, initial_condition_index])
-                    copyto!(v,history[1+N_tot:end, 1+n, 1, initial_condition_index])
+                for n in 0:prob.nsteps
+                    copyto!(u, history[1:prob.N_tot_levels    , 1+n, 1, initial_condition_index])
+                    copyto!(v, history[1+prob.N_tot_levels:end, 1+n, 1, initial_condition_index])
 
-                    utvt!(ut, vt, u, v,
-                          dKs_da, dSs_da, a_plus_adag, a_minus_adag,
-                          dpda, dqda, t, α)
-                    copyto!(forcing_vec,1,ut,1,N_tot)
-                    copyto!(forcing_vec,1+N_tot,vt,1,N_tot)
+                    utvt!(
+                        ut, vt, u, v,
+                        dKs_da, dSs_da, prob.p_operator, prob.q_operator,
+                        dpda, dqda, t, pcof
+                    )
+                    copyto!(forcing_vec, 1,                   ut, 1, prob.N_tot_levels)
+                    copyto!(forcing_vec, 1+prob.N_tot_levels, vt, 1, prob.N_tot_levels)
 
-                    forcing_ary[:,1+n,1,initial_condition_index] .= forcing_vec
+                    forcing_ary[:, 1+n, 1, initial_condition_index] .= forcing_vec
 
                     t += dt
                 end
+
+            # 4th order version
             elseif order == 4
-                forcing_vec2 = zeros(2*N_tot)
-                forcing_vec4 = zeros(2*N_tot)
+                forcing_vec2 = zeros(2*prob.N_tot_levels)
+                forcing_vec4 = zeros(2*prob.N_tot_levels)
 
-                u  = zeros(N_tot)
-                v  = zeros(N_tot)
-                ut = zeros(N_tot)
-                vt = zeros(N_tot)
+                u  = zeros(prob.N_tot_levels)
+                v  = zeros(prob.N_tot_levels)
+                ut = zeros(prob.N_tot_levels)
+                vt = zeros(prob.N_tot_levels)
 
-                nsteps = prob.nsteps
                 t = 0.0
-                dt = prob.tf/nsteps
+                dt = prob.tf/prob.nsteps
 
                 # Get forcing (dH/dα * ψ)
-                for n in 0:nsteps
+                for n in 0:prob.nsteps
                     # Second Order Forcing
-                    u .= history[1:N_tot,     1+n, 1, initial_condition_index]
-                    v .= history[1+N_tot:end, 1+n, 1, initial_condition_index]
+                    u .= history[1:prob.N_tot_levels,     1+n, 1, initial_condition_index]
+                    v .= history[1+prob.N_tot_levels:end, 1+n, 1, initial_condition_index]
 
-                    utvt!(ut, vt, u, v, 
-                          dKs_da, dSs_da, a_plus_adag, a_minus_adag,
-                          dpda, dqda, t, α)
-                    forcing_vec2[1:N_tot] .= ut
-                    forcing_vec2[1+N_tot:end] .= vt
+                    utvt!(
+                        ut, vt, u, v, 
+                        dKs_da, dSs_da, prob.p_operator, prob.q_operator,
+                        dpda, dqda, t, pcof
+                    )
+                    forcing_vec2[1:prob.N_tot_levels]     .= ut
+                    forcing_vec2[1+prob.N_tot_levels:end] .= vt
 
-                    forcing_ary[:,1+n,1,initial_condition_index] .= forcing_vec2
+                    forcing_ary[:, 1+n, 1, initial_condition_index] .= forcing_vec2
 
                     # Fourth Order Forcing
-                    forcing_vec4 = zeros(2*N_tot)
+                    forcing_vec4 = zeros(2*prob.N_tot_levels)
 
-                    utvt!(ut, vt, u, v,
-                          dKs_da, dSs_da, a_plus_adag, a_minus_adag,
-                          d2p_dta, d2q_dta, t, α)
-                    forcing_vec4[1:N_tot] += ut
-                    forcing_vec4[1+N_tot:end] += vt
+                    utvt!(
+                        ut, vt, u, v,
+                        dKs_da, dSs_da, prob.p_operator, prob.q_operator,
+                          d2p_dta, d2q_dta, t, pcof)
+                    forcing_vec4[1:prob.N_tot_levels]     .+= ut
+                    forcing_vec4[1+prob.N_tot_levels:end] .+= vt
 
-                    ut .= history[1:N_tot,     1+n, 2, initial_condition_index]
-                    vt .= history[1+N_tot:end, 1+n, 2, initial_condition_index]
+                    ut .= history[1:prob.N_tot_levels,     1+n, 2, initial_condition_index]
+                    vt .= history[1+prob.N_tot_levels:end, 1+n, 2, initial_condition_index]
 
-                    A = zeros(N_tot) # Placeholders
-                    B = zeros(N_tot)
-                    utvt!(A, B, ut, vt,
-                          dKs_da, dSs_da, a_plus_adag, a_minus_adag,
-                          dpda, dqda, t, α)
-                    forcing_vec4[1:N_tot] += A
-                    forcing_vec4[1+N_tot:end] += B
+                    A = zeros(prob.N_tot_levels) # Placeholders
+                    B = zeros(prob.N_tot_levels)
 
-                    forcing_ary[:,1+n,2,initial_condition_index] .= forcing_vec4
+                    utvt!(
+                        A, B, ut, vt,
+                        dKs_da, dSs_da, prob.p_operator, prob.q_operator,
+                        dpda, dqda, t, pcof
+                    )
+
+                    forcing_vec4[1:prob.N_tot_levels]     .+= A
+                    forcing_vec4[1+prob.N_tot_levels:end] .+= B
+
+                    forcing_ary[:, 1+n, 2, initial_condition_index] .= forcing_vec4
 
                     t += dt
                 end
@@ -603,21 +584,22 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, target::VM,
             vec_prob.u0 .= 0.0
             vec_prob.v0 .= 0.0
             history_dQi_da = eval_forward_forced(
-                vec_prob, forcing_ary[:,:,:,initial_condition_index], α,
+                vec_prob, control, pcof, forcing_ary[:, :, :, initial_condition_index],
                 order=order
             )
-            dQda[:,initial_condition_index] .= history_dQi_da[:,end]
+            dQda[:,initial_condition_index] .= history_dQi_da[:, end]
         end
 
         R = copy(target)
-        T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
+        T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
 
         if cost_type == :Infidelity
-            gradient[control_param_index] = -(2/(N_ess^2))*(dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
+            gradient[control_param_index] = (dot(Q,R)*dot(dQda,R) + dot(Q,T)*dot(dQda,T))
+            gradient[control_param_index] *= -(2/(prob.N_ess_levels^2))
         elseif cost_type == :Tracking
             gradient[control_param_index] = dot(dQda, Q - target)
         elseif cost_type == :Norm
-            gradient[control_param_index] = dot(dQda,Q)
+            gradient[control_param_index] = dot(dQda, Q)
         else
             throw("Invalid cost type: $cost_type")
         end
@@ -631,24 +613,27 @@ end
 Vector control version.
 
 Evaluates gradient of the provided Schrodinger problem with the given target
-gate and control parameter(s) α using a finite difference method, where a step
-size of dα is used when perturbing the components of the control vector α.
+gate and control parameter(s) pcof using a finite difference method, where a step
+size of dpcof is used when perturbing the components of the control vector pcof.
 
 Returns: gradient
 """
 function eval_grad_finite_difference(prob::SchrodingerProb{M,M}, target::M,
-        α::AbstractVector{Float64}, dα=1e-5; order=2, cost_type=:Infidelity
+        pcof::AbstractVector{Float64}, dpcof=1e-5; order=2, cost_type=:Infidelity
     ) where {M <: AbstractMatrix{Float64}}
 
-    grad = zeros(length(α))
-    for i in 1:length(α)
+    grad = zeros(length(pcof))
+
+    for i in 1:length(pcof)
         # Centered Difference Approximation
-        α_r = copy(α)
-        α_r[i] += dα
-        α_l = copy(α)
-        α_l[i] -= dα
-        history_r = eval_forward(prob, α_r, order=order)
-        history_l = eval_forward(prob, α_l, order=order)
+        pcof_r = copy(pcof)
+        pcof_r[i] += dpcof
+
+        pcof_l = copy(pcof)
+        pcof_l[i] -= dpcof
+
+        history_r = eval_forward(prob, control, pcof_r, order=order)
+        history_l = eval_forward(prob, control, pcof_l, order=order)
         ψf_r = history_r[:,end,:]
         ψf_l = history_l[:,end,:]
         if cost_type == :Infidelity
@@ -663,27 +648,32 @@ function eval_grad_finite_difference(prob::SchrodingerProb{M,M}, target::M,
         else
             throw("Invalid cost type: $cost_type")
         end
-        grad[i] = (cost_r - cost_l)/(2*dα)
+        grad[i] = (cost_r - cost_l)/(2*dpcof)
     end
 
     return grad
 end
 
-function eval_grad_finite_difference(prob::SchrodingerProb{M, V}, target::V,
-        α::AbstractVector{Float64}, dα=1e-5; order=2, cost_type=:Infidelity
+function eval_grad_finite_difference(
+        prob::SchrodingerProb{M, V}, control::Control, 
+        pcof::AbstractVector{Float64}, target::V; dpcof=1e-5, order=2, 
+        cost_type=:Infidelity
     ) where {M<: AbstractMatrix{Float64}, V <: AbstractVector{Float64}}
 
-    grad = zeros(length(α))
-    for i in 1:length(α)
+    grad = zeros(control.N_coeff)
+
+    for i in 1:length(pcof)
         # Centered Difference Approximation
-        α_r = copy(α)
-        α_r[i] += dα
-        α_l = copy(α)
-        α_l[i] -= dα
-        history_r = eval_forward(prob, α_r, order=order)
-        history_l = eval_forward(prob, α_l, order=order)
-        ψf_r = history_r[:,end]
-        ψf_l = history_l[:,end]
+        pcof_r = copy(pcof)
+        pcof_r[i] += dpcof
+
+        pcof_l = copy(pcof)
+        pcof_l[i] -= dpcof
+
+        history_r = eval_forward(prob, control, pcof_r, order=order)
+        history_l = eval_forward(prob, control, pcof_l, order=order)
+        ψf_r = history_r[:, end]
+        ψf_l = history_l[:, end]
         if cost_type == :Infidelity
             cost_r = infidelity(ψf_r, target, prob.N_ess_levels)
             cost_l = infidelity(ψf_l, target, prob.N_ess_levels)
@@ -696,7 +686,7 @@ function eval_grad_finite_difference(prob::SchrodingerProb{M, V}, target::V,
         else
             throw("Invalid cost type: $cost_type")
         end
-        grad[i] = (cost_r - cost_l)/(2*dα)
+        grad[i] = (cost_r - cost_l)/(2*dpcof)
     end
 
     return grad
