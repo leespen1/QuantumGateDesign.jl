@@ -7,10 +7,16 @@ import Ipopt
 # I have added exclamation points because their purpose really is to mutate
 # vectors. They don't return anything meaningful.
 
+"""
+Unused, but need a function to provide to ipopt.
+"""
 function dummy_eval_g!(x::Vector{Float64}, g::Vector{Float64})
     return
 end
 
+"""
+Unused, but need a function to provide to ipopt.
+"""
 function dummy_eval_jacobian_g!(
     x::Vector{Float64},
     rows::Vector{Int32},
@@ -20,6 +26,9 @@ function dummy_eval_jacobian_g!(
     return
 end
 
+"""
+Unused, but need a function to provide to ipopt.
+"""
 function dummy_eval_hessian!(
         x::Vector{Float64},
         rows::Vector{Int32},
@@ -32,20 +41,24 @@ function dummy_eval_hessian!(
     return 
 end
 
+"""
+Unused, but need a function to provide to ipopt.
+"""
 function optimize_gate(
-        schro_prob::SchrodingerProb{M, VM}, target::VM, pcof_init::V;
+        schro_prob::SchrodingerProb{M, VM}, control::Control,
+        pcof_init::AbstractVector{Float64}, target::VM
     ) where {V<:AbstractVector{Float64}, VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
     # Right now I am unnecessarily doing a full forward evolution to compute the
     # infidelity, when this should be done already in the gradient computation.
     function eval_f(pcof::Vector{Float64})
-        history = eval_forward(schro_prob, pcof)
+        history = eval_forward(schro_prob, control, pcof)
         QN = history[:,end,:]
         return infidelity(QN, target, schro_prob.N_ess_levels)
     end
 
     function eval_grad_f!(pcof::Vector{Float64}, grad_f::Vector{Float64})
-        grad_f .= discrete_adjoint(schro_prob, target, pcof)
+        grad_f .= discrete_adjoint(schro_prob, control, target, pcof)
     end
 
     N_coeff = length(pcof_init)
