@@ -58,7 +58,7 @@ function optimize_gate(
     end
 
     function eval_grad_f!(pcof::Vector{Float64}, grad_f::Vector{Float64})
-        grad_f .= discrete_adjoint(schro_prob, control, target, pcof)
+        grad_f .= discrete_adjoint(schro_prob, control, pcof, target)
     end
 
     N_coeff = length(pcof_init)
