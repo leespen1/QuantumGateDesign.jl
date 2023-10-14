@@ -27,17 +27,20 @@ function bspline_control(bcpar)
     return Control(p_vec, q_vec, grad_p_vec, grad_q_vec, N_coeff)
 end
 
-function qubit_with_bspline(ground_state_transition_frequency,
+"""
+Single qubit in the rotating frame, with rotating wave approximation.
+"""
+function qubit_with_bspline(detuning_frequency,
         self_kerr_coefficient, N_ess_levels, N_guard_levels;
-        N_coeff_per_control = 4, tf=1.0, nsteps=10
+        N_coeff_per_control = 4, tf=1.0, nsteps=10, 
     )
 
     prob = single_transmon_qubit_rwa(
-        ground_state_transition_frequency, self_kerr_coefficient, N_ess_levels,
+        detuning_frequency, self_kerr_coefficient, N_ess_levels,
         N_guard_levels, tf, nsteps
     )
 
-    omega::Vector{Vector{Float64}} = [[ground_state_transition_frequency]] # 1 frequency for 1 pair of coupled controls (p and q)
+    omega::Vector{Vector{Float64}} = [[detuning_frequency]] # 1 frequency for 1 pair of coupled controls (p and q)
     pcof = ones(2*N_coeff_per_control) # Put in dummy pcof, just so the length is known
     # Use simplest constructor
     bcpar = bcparams(prob.tf, N_coeff_per_control, omega, pcof) 

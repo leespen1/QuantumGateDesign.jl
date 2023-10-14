@@ -63,7 +63,7 @@ function discrete_adjoint(
 
             RHS .= terminal_RHS[:,initial_condition_index]
 
-            LHS_map = LinearMap(
+            LHS_map = LinearMaps.LinearMap(
                 x -> LHS_func(
                     lambda_ut, lambda_vt, x[1:prob.N_tot_levels],
                     x[1+prob.N_tot_levels:end], Ks_adj, Ss_adj, p_operator_adj,
@@ -72,7 +72,7 @@ function discrete_adjoint(
                 ),
                 2*prob.N_tot_levels,2*prob.N_tot_levels
             )
-            gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+            IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
             lambda_history[:,1+prob.nsteps] .= lambda
             lambda_u = copy(lambda[1:prob.N_tot_levels])
@@ -97,7 +97,7 @@ function discrete_adjoint(
 
                 # NOTE: LHS and RHS Linear transformations use the SAME TIME
 
-                LHS_map = LinearMap(
+                LHS_map = LinearMaps.LinearMap(
                     x -> LHS_func(
                         lambda_ut, lambda_vt, x[1:prob.N_tot_levels],
                         x[1+prob.N_tot_levels:end], Ks_adj, Ss_adj,
@@ -107,7 +107,7 @@ function discrete_adjoint(
                     2*prob.N_tot_levels,2*prob.N_tot_levels
                 )
 
-                gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+                IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
                 lambda_history[:,1+n] .= lambda
                 lambda_u = lambda[1:prob.N_tot_levels]
                 lambda_v = lambda[1+prob.N_tot_levels:end]
@@ -164,7 +164,7 @@ function discrete_adjoint(
 
             RHS .= terminal_RHS[:,initial_condition_index]
 
-            LHS_map = LinearMap(
+            LHS_map = LinearMaps.LinearMap(
                 x -> LHS_func_order4(
                     lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
                     x[1:prob.N_tot_levels], x[1+prob.N_tot_levels:end],
@@ -175,7 +175,7 @@ function discrete_adjoint(
                 2*prob.N_tot_levels,2*prob.N_tot_levels
             )
 
-            gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+            IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
             lambda_history[:,1+prob.nsteps] .= lambda
             lambda_u = copy(lambda[1:prob.N_tot_levels])
@@ -210,7 +210,7 @@ function discrete_adjoint(
 
                 # NOTE: LHS and RHS Linear transformations use the SAME TIME
 
-                LHS_map = LinearMap(
+                LHS_map = LinearMaps.LinearMap(
                     x -> LHS_func_order4(
                         lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
                         x[1:prob.N_tot_levels], x[1+prob.N_tot_levels:end],
@@ -221,7 +221,7 @@ function discrete_adjoint(
                     2*prob.N_tot_levels,2*prob.N_tot_levels
                 )
 
-                gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+                IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
                 lambda_history[:,1+n] .= lambda
                 lambda_u = lambda[1:prob.N_tot_levels]
                 lambda_v = lambda[1+prob.N_tot_levels:2*prob.N_tot_levels]
