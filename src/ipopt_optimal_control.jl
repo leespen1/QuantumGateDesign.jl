@@ -52,6 +52,7 @@ function optimize_gate(
     # Right now I am unnecessarily doing a full forward evolution to compute the
     # infidelity, when this should be done already in the gradient computation.
     function eval_f(pcof::Vector{Float64})
+        println(pcof)
         history = eval_forward(schro_prob, control, pcof)
         QN = history[:,end,:]
         return infidelity(QN, target, schro_prob.N_ess_levels)
@@ -63,7 +64,7 @@ function optimize_gate(
 
     N_coeff = length(pcof_init)
     x_L = zeros(N_coeff)
-    x_U = ones(N_coeff) .* 2
+    x_U = ones(N_coeff) .* 100
 
     N_constraints = 0
     g_L = Vector{Float64}()
@@ -87,6 +88,16 @@ function optimize_gate(
         dummy_eval_jacobian_g!,
         dummy_eval_hessian!,
     )
+
+    #=
+    addOption( prob, "hessian_approximation", "limited-memory");
+    addOption( prob, "limited_memory_max_history", lbfgsMax); # Max number of past iterations for hessian approximation
+    addOption( prob, "max_iter", maxIter);
+    addOption( prob, "tol", ipTol);
+    addOption( prob, "acceptable_tol", acceptTol);
+    addOption( prob, "acceptable_iter", acceptIter);
+    addOption( prob, "jacobian_approximation", "exact");
+    =#
 
     ipopt_prob.x .= pcof_init
     solvestat = Ipopt.IpoptSolve(ipopt_prob)
