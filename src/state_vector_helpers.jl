@@ -36,6 +36,10 @@ end
 
 """
 Given state vector history, plot population evolution (assuming single qubit for labels).
+
+Should make a version that takes a Schrodinger problem as an input, so I can
+get the number of subsystems, etc.
+
 """
 function plot_populations(history::AbstractMatrix{Float64})
     populations = get_populations(history)
