@@ -10,82 +10,71 @@ using Test
 # the exact same results up to machine precision.
 #
 =#
-
-nsteps = 5 # Use a small number of steps for these correctness tests, to lower computational cost
+detuning_frequency = 1.0
+self_kerr_coefficient = 0.5
 
 N_ess = 2
 N_guard = 0
-#probs = [rabi_osc(N_ess, N_guard, nsteps=nsteps),
-#         gargamel_prob(nsteps=nsteps),
-#         ]
-#pcofs = [rand(), rand(4), rand(1)]
-probs = [bspline_prob(nsteps=nsteps), gargamel_prob(nsteps=nsteps),
-         rabi_osc(N_ess, N_guard, nsteps=nsteps)]
-probs_strs = ["Bspline Prob", "Gargamel Prob", "Rabi Oscilator"]
+
+N_coeff_per_control = 4
+
+tf=1.0
+nsteps = 5 # Use few steps for tests, care about algorithm correctness, not physical accuracy
+
+prob, control = HermiteOptimalControl.qubit_with_bspline(
+    detuning_frequency,
+    self_kerr_coefficient,
+    N_ess,
+    N_guard,
+    tf=tf,
+    nsteps=nsteps,
+    N_coeff_per_control=N_coeff_per_control
+)
+
+target = rand(4,2)
+pcof = rand(8)
+
 orders = [2, 4]
 cost_types = [:Infidelity, :Tracking, :Norm]
-
-# May be better to use a consistent-between-tests set of randomly generated 
-# variables, instead of regenerating each time.
-pcofs = [rand(8), rand(4), rand()]
-target = rand(4)
 
 @testset "Checking Gradient Agreement Between Methods" begin
 
 # Check that gradients calculated using discrete adjoint and finite difference
 # methods agree to reasonable precision
-@testset "Discrete Adjoint Vs Finite Difference" begin
-for (i, prob) in enumerate(probs)
-    prob_str = probs_strs[i]
-    pcof = pcofs[i]
-    @testset "Problem: $prob_str" begin
-    for cost_type in cost_types
-        @testset "Cost function: $cost_type" begin
-        for order in orders
-            @testset "Order: $order" begin
-            grad_disc_adj = discrete_adjoint(prob, target, pcof, order=order, cost_type=cost_type)
-            grad_fin_diff = eval_grad_finite_difference(prob, target, pcof, order=order, cost_type=cost_type)
-            absolute_tolerance = 1e-9 # Might want to relax this to 1e-9.
+@testset "Discrete Adjoint Vs Finite Difference Vs Forced Method" begin
+for cost_type in cost_types
+    @testset "Cost function: $cost_type" begin
+    for order in orders
+        @testset "Order: $order" begin
+        grad_disc_adj = discrete_adjoint(prob, control, pcof, target, order=order, cost_type=cost_type)
 
+        grad_forced = eval_grad_forced(prob, control, pcof, target, order=order, cost_type=cost_type)
+        grad_fin_diff = eval_grad_finite_difference(prob, control, pcof, target, order=order, cost_type=cost_type)
+
+        forced_atol = 1e-14
+        fin_diff_atol = 1e-9 # Might want to relax this to 1e-9.
+
+        @testset "Forced Method" begin
             for k in 1:length(grad_disc_adj)
-                @test isapprox(grad_disc_adj[k], grad_fin_diff[k], atol = absolute_tolerance)
+                @test isapprox(grad_disc_adj[k], grad_forced[k], atol=forced_atol)
             end
-            end #@testset
         end
-        end #@testset
-    end
-    end #@testset
-end
-end #@testset "Discrete Adjoint Vs Finite Difference"
 
-# Check agreement between discrete adjoint and forward differentiation
-@testset "Discrete Adjoint Vs Forward Differentiation" begin
-for (i, prob) in enumerate(probs)
-    prob_str = probs_strs[i]
-    pcof = pcofs[i]
-    @testset "Problem: $prob_str" begin
-    for cost_type in cost_types
-        @testset "Cost function: $cost_type" begin
-        for order in orders
-            @testset "Order: $order" begin
-            grad_disc_adj = discrete_adjoint(prob, target, pcof, order=order, cost_type=cost_type)
-            grad_fwd_diff = eval_grad_forced(prob, target, pcof, order=order, cost_type=cost_type)
-            absolute_tolerance = 1e-14 # Might want to relax this
-
+        @testset "Finite Difference" begin
             for k in 1:length(grad_disc_adj)
-                @test isapprox(grad_disc_adj[k], grad_fwd_diff[k], atol = absolute_tolerance)
+                @test isapprox(grad_disc_adj[k], grad_fin_diff[k], atol=fin_diff_atol)
             end
-            end #@testset
         end
-        end #@testset
+
+        end #@testset "Order: $order"
     end
-    end #@testset
+    end #@testset "Cost function: $cost_type"
 end
-end #@testset "Discrete Adjoint Vs Forward Differentiation"
+end # @testset "Discrete Adjoint Vs Finite Difference Vs Forced Method"
 
 end # @testset "Checking Gradient Agreement Between Methods"
-println("End Tests")
 
-# Should I also add an automated test for convergence?
-# I can precompute a "true" solution if I keep the variables the same between
-# tests.
+@testset "Covergence" begin
+# Should check that convergence of forward evolution is of the correct order.
+end
+
