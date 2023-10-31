@@ -2,7 +2,7 @@ module HermiteOptimalControl
 
 
 import LinearMaps, IterativeSolvers, Plots, Ipopt
-using LinearAlgebra: mul!, axpy!, dot, tr
+using LinearAlgebra: mul!, axpy!, dot, tr, norm
 
 # Export schrodinger problem definition and forward evolution methods
 export SchrodingerProb, VectorSchrodingerProb, eval_forward, eval_forward_forced
