@@ -36,9 +36,9 @@ function discrete_adjoint(
         terminal_RHS = (dot(history[:,end,:],R)*R + dot(history[:,end,:],T)*T)
         terminal_RHS *= (2.0/(prob.N_ess_levels^2))
     elseif cost_type == :Tracking
-        terminal_RHS = -(history[:,end] - target)
+        terminal_RHS = -(history[:,end,:] - target)
     elseif cost_type == :Norm
-        terminal_RHS = -history[:,end]
+        terminal_RHS = -history[:,end,:]
     else
         throw("Invalid cost type: $cost_type")
     end
