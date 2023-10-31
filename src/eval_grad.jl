@@ -618,9 +618,11 @@ size of dpcof is used when perturbing the components of the control vector pcof.
 
 Returns: gradient
 """
-function eval_grad_finite_difference(prob::SchrodingerProb{M,M}, target::M,
-        pcof::AbstractVector{Float64}, dpcof=1e-5; order=2, cost_type=:Infidelity
-    ) where {M <: AbstractMatrix{Float64}}
+function eval_grad_finite_difference(
+        prob::SchrodingerProb, control::Control,
+        pcof::AbstractVector{Float64}, target::AbstractMatrix{Float64}, 
+        dpcof=1e-5; order=2, cost_type=:Infidelity,
+    )
 
     grad = zeros(length(pcof))
 
