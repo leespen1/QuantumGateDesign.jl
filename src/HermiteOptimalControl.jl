@@ -43,4 +43,6 @@ include("state_vector_helpers.jl")
 #include("ExampleProblems/gargamel_prob.jl")
 include("ExampleProblems/bspline_prob.jl")
 
+include("../test/test_gradient.jl")
+
 end # module HermiteOptimalControl
