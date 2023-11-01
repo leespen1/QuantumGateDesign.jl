@@ -52,11 +52,28 @@ function partial_q(
     return control.grad_q[derivative_index](t, pcof)[coefficient_index]
 end
 
+function Control(p_vec::Vector{Function}, q_vec::Vector{Function}, N_coeff::Int)
+    N_derivatives = length(p_vec)
+    @assert N_derivatives == length(q_vec)
+
+    grad_p_vec = Vector{Function}(undef, N_derivatives)
+    grad_q_vec = Vector{Function}(undef, N_derivatives)
+
+    # Compute gradients of control functions (and time derivatives) with
+    # respect to control parameters
+    for k = 1:N_derivatives
+        grad_p_vec[k] = (t, pcof) -> ForwardDiff.gradient(pcof_dummy -> p_vec[k](t, pcof_dummy), pcof)
+        grad_q_vec[k] = (t, pcof) -> ForwardDiff.gradient(pcof_dummy -> q_vec[k](t, pcof_dummy), pcof)
+    end
+
+    return Control(p_vec, q_vec, grad_p_vec, grad_q_vec, N_coeff)
+end
+
 """
 Alternative constructor. Use automatic differentiation to get derivatives of 
 control functions.
 
-Could do it to infinitely high order using lazy arrays.
+Could do it to implement infinitely high order using lazy arrays.
 """
 function Control(p::Function, q::Function, N_coeff::Int, N_derivatives::Int)
 
