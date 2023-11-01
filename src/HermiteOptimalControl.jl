@@ -44,7 +44,9 @@ include("state_vector_helpers.jl")
 #include("ExampleProblems/rabi_prob.jl")
 #include("ExampleProblems/gargamel_prob.jl")
 include("ExampleProblems/bspline_control.jl")
+include("ExampleProblems/sincos_control.jl")
 
 include("../test/test_gradient.jl")
+include("../test/test_convergence.jl")
 
 end # module HermiteOptimalControl
