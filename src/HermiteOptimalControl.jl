@@ -1,7 +1,7 @@
 module HermiteOptimalControl
 
 
-import LinearMaps, IterativeSolvers, Plots, Ipopt
+import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 
 # Export schrodinger problem definition and forward evolution methods
@@ -18,13 +18,15 @@ export gradient_test, plot_gradients, plot_gradient_deviation
 export convergence_test!, plot_convergence_test
 
 # Export specific problem definitions
-export single_qubit_with_bspline_control, bspline_control
+export single_qubit_prob_with_bspline_control, bspline_control
 
 export infidelity
 
 export optimize_gate
 
 export get_populations, target_helper, plot_populations
+
+export Control
 
 include("SchrodingerProb.jl")
 include("bsplines.jl")
