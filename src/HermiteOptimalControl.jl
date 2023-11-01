@@ -18,7 +18,7 @@ export gradient_test, plot_gradients, plot_gradient_deviation
 export convergence_test!, plot_convergence_test
 
 # Export specific problem definitions
-export qubit_with_bspline, bspline_control
+export single_qubit_with_bspline_control, bspline_control
 
 export infidelity
 
@@ -41,7 +41,7 @@ include("state_vector_helpers.jl")
 
 #include("ExampleProblems/rabi_prob.jl")
 #include("ExampleProblems/gargamel_prob.jl")
-include("ExampleProblems/bspline_prob.jl")
+include("ExampleProblems/bspline_control.jl")
 
 include("../test/test_gradient.jl")
 
