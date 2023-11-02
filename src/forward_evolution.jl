@@ -213,7 +213,7 @@ function eval_forward_order4(
             2*prob.N_tot_levels, 2*prob.N_tot_levels
         )
 
-        IterativeSolvers.gmres!(uv, LHS_map, RHS)
+        IterativeSolvers.gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
         uv_history[:,1+n+1] .= uv
 
         u = uv[1:prob.N_tot_levels]
