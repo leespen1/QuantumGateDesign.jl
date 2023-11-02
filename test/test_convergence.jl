@@ -22,16 +22,15 @@ function plot_history_convergence(prob, control, pcof, N_iterations;
     yticks = [10.0 ^ n for n in -15:15] 
     Plots.plot!(pl, yticks=yticks, legend=:topleft)
 
+    # Get "true" solution using many timesteps with highest order method
+    most_steps = base_nsteps*(nsteps_change_factor ^ N_iterations)
+    prob_copy.nsteps = most_steps
+    true_history = eval_forward(prob_copy, control, pcof, order=orders[end])
+
+    # Parse history to include only times included when using base_nsteps
+    true_history = true_history[:,1:(nsteps_change_factor^N_iterations):end,:]
+
     for order in orders
-
-        # Get "true" solution using many timesteps
-        most_steps = base_nsteps*(nsteps_change_factor ^ N_iterations)
-        prob_copy.nsteps = most_steps
-        true_history = eval_forward(prob_copy, control, pcof)
-
-        # Parse history to include only times included when using base_nsteps
-        true_history = true_history[:,1:(nsteps_change_factor^N_iterations):end,:]
-
         errors = Vector{Float64}(undef, N_iterations)
 
         for k in 1:N_iterations
