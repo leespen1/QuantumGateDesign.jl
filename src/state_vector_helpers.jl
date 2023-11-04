@@ -27,7 +27,7 @@ end
 =#
 
 function get_populations(history::AbstractArray{T}) where T <: Real
-    return abs.(real_to_complex(history))
+    return (abs.(real_to_complex(history))) .^ 2
 end
 
 
