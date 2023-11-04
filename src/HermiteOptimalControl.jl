@@ -24,9 +24,12 @@ export infidelity
 
 export optimize_gate
 
-export get_populations, target_helper, plot_populations
+export get_populations, target_helper, plot_populations, real_to_complex, complex_to_real
 
 export Control
+
+export rotating_frame_qubit
+export initial_basis
 
 include("SchrodingerProb.jl")
 include("bsplines.jl")
@@ -45,6 +48,7 @@ include("state_vector_helpers.jl")
 #include("ExampleProblems/gargamel_prob.jl")
 include("ExampleProblems/bspline_control.jl")
 include("ExampleProblems/sincos_control.jl")
+include("ExampleProblems/standard_prob.jl")
 
 include("../test/test_gradient.jl")
 include("../test/test_convergence.jl")
