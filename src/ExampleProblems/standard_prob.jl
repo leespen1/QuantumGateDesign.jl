@@ -38,7 +38,7 @@ Later, should make version of this for multiple qubits.
 function lowering_operator(N_tot_levels::Int)
     lowering_operator = zeros(N_tot_levels, N_tot_levels)
     for i = 2:N_tot_levels
-        lowering_operator[i-1,i] = sqrt(i)
+        lowering_operator[i-1,i] = sqrt(i-1)
     end
     return lowering_operator
 end
