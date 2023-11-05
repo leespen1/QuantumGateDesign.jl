@@ -92,8 +92,8 @@ function optimize_gate(
 
     maxIter = 50
     lbfgsMax = 200
-    coldStart=true
-    acceptTol=1e-5
+    coldStart = true
+    acceptTol = 1e-5
     ipTol = 1e-5
     acceptIter = 1
 
