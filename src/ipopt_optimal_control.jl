@@ -55,7 +55,7 @@ function optimize_gate(
     # Right now I am unnecessarily doing a full forward evolution to compute the
     # infidelity, when this should be done already in the gradient computation.
     function eval_f(pcof::Vector{Float64})
-        println(pcof)
+        #println(pcof)
         history = eval_forward(schro_prob, control, pcof, order=order)
         QN = @view history[:,end,:]
         return infidelity(QN, target, schro_prob.N_ess_levels)
@@ -97,28 +97,25 @@ function optimize_gate(
     )
 
     maxIter = 50
-    lbfgsMax = 200
-    coldStart = true
-    acceptTol = 1e-5 # Num
-    ipTol = 1e-5
-    acceptIter = 5 # Number of "succesful" iterations before calling it quits
+    lbfgsMax = 200 
+    acceptTol = 1e-6 
+    ipTol = 1e-8
+    acceptIter = 10 # Number of "acceptable" iterations before calling it quits
+    print_level = 5 # Default is 5
 
-    #Ipopt.AddIpoptIntOption(ipopt_prob, "acceptable_iter", acceptIter)
+    # Description of options: https://coin-or.github.io/Ipopt/OPTIONS.html
+
     Ipopt.AddIpoptStrOption(ipopt_prob, "hessian_approximation", "limited-memory"); # Use L-BFGS, approximate hessian
-    Ipopt.AddIpoptIntOption(ipopt_prob, "limited_memory_max_history", lbfgsMax);
-    Ipopt.AddIpoptIntOption(ipopt_prob, "max_iter", maxIter);
-    Ipopt.AddIpoptNumOption(ipopt_prob, "tol", ipTol);
-    Ipopt.AddIpoptNumOption(ipopt_prob, "acceptable_tol", acceptTol);
-    Ipopt.AddIpoptIntOption(ipopt_prob, "acceptable_iter", acceptIter);
+    Ipopt.AddIpoptIntOption(ipopt_prob, "limited_memory_max_history", lbfgsMax); # Maximum number of gradients to use for Hessian approximation (not really a memory concern for me)
+    Ipopt.AddIpoptIntOption(ipopt_prob, "max_iter", maxIter); # Maximum number of iterations to run before terminating
+    Ipopt.AddIpoptNumOption(ipopt_prob, "tol", ipTol); # Relative convergence tolerance. Terminate if (scaled) NLP error becomes smaller than this (NLP = Nonlinear Programming, is NLP error just objective function, or something closely related?)
+    Ipopt.AddIpoptNumOption(ipopt_prob, "acceptable_tol", acceptTol); # "Acceptable" relative convergence tolerance
+    Ipopt.AddIpoptIntOption(ipopt_prob, "acceptable_iter", acceptIter); # If we perform this many iterations with "acceptable" NLP error, terminate optimization process (useful if we can't reach desired tolerance)
     Ipopt.AddIpoptStrOption(ipopt_prob, "jacobian_approximation", "exact");
     #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "first-order") # What does this do?
     Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "none") # Not sure what derivative test does, but it takes a minute.
+    Ipopt.AddIpoptIntOption(ipopt_prob, "print_level", print_level)  
 
-    #=
-    addOption(ipopt_prob, "hessian_approximation", "limited-memory");
-    addOption(ipopt_prob, "limited_memory_max_history", lbfgsMax); # Max number of past iterations for hessian approximation
-    addOption(ipopt_prob, "jacobian_approximation", "exact");
-    =#
 
     ipopt_prob.x .= pcof_init
     solvestat = Ipopt.IpoptSolve(ipopt_prob)
