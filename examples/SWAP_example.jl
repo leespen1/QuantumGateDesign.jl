@@ -24,28 +24,40 @@
 
 using HermiteOptimalControl
 
-# Set up problem
-N_ess_levels = 2
-N_guard_levels = 2
-tf = 140.0 # If everything else is in GHz, then I think 140 should be 140 ns
-nsteps = 14787
+function main(N_ess_levels=2, N_guard_levels=0)
+    # Set up problem
+    tf = 140.0 # If everything else is in GHz, then I think 140 should be 140 ns
+    nsteps=10
+    #nsteps = 14787
 
-detuning_frequency = 0.0
-self_kerr_coefficient =  2*pi*0.22 
+    detuning_frequency = 0.0
+    self_kerr_coefficient =  2*pi*0.22 
 
-prob = rotating_frame_qubit(
-    N_ess_levels,
-    N_guard_levels,
-    tf=tf, 
-    detuning_frequency=detuning_frequency,
-    self_kerr_coefficient=self_kerr_coefficient,
-    nsteps = nsteps
-)
+    prob = rotating_frame_qubit(
+        N_ess_levels,
+        N_guard_levels,
+        tf=tf, 
+        detuning_frequency=detuning_frequency,
+        self_kerr_coefficient=self_kerr_coefficient,
+        nsteps = nsteps
+    )
 
-# Set up control
-D1 = 10
-carrier_wave_freqs = [(k-1)*(-self_kerr_coefficient) for k in 1:N_ess_levels]
+    # Set up control
+    D1 = 10
+    carrier_wave_freqs = [(k-1)*(-self_kerr_coefficient) for k in 1:N_ess_levels]
 
-control = bspline_control(tf, D1, carrier_wave_freqs)
+    control = bspline_control(tf, D1, carrier_wave_freqs)
 
-pcof = rand(2*D1*N_ess_levels)
+    pcof = rand(2*D1*N_ess_levels)
+
+    SWAP_target_complex = zeros(N_ess_levels,N_ess_levels)
+    for i in 1:N_ess
+        SWAP_target_complex[1+N_ess_levels-i,i] = 1
+    end
+
+    SWAP_target_real = target_helper(SWAP_target_complex, N_guard_levels)
+
+    return prob, control, pcof, SWAP_target_real
+end
+
+
