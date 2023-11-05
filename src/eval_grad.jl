@@ -702,7 +702,7 @@ Calculates the infidelity for the given state vector 'ψ' and target state
 
 Returns: Infidelity
 """
-function infidelity(ψ::V, target::V, N_ess::Int64) where {V <: AbstractVector{Float64}}
+function infidelity(ψ::AbstractVector{Float64}, target::AbstractVector{Float64}, N_ess::Int64) where {V <: AbstractVector{Float64}}
     R = copy(target)
     N_tot = size(target,1)÷2
     T = vcat(R[1+N_tot:end], -R[1:N_tot])
@@ -717,7 +717,7 @@ of target states 'target.'
 
 Returns: Infidelity
 """
-function infidelity(Q::M, target::M, N_ess::Int64) where {M <: AbstractMatrix{Float64}}
+function infidelity(Q::AbstractMatrix{Float64}, target::AbstractMatrix{Float64}, N_ess::Int64)
     R = copy(target)
     N_tot = size(target,1)÷2
     T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
