@@ -1,7 +1,8 @@
 using GLMakie
 using HermiteOptimalControl
 
-function visualize_control(control, range=LinRange(0,1,101); prob=missing, pcof_init=missing)
+function visualize_control(control, range=LinRange(0,1,101); prob=missing, 
+        pcof_init=missing, use_slidergrid=true)
     # Set up Makie figure and axis for plotting
     fig = Figure(; resolution=(1000,1000))
     ax = Axis(fig[1,1])
@@ -14,15 +15,23 @@ function visualize_control(control, range=LinRange(0,1,101); prob=missing, pcof_
         startvalues .= pcof_init
     end
 
-    pcof_slider_parameters = [
-        (label="pcof[$i]", range=range, startvalue=startvalues[i])
-        for i in 1:control.N_coeff
-    ]
-    pcof_slidergrid = SliderGrid(fig[2,1], pcof_slider_parameters...)
+    if use_slidergrid
+        pcof_slider_parameters = [
+            (label="pcof[$i]", range=range, startvalue=startvalues[i])
+            for i in 1:control.N_coeff
+        ]
+        pcof_slidergrid = SliderGrid(fig[4,1], pcof_slider_parameters...)
 
-    # Set up link between slider values and pcof observable values
-    for i in 1:control.N_coeff
-        pcof_o[i] = lift(x -> x, pcof_slidergrid.sliders[i].value)
+        # Set up link between slider values and pcof observable values
+        for i in 1:control.N_coeff
+            pcof_o[i] = lift(x -> x, pcof_slidergrid.sliders[i].value)
+        end
+    elseif !ismissing(pcof_init)
+        for i in 1:control.N_coeff
+            pcof_o[i] = Observable{Float64}(pcof_init[i])
+        end
+    else
+        throw("use_slidergrid=false, but no initial control vector provided")
     end
 
 
@@ -34,15 +43,19 @@ function visualize_control(control, range=LinRange(0,1,101); prob=missing, pcof_
     ts_o = lift((t,n) -> LinRange(0,t,n), tf_o, n_points_o)
 
     # Setup textbox for modification of final time, and number of grid points
-    tb_tf = Textbox(fig[3,1], placeholder= "Enter final time", validator=Float64, tellwidth=false)
+    tb_tf = Textbox(fig[2,1], placeholder= "Enter final time", validator=Float64, tellwidth=false)
     on(tb_tf.stored_string) do s
         tf_o[] = parse(Float64, s)
     end
 
-    tb_npoints = Textbox(fig[4,1], placeholder= "Number of gridpoints", validator=Int64, tellwidth=false)
+    tb_npoints = Textbox(fig[3,1], placeholder= "Number of gridpoints", validator=Int64, tellwidth=false)
     on(tb_npoints.stored_string) do s
         n_points_o[] = parse(Int64, s)
     end
+
+    # Set up function value observables
+    p_vals_o = Observable(zeros(n_points_o[]))
+    q_vals_o = Observable(zeros(n_points_o[]))
 
     # Set up function for updating values of p and q when coefficients or times change
     function update_graph()
@@ -65,6 +78,9 @@ function visualize_control(control, range=LinRange(0,1,101); prob=missing, pcof_
         =#
     end
 
+    # Initial update
+    update_graph()
+
     # Set xlims to track final time (and leave a fraction of the window empty)
     on(tf_o) do tf
         xlims!(ax, -(1/16)*tf, tf*(1+(1/16)))
@@ -74,10 +90,6 @@ function visualize_control(control, range=LinRange(0,1,101); prob=missing, pcof_
     on(n_points_o) do n_points
         update_graph()
     end
-
-    # Set up function value observables
-    p_vals_o = Observable(zeros(n_points_o[]))
-    q_vals_o = Observable(zeros(n_points_o[]))
 
     # Set up population value observables
     #=
