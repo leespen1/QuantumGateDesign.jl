@@ -45,7 +45,7 @@ function plot_history_convergence(prob, control, pcof, N_iterations;
 
         end
 
-        step_sizes = prob.tf ./ [nsteps_change_factor^k for k in 0:N_iterations-1]
+        step_sizes = (prob.tf/nsteps) ./ [nsteps_change_factor^k for k in 0:N_iterations-1]
 
         Plots.plot!(pl, step_sizes, errors, marker=:circle, markersize=5, label="Order=$order")
         Plots.plot!(pl, step_sizes, step_sizes .^ order, label="Δt^$order")
