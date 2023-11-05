@@ -10,7 +10,8 @@ solutions, with the number of points in time compared taken to be the number
 of points in time when using the fewest steps / largest step size.
 """
 function plot_history_convergence(prob, control, pcof, N_iterations;
-        orders=[2, 4], nsteps_change_factor=2
+        orders=[2, 4], nsteps_change_factor=2,
+        return_data=false
     )
     base_nsteps = prob.nsteps
 
@@ -18,7 +19,7 @@ function plot_history_convergence(prob, control, pcof, N_iterations;
     prob_copy = copy(prob)
     histories = Vector[]
 
-    pl = Plots.plot(xlabel="Step Size Δt", ylabel="Error", scale=:log10)
+    pl = Plots.plot(xlabel="Step Size Δt", ylabel="Relative Error", scale=:log10)
     yticks = [10.0 ^ n for n in -15:15] 
     Plots.plot!(pl, yticks=yticks, legend=:topleft)
 
@@ -30,7 +31,9 @@ function plot_history_convergence(prob, control, pcof, N_iterations;
     # Parse history to include only times included when using base_nsteps
     true_history = true_history[:,1:(nsteps_change_factor^N_iterations):end,:]
 
-    for order in orders
+    errors_all = Matrix{Float64}(undef, N_iterations, 2*length(orders))
+
+    for (j, order) in enumerate(orders)
         errors = Vector{Float64}(undef, N_iterations)
 
         for k in 1:N_iterations
@@ -40,17 +43,25 @@ function plot_history_convergence(prob, control, pcof, N_iterations;
             # Skip over steps to match base_nsteps solution
             history = history[:,1:nsteps_multiplier:end,:]
 
-            error = norm(history - true_history)
+            error = norm(history - true_history)/norm(true_history)
             errors[k] = error
 
         end
-
         step_sizes = (prob.tf/base_nsteps) ./ [nsteps_change_factor^k for k in 0:N_iterations-1]
 
+        order_line = step_sizes .^ order
+        order_line .*= 2 * errors[end]/order_line[end] # Adjust vertical position to match data, with small offset for visibility
+
         Plots.plot!(pl, step_sizes, errors, marker=:circle, markersize=5, label="Order=$order")
-        Plots.plot!(pl, step_sizes, step_sizes .^ order, label="Δt^$order")
+        Plots.plot!(pl, step_sizes, order_line, label="Δt^$order")
+
+        errors_all[:,j] .= errors
+        errors_all[:,length(orders)+j] .= order_line
     end
 
+    if return_data
+        return step_sizes, errors_all
+    end
     return pl
 end
 
