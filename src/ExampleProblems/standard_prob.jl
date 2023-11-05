@@ -1,6 +1,9 @@
 """
 A single qubit in the dispersive limit (e.g. section 2 of JuqBox paper), in the
 rotating frame.
+
+Frequencies should be in GHz, and will be multiplied by 2pi to get angular
+frequencies in the Hamiltonian.
 """
 function rotating_frame_qubit(N_ess_levels::Int, N_guard_levels::Int;
         tf::Float64=1.0, nsteps::Int64=10, detuning_frequency::Float64=1.0,
@@ -14,8 +17,8 @@ function rotating_frame_qubit(N_ess_levels::Int, N_guard_levels::Int;
     Ks = zeros(N_tot_levels, N_tot_levels)
     Ss = zeros(N_tot_levels, N_tot_levels)
 
-    Ks .+= detuning_frequency .* (a'*a)
-    Ks .-= (0.5*self_kerr_coefficient) .* (a'*a'*a*a)
+    Ks .+= 2*pi*detuning_frequency .* (a'*a)
+    Ks .-= (0.5*2*pi*self_kerr_coefficient) .* (a'*a'*a*a)
 
     p_operator = a + a'
     q_operator = a - a'
