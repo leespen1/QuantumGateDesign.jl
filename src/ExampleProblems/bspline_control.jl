@@ -32,27 +32,11 @@ end
 
 # Alternate constructor, provide arguments used to construct bcparams directly.
 # (except pcof, which I think shouldn't be a constructor arg anyway)
-function bspline_control(T, D1, omega)
-    pcof = zeros(2*D1) # For now, only doing one coupled pair of control
-    bcpar = bcparams(T, D1, omega, pcof)
+#
+# Used for a single coupled control with multiple frequencies
+function bspline_control(T::Float64, D1::Int, omega::AbstractVector{Float64})
+    pcof = zeros(2*D1*length(omega)) # For now, only doing one coupled pair of control
+    omega_bcpar = [omega] # Need to wrap in another vector, since bcparams generally expects multiple controls (multiple frequencies != multiple controls)
+    bcpar = bcparams(T, D1, omega_bcpar, pcof)
     return bspline_control(bcpar)
-end
-
-"""
-Single qubit in the rotating frame, with rotating wave approximation.
-"""
-function single_qubit_prob_with_bspline_control(detuning_frequency,
-        self_kerr_coefficient, N_ess_levels, N_guard_levels;
-        N_coeff_per_control = 6, tf=1.0, nsteps=10, 
-    )
-
-    prob = single_transmon_qubit_rwa(
-        detuning_frequency, self_kerr_coefficient, N_ess_levels,
-        N_guard_levels, tf, nsteps
-    )
-
-    omega::Vector{Vector{Float64}} = [[detuning_frequency]] # 1 frequency for 1 pair of coupled controls (p and q)
-    control = bspline_control(prob.tf, N_coeff_per_control, omega)
-
-    return prob, control
 end
