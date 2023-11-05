@@ -47,7 +47,9 @@ Unused, but need a function to provide to ipopt.
 function optimize_gate(
         schro_prob::SchrodingerProb{M, VM}, control::Control,
         pcof_init::AbstractVector{Float64}, target::VM;
-        order=4
+        order=4,
+        pcof_L=missing,
+        pcof_U=missing
     ) where {V<:AbstractVector{Float64}, VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
     # Right now I am unnecessarily doing a full forward evolution to compute the
@@ -55,7 +57,7 @@ function optimize_gate(
     function eval_f(pcof::Vector{Float64})
         println(pcof)
         history = eval_forward(schro_prob, control, pcof, order=order)
-        QN = history[:,end,:]
+        QN = @view history[:,end,:]
         return infidelity(QN, target, schro_prob.N_ess_levels)
     end
 
@@ -63,9 +65,13 @@ function optimize_gate(
         grad_f .= discrete_adjoint(schro_prob, control, pcof, target, order=order)
     end
 
-    N_coeff = length(pcof_init)
-    x_L = zeros(N_coeff)
-    x_U = ones(N_coeff) .* 2
+
+    if ismissing(pcof_L)
+        pcof_L = -ones(control.N_coeff)
+    end
+    if ismissing(pcof_U)
+        pcof_U = ones(control.N_coeff)
+    end
 
     N_constraints = 0
     g_L = Vector{Float64}()
@@ -75,9 +81,9 @@ function optimize_gate(
     nele_hessian = 0
 
     ipopt_prob = Ipopt.CreateIpoptProblem(
-        N_coeff,
-        x_L,
-        x_U,
+        control.N_coeff,
+        pcof_L,
+        pcof_U,
         N_constraints,
         g_L,
         g_U,
@@ -93,9 +99,9 @@ function optimize_gate(
     maxIter = 50
     lbfgsMax = 200
     coldStart = true
-    acceptTol = 1e-5
+    acceptTol = 1e-5 # Num
     ipTol = 1e-5
-    acceptIter = 1
+    acceptIter = 5 # Number of "succesful" iterations before calling it quits
 
     #Ipopt.AddIpoptIntOption(ipopt_prob, "acceptable_iter", acceptIter)
     Ipopt.AddIpoptStrOption(ipopt_prob, "hessian_approximation", "limited-memory"); # Use L-BFGS, approximate hessian
@@ -105,7 +111,8 @@ function optimize_gate(
     Ipopt.AddIpoptNumOption(ipopt_prob, "acceptable_tol", acceptTol);
     Ipopt.AddIpoptIntOption(ipopt_prob, "acceptable_iter", acceptIter);
     Ipopt.AddIpoptStrOption(ipopt_prob, "jacobian_approximation", "exact");
-    Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "first-order") # What does this do?
+    #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "first-order") # What does this do?
+    Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "none") # Not sure what derivative test does, but it takes a minute.
 
     #=
     addOption(ipopt_prob, "hessian_approximation", "limited-memory");
@@ -119,3 +126,27 @@ function optimize_gate(
 
     return ipopt_prob
 end
+
+#=
+"""
+    pcof = run_optimizer(params, pcof0, maxAmp; maxIter=50, lbfgsMax=200, coldStart=true, ipTol=1e-5, acceptTol=1e-5, acceptIter=15, print_level=5, print_frequency_iter=1, nodes=[0.0], weights=[1.0])
+
+Call IPOPT to  optimizize the control functions.
+
+# Arguments
+- `params:: objparams`: Struct with problem definition
+- `pcof0:: Vector{Float64}`: Initial guess for the control vector
+- `maxAmp:: Vector{Float64}`: Maximum amplitude for each control function (size Nctrl)
+- `maxIter:: Int64`: (Optional-kw) Maximum number of iterations to be taken by optimizer
+- `lbfgsMax:: Int64`: (Optional-kw) Maximum number of past iterates for Hessian approximation by L-BFGS
+- `coldStart:: Bool`: (Optional-kw) true (default): start a new optimization with ipopt; false: continue a previous optimization
+- `ipTol:: Float64`: (Optional-kw) Desired convergence tolerance (relative)
+- `acceptTol:: Float64`: (Optional-kw) Acceptable convergence tolerance (relative)
+- `acceptIter:: Int64`: (Optional-kw) Number of acceptable iterates before triggering termination
+- `print_level:: Int64`: (Optional-kw) Ipopt verbosity level (5)
+- `print_frequency_iter:: Int64`: (Optional-kw) Ipopt printout frequency (1)
+- `nodes:: AbstractArray`: (Optional-kw) Risk-neutral opt: User specified quadrature nodes on the interval [-ϵ,ϵ] for some ϵ
+- `weights:: AbstractArray`: (Optional-kw) Risk-neutral opt: User specified quadrature weights on the interval [-ϵ,ϵ] for some ϵ
+- `derivative_test:: Bool`: (Optional-kw) Set to true to check the gradient against a FD approximation (default is false)
+"""
+=#
