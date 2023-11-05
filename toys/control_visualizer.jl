@@ -1,15 +1,21 @@
 using GLMakie
 using HermiteOptimalControl
 
-function visualize_control(control, range=LinRange(0,1,11), prob=missing)
+function visualize_control(control, range=LinRange(0,1,101); prob=missing, pcof_init=missing)
     # Set up Makie figure and axis for plotting
     fig = Figure(; resolution=(1000,1000))
     ax = Axis(fig[1,1])
 
     # Set up control vector pcof, and slidergrid for manipulating control vector
     pcof_o = Vector{Observable{Float64}}(undef, control.N_coeff)
+
+    startvalues = zeros(control.N_coeff)
+    if !ismissing(pcof_init)
+        startvalues .= pcof_init
+    end
+
     pcof_slider_parameters = [
-        (label="pcof[$i]", range=range, startvalue=0.0)
+        (label="pcof[$i]", range=range, startvalue=startvalues[i])
         for i in 1:control.N_coeff
     ]
     pcof_slidergrid = SliderGrid(fig[2,1], pcof_slider_parameters...)
