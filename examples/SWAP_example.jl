@@ -24,12 +24,21 @@
 
 using HermiteOptimalControl
 
-function main(d=1, N_guard_levels=2)
+function main(;d=1, N_guard=2, D1=missing, tf=missing, nsteps=missing)
+
     N_ess_levels = d+1
-    # Set up problem
-    tf = 50.0 # If everything else is in GHz, then I think tf should be in ns
-    nsteps=10
-    #nsteps = 14787
+    # Set up problem (for d = 1, 2, I just loosely followed pattern for nsteps and duration)
+
+    # If everything else is in GHz, then I think times should be in ns
+    duration_defaults = [50.0, 100.0, 140.0, 215.0, 265.0, 425.0]
+    if ismissing(tf)
+        tf = duration_defaults[d]
+    end
+
+    nsteps_defaults = [3500, 7000, 14787, 37843, 69962, 157082] # Defaults, as in Juqbox
+    if ismissing(nsteps)
+        nsteps = nsteps_defaults[d]
+    end
 
     detuning_frequency = 0.0
     self_kerr_coefficient =  2*pi*0.22 
@@ -37,7 +46,7 @@ function main(d=1, N_guard_levels=2)
 
     prob = rotating_frame_qubit(
         N_ess_levels,
-        N_guard_levels,
+        N_guard,
         tf=tf, 
         detuning_frequency=detuning_frequency,
         self_kerr_coefficient=self_kerr_coefficient,
@@ -45,7 +54,16 @@ function main(d=1, N_guard_levels=2)
     )
 
     # Set up control
-    D1 = 10
+    if ismissing(D1)
+        if d == 6
+            D1 = 20
+        else
+            D1 = 10
+        end
+    end
+
+
+
     carrier_wave_freqs = [(k-1)*(-self_kerr_coefficient) for k in 1:d]
 
     control = bspline_control(tf, D1, carrier_wave_freqs)
@@ -58,7 +76,7 @@ function main(d=1, N_guard_levels=2)
     end
     SWAP_target_complex[1,N_ess_levels] = SWAP_target_complex[N_ess_levels,1] = 1
 
-    SWAP_target_real = target_helper(SWAP_target_complex, N_guard_levels)
+    SWAP_target_real = target_helper(SWAP_target_complex, N_guard)
 
     return prob, control, pcof, SWAP_target_real
 end
