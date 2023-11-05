@@ -20,37 +20,42 @@ example_name = 'SWAP'
 
 ## Hamiltonian Setup
 # Set up "drift"/"control" Hamiltonian, non-tunable
-N_ess_levels = 2
+d = 1
+N_ess_levels = d+1
 N_guard_levels = 2
 N_tot_levels = N_ess_levels + N_guard_levels
 
+# Frequencies in GHz
 detuning_frequency = 0
-self_kerr_coefficient = 2*np.pi*0.22
+self_kerr_coefficient = 0.22
 
 a = destroy(N_tot_levels)
 
-H_d = detuning_frequency * (a.dag()*a) - 0.5*self_kerr_coefficient*(a.dag()*a.dag()*a*a)
+H_d = 2*np.pi*detuning_frequency * (a.dag()*a) - 0.5*2*np.pi*self_kerr_coefficient*(a.dag()*a.dag()*a*a)
 
 # Set up tunable/control Hamiltonians
 H_c = [a + a.dag(), a - a.dag()]
 
-U_0_np = np.zeros((N_tot_levels, N_guard_levels))
-for i in range(N_ess_levels):
+#U_0_np = np.zeros((N_tot_levels, N_ess_levels))
+U_0_np = np.zeros((N_tot_levels, N_tot_levels))
+#for i in range(N_ess_levels):
+for i in range(N_tot_levels):
     U_0_np[i,i] = 1
 
 U_0 = Qobj(U_0_np)
 
-U_targ_np = np.zeros((N_tot_levels, N_ess_levels))
-for i in range(N_ess_levels):
-    U_targ_np[N_ess_levels-1-i,i] = 1
+U_targ_np = np.copy(U_0_np)
+U_targ_np[0,0] = 0
+U_targ_np[N_ess_levels-1,0] = 1
+U_targ_np[N_ess_levels-1,N_ess_levels-1] = 0
+U_targ_np[0,N_ess_levels-1] = 1
 
 U_targ = Qobj(U_targ_np)
 
 
-
-evo_time = 140
-n_timesteps = 37843
-#n_timesteps = 10
+evo_time = 50
+#n_timesteps = 4480
+n_timesteps = 100
 
 
 
@@ -71,7 +76,10 @@ min_grad = 1e-20
 # This is what we use as the original guess for the pulse. It's always
 # piecewise constant, but we can chose the initial amplitudes to be random, 
 # zero, a piecewise constant approximation of a sine wave, etc
-p_type = 'RND'
+
+# I think zero is a good choice, since I can have the same start for GRAPE and Hermite
+#p_type = 'RND'
+p_type = 'ZERO'
 
 
 
@@ -115,6 +123,9 @@ ax2.set_xlabel("Time")
 ax2.set_ylabel("Control amplitude")
 ax2.step(result.time,
          np.hstack((result.final_amps[:, 0], result.final_amps[-1, 0])),
+         where='post')
+ax2.step(result.time,
+         np.hstack((result.final_amps[:, 1], result.final_amps[-1, 1])),
          where='post')
 plt.tight_layout()
 plt.show()
