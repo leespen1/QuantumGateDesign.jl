@@ -24,7 +24,7 @@
 
 using HermiteOptimalControl
 
-function main(;d=1, N_guard=2, D1=missing, tf=missing, nsteps=missing)
+function main(;d=3, N_guard=1, D1=missing, tf=missing, nsteps=missing)
 
     N_ess_levels = d+1
     # Set up problem (for d = 1, 2, I just loosely followed pattern for nsteps and duration)
@@ -40,8 +40,9 @@ function main(;d=1, N_guard=2, D1=missing, tf=missing, nsteps=missing)
         nsteps = nsteps_defaults[d]
     end
 
+    # Frequencies in GHz, *not angular*
     detuning_frequency = 0.0
-    self_kerr_coefficient =  2*pi*0.22 
+    self_kerr_coefficient =  0.22 
 
 
     prob = rotating_frame_qubit(
@@ -64,11 +65,15 @@ function main(;d=1, N_guard=2, D1=missing, tf=missing, nsteps=missing)
 
 
 
-    carrier_wave_freqs = [(k-1)*(-self_kerr_coefficient) for k in 1:d]
+    carrier_wave_freqs = [k*(-self_kerr_coefficient) for k in 0:d] # One more frequency than in the paper, but consistent with current juqbox examples
 
     control = bspline_control(tf, D1, carrier_wave_freqs)
 
-    pcof = rand(control.N_coeff)
+    # Dividing by length of carrier wave freqs as a hacky way of keeping amplitude down
+    amp_ubound = 20*(1e-3)*2*pi/length(carrier_wave_freqs) # Set amplitude bounds of 20 MHz, or 2pi*20 in angular frequency
+    amp_lbound = -amp_ubound
+
+    pcof = 2 .* (rand(control.N_coeff) .- 0.5) .* amp_ubound
 
     SWAP_target_complex = zeros(N_ess_levels,N_ess_levels)
     for i in 2:N_ess_levels-1
@@ -78,7 +83,8 @@ function main(;d=1, N_guard=2, D1=missing, tf=missing, nsteps=missing)
 
     SWAP_target_real = target_helper(SWAP_target_complex, N_guard)
 
-    return prob, control, pcof, SWAP_target_real
+
+    return prob, control, pcof, SWAP_target_real, amp_ubound, amp_lbound
 end
 
 
