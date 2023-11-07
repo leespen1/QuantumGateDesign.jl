@@ -11,7 +11,7 @@ of points in time when using the fewest steps / largest step size.
 """
 function plot_history_convergence(prob, control, pcof, N_iterations;
         orders=[2, 4], nsteps_change_factor=2,
-        return_data=false
+        return_data=false, duration_error=true
     )
     base_nsteps = prob.nsteps
 
@@ -19,7 +19,7 @@ function plot_history_convergence(prob, control, pcof, N_iterations;
     prob_copy = copy(prob)
     histories = Vector[]
 
-    pl = Plots.plot(xlabel="Step Size Δt", ylabel="Relative Error", scale=:log10)
+    pl = Plots.plot(xlabel="Step Size Δt", ylabel="Relative Error in State Vector History", scale=:log10)
     yticks = [10.0 ^ n for n in -15:15] 
     Plots.plot!(pl, yticks=yticks, legend=:topleft)
 
@@ -33,6 +33,9 @@ function plot_history_convergence(prob, control, pcof, N_iterations;
 
     errors_all = Matrix{Float64}(undef, N_iterations, 2*length(orders))
 
+    step_sizes = (prob.tf/base_nsteps) ./ [nsteps_change_factor^k for k in 0:N_iterations-1]
+
+    try
     for (j, order) in enumerate(orders)
         errors = Vector{Float64}(undef, N_iterations)
 
@@ -43,21 +46,34 @@ function plot_history_convergence(prob, control, pcof, N_iterations;
             # Skip over steps to match base_nsteps solution
             history = history[:,1:nsteps_multiplier:end,:]
 
-            error = norm(history - true_history)/norm(true_history)
+            if duration_error # Use error across entire duration of problem
+                error = norm(history - true_history)/norm(true_history)
+            else # Only use error at final state
+                error = norm(history[:,end,:] - true_history[:,end,:])/norm(true_history[:,end,:])
+            end
+
             errors[k] = error
-
         end
-        step_sizes = (prob.tf/base_nsteps) ./ [nsteps_change_factor^k for k in 0:N_iterations-1]
-
-        order_line = step_sizes .^ order
-        order_line .*= 2 * errors[end]/order_line[end] # Adjust vertical position to match data, with small offset for visibility
 
         Plots.plot!(pl, step_sizes, errors, marker=:circle, markersize=5, label="Order=$order")
-        Plots.plot!(pl, step_sizes, order_line, label="Δt^$order")
 
         errors_all[:,j] .= errors
-        errors_all[:,length(orders)+j] .= order_line
+        #errors_all[:,length(orders)+j] .= order_line
     end
+    catch e
+        if e isa InterruptException
+            println("Keyboard interruption, ending early")
+        end
+    end
+
+    order_line2 = step_sizes .^ 2
+    order_line2 .*= 2 * errors_all[1,1]/order_line2[1] # Adjust vertical position to match data, with small offset for visibility
+    Plots.plot!(pl, step_sizes, order_line2, label="Δt²", linecolor=:black, linestyle=:dash)
+
+    order_line4 = step_sizes .^ 4
+    order_line4 .*= 2 * errors_all[1,2]/order_line4[1] # Adjust vertical position to match data, with small offset for visibility
+    Plots.plot!(pl, step_sizes, order_line4, label="Δt⁴", linecolor=:black, linestyle=:dashdot)
+
 
     if return_data
         return step_sizes, errors_all
