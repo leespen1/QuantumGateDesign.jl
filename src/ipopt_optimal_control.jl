@@ -67,11 +67,18 @@ function optimize_gate(
 
 
     if ismissing(pcof_L)
-        pcof_L = -ones(control.N_coeff)
+        pcof_L = -ones(control.N_coeff) # A GHz control is pretty generous
+    elseif isa(pcof_L, Real)
+        pcof_L = ones(control.N_coeff) .* pcof_L
     end
     if ismissing(pcof_U)
         pcof_U = ones(control.N_coeff)
+    elseif isa(pcof_U, Real)
+        pcof_U = ones(control.N_coeff) .* pcof_U
     end
+
+    @assert isa(pcof_L, Vector{Float64})
+    @assert isa(pcof_U, Vector{Float64})
 
     N_constraints = 0
     g_L = Vector{Float64}()
@@ -96,10 +103,10 @@ function optimize_gate(
         dummy_eval_hessian!,
     )
 
-    maxIter = 50
+    maxIter = 1000
     lbfgsMax = 200 
     acceptTol = 1e-6 
-    ipTol = 1e-8
+    ipTol = 1e-6
     acceptIter = 10 # Number of "acceptable" iterations before calling it quits
     print_level = 5 # Default is 5
 
