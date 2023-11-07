@@ -1,11 +1,12 @@
-using GLMakie
+#using GLMakie
+using CairoMakie
 using HermiteOptimalControl
 
-function visualize_control(control, range=LinRange(0,1,101); prob=missing, 
-        pcof_init=missing, use_slidergrid=true)
+function visualize_control(control, tf, npoints; prob=missing, 
+        pcof_init=missing, use_slidergrid=true, use_tboxes=true)
     # Set up Makie figure and axis for plotting
-    fig = Figure(; resolution=(1000,1000))
-    ax = Axis(fig[1,1])
+    fig = Figure(;)
+    ax = Axis(fig[1,1], xlabel="Time (ns)", ylabel="Control Amplitude (MHz)")
 
     # Set up control vector pcof, and slidergrid for manipulating control vector
     pcof_o = Vector{Observable{Float64}}(undef, control.N_coeff)
@@ -36,21 +37,24 @@ function visualize_control(control, range=LinRange(0,1,101); prob=missing,
 
 
     # Set up timing observables
-    n_points_o = Observable{Int64}(101)
-    tf_o = Observable{Float64}(1.0)
+    n_points_o = Observable{Int64}(npoints)
+    tf_o = Observable{Float64}(tf)
+
     # Time grid tracks final time
     # Having the number of points in linrange seems to produce errors, but the plot still works
     ts_o = lift((t,n) -> LinRange(0,t,n), tf_o, n_points_o)
 
-    # Setup textbox for modification of final time, and number of grid points
-    tb_tf = Textbox(fig[2,1], placeholder= "Enter final time", validator=Float64, tellwidth=false)
-    on(tb_tf.stored_string) do s
-        tf_o[] = parse(Float64, s)
-    end
+    if use_tboxes
+        # Setup textbox for modification of final time, and number of grid points
+        tb_tf = Textbox(fig[2,1], placeholder= "Enter final time", validator=Float64, tellwidth=false)
+        on(tb_tf.stored_string) do s
+            tf_o[] = parse(Float64, s)
+        end
 
-    tb_npoints = Textbox(fig[3,1], placeholder= "Number of gridpoints", validator=Int64, tellwidth=false)
-    on(tb_npoints.stored_string) do s
-        n_points_o[] = parse(Int64, s)
+        tb_npoints = Textbox(fig[3,1], placeholder= "Number of gridpoints", validator=Int64, tellwidth=false)
+        on(tb_npoints.stored_string) do s
+            n_points_o[] = parse(Int64, s)
+        end
     end
 
     # Set up function value observables
@@ -58,10 +62,11 @@ function visualize_control(control, range=LinRange(0,1,101); prob=missing,
     q_vals_o = Observable(zeros(n_points_o[]))
 
     # Set up function for updating values of p and q when coefficients or times change
+    # (in units of MHz, non angular)
     function update_graph()
         pcof = to_value.(pcof_o)
-        p_vals_o[] = [control.p[1](ts_o[][k], pcof) for k in 1:n_points_o[]]
-        q_vals_o[] = [control.q[1](ts_o[][k], pcof) for k in 1:n_points_o[]]
+        p_vals_o[] = [control.p[1](ts_o[][k], pcof)*1e3/(2*pi) for k in 1:n_points_o[]]
+        q_vals_o[] = [control.q[1](ts_o[][k], pcof)*1e3/(2*pi) for k in 1:n_points_o[]]
 
         # Update ylims to capture entire control; const args ensure ylims != (0,0)
         ylims!(ax, min(minimum(p_vals_o[]), minimum(q_vals_o[]))-1,
@@ -108,8 +113,8 @@ function visualize_control(control, range=LinRange(0,1,101); prob=missing,
 
 
     # Draw the functions
-    Makie.lines!(ax, ts_o, p_vals_o)
-    Makie.lines!(ax, ts_o, q_vals_o)
+    Makie.lines!(ax, ts_o, p_vals_o, linewidth=2)
+    Makie.lines!(ax, ts_o, q_vals_o, linewidth=2)
     #=
     if !ismissing(prob)
         for i in 1:prob.
