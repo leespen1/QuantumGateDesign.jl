@@ -1,3 +1,50 @@
+abstract type AbstractControl end
+
+struct BSplineControl <: AbstractControl
+    N_coeff::Int64
+    bcpar::bcparams
+end
+
+function bspline_control(T::Float64, D1::Int, omega::AbstractVector{Float64})
+    pcof = zeros(2*D1*length(omega)) # For now, only doing one coupled pair of control
+    omega_bcpar = [omega] # Need to wrap in another vector, since bcparams generally expects multiple controls (multiple frequencies != multiple controls)
+    bcpar = bcparams(T, D1, omega_bcpar, pcof)
+    return BSplineControl(bcpar.Ncoeff, bcpar)
+end
+
+
+function eval_p(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
+        return bcarrier2(t, control.bcpar, 0, pcof)
+end
+
+function eval_q(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
+    return bcarrier2(t, control.bcpar, 1, pcof)
+end
+
+function eval_pt(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
+    return bcarrier2_dt(t, control.bcpar, 0, pcof)
+end
+
+function eval_qt(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
+    return bcarrier2_dt(t, control.bcpar, 1, pcof)
+end
+
+function eval_grad_p(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
+    return gradbcarrier2(t, control.bcpar, 0)
+end
+
+function eval_grad_q(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
+    return gradbcarrier2_dt(t, control.bcpar, 1)
+end
+
+
+################################################################################
+#
+# Old Code, need to keep it around while refactoring
+#
+################################################################################
+
+
 """
 Need the p's, q's, dpda's, dqda's, dpdt's, dqdt's, and the coss derivatives, to
 higher order for higher order. But I think the derivative with respect to a
@@ -11,7 +58,7 @@ partial derivative, since I usually only need one at a time.
 
 Will need to revise this as I move to systems with more controls (e.g. more qubits)
 """
-struct Control{N_derivatives}
+struct Control{N_derivatives} <: AbstractControl
     p::Vector{Function}
     q::Vector{Function}
     grad_p::Vector{Function}

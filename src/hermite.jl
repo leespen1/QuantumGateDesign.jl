@@ -9,8 +9,22 @@ function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
     return nothing
 end
 
+function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
+        a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
+        control::AbstractControl, t::Float64, pcof::AbstractArray{Float64})
+
+    pval = eval_p(control, t, pcof)
+    qval = eval_p(control, t, pcof)
+
+    utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, pval, qval)
+
+    return nothing
+end
+
 """
-Values of p(t,α) and q(t,α) provided
+Values of p(t,α) and q(t,α) provided. Mutates ut and vt, leaves all other variables untouched.
 """
 function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
@@ -77,10 +91,10 @@ LHS*uvⁿ⁺¹ = RHS*uvⁿ
 This function computes the action of LHS on a vector uv.
 That is, given an input uv (as two arguments u and v), return LHS*uv
 """
-function LHS_func(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p, q, t, α, dt, N_tot)
+function LHS_func(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, control, t, pcof, dt, N_tot)
     utvt!(ut, vt, u, v,
           Ks, Ss, a_plus_adag, a_minus_adag,
-          p, q, t, α)
+          control, t, pcof)
     
     LHSu = copy(u)
     axpy!(-0.5*dt,ut,LHSu)

@@ -1,13 +1,15 @@
 """
 """
 function eval_forward(
-        prob::SchrodingerProb, control::Control{Nderivatives},
+        prob::SchrodingerProb, control::AbstractControl,
         pcof::AbstractVector{Float64}; order=2, return_time_derivatives=false
-    ) where Nderivatives
+    )
 
+    #=
     if div(order, 2) > Nderivatives
         @warn "Calling method of order $order for control with $Nderivatives given. Obtaining higher order derivatives using automatic differentiation.\n"
     end
+    =#
 
     if order == 2
         return eval_forward_order2(prob, control, pcof, return_time_derivatives=return_time_derivatives)
@@ -23,12 +25,10 @@ end
 Evolve a single initial condition (vector).
 """
 function eval_forward_order2(
-        prob::SchrodingerProb{M, V}, control::Control{Nderivatives},
+        prob::SchrodingerProb{M, V}, control::AbstractControl,
         pcof::AbstractVector{Float64}; return_time_derivatives=false
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, Nderivatives}
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     
-    @assert Nderivatives >= 1
-
     t = 0.0
     dt = prob.tf/prob.nsteps
 
@@ -57,7 +57,7 @@ function eval_forward_order2(
         return LHS_func(
             ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control.p[1], control.q[1], t, pcof, dt, prob.N_tot_levels
+            control, t, pcof, dt, prob.N_tot_levels
         )
     end
 
@@ -72,7 +72,7 @@ function eval_forward_order2(
         utvt!(
             ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control.p[1], control.q[1], t, pcof
+            control, t, pcof
         )
 
         utvt_history[1:prob.N_tot_levels,     1+n] .= ut
@@ -99,7 +99,7 @@ function eval_forward_order2(
     # One last time, for utvt history at final time
     utvt!(ut, vt, u, v,
           prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-          control.p[1], control.q[1], t, pcof)
+          control, t, pcof)
 
     utvt_history[1:prob.N_tot_levels,1+prob.nsteps] .= ut
     utvt_history[1+prob.N_tot_levels:end,1+prob.nsteps] .= vt
@@ -115,9 +115,9 @@ end
 Evolve a matrix where each column is an iniital condition.
 """
 function eval_forward_order2(
-        prob::SchrodingerProb{M1, M2}, control::Control{Nderivatives},
+        prob::SchrodingerProb{M1, M2}, control::AbstractControl,
         pcof::AbstractVector{Float64}; return_time_derivatives=false
-    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, Nderivatives}
+    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     uv_history = Array{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps, prob.N_ess_levels)
     uv_utvt_history = Array{Float64}(undef,2*prob.N_tot_levels,1+prob.nsteps, 2, prob.N_ess_levels)
@@ -152,9 +152,9 @@ end
 Evolve a single initial condition (vector).
 """
 function eval_forward_order4(
-        prob::SchrodingerProb{M, V}, control::Control{Nderivatives},
+        prob::SchrodingerProb{M, V}, control::AbstractControl,
         pcof::AbstractVector{Float64}; return_time_derivatives=false
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, Nderivatives}
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     t = 0.0
     dt = prob.tf/prob.nsteps
@@ -260,9 +260,9 @@ function eval_forward_order4(
 end
 
 function eval_forward_order4(
-        prob::SchrodingerProb{M1, M2}, control::Control{Nderivatives},
+        prob::SchrodingerProb{M1, M2}, control::AbstractControl,
         pcof::AbstractVector{Float64}; return_time_derivatives=false
-    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, Nderivatives}
+    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_init_cond = size(prob.u0,2)
     uv_history = Array{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps, N_init_cond)

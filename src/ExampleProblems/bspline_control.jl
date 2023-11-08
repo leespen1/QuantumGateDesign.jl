@@ -7,6 +7,7 @@ got the bsplines from) they include the carrier wave as well.
 Do half the controls affect only p, and the other half affect only q? Or is
 there more to it?
 """
+#=
 function bspline_control(bcpar::bcparams)
     p_vec = [
         (t, pcof) -> bcarrier2(t,    bcpar, 0, pcof),
@@ -40,3 +41,4 @@ function bspline_control(T::Float64, D1::Int, omega::AbstractVector{Float64})
     bcpar = bcparams(T, D1, omega_bcpar, pcof)
     return bspline_control(bcpar)
 end
+=#
