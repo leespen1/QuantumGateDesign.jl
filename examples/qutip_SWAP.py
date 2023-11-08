@@ -20,7 +20,7 @@ example_name = 'SWAP'
 
 ## Hamiltonian Setup
 # Set up "drift"/"control" Hamiltonian, non-tunable
-d = 3
+d = 1
 N_ess_levels = d+1
 N_guard_levels = 1
 N_tot_levels = N_ess_levels + N_guard_levels
@@ -60,7 +60,9 @@ U_targ = Qobj(U_targ_np)
 
 
 evo_time = 140 # ns
-n_timesteps = 4480 # = 0.5*n_parameters
+#n_timesteps = 4480 # = 0.5*n_parameters
+#n_timesteps = 4*evo_time
+n_timesteps = 100
 
 
 
