@@ -57,21 +57,27 @@ function discrete_adjoint(
 
         grad_contrib = zeros(len_pcof)
 
+
         if order == 2
             # Terminal Condition
             t = prob.tf
 
             RHS .= terminal_RHS[:,initial_condition_index]
 
-            LHS_map = LinearMaps.LinearMap(
-                x -> LHS_func(
+            function LHS_func_wrapper_order2(x::AbstractVector{Float64})::Vector{Float64}
+                return LHS_func(
                     lambda_ut, lambda_vt, x[1:prob.N_tot_levels],
                     x[1+prob.N_tot_levels:end], Ks_adj, Ss_adj, p_operator_adj,
                     q_operator_adj, control.p[1], control.q[1], t, pcof, dt,
                     prob.N_tot_levels
-                ),
-                2*prob.N_tot_levels,2*prob.N_tot_levels
+                )
+            end
+
+            LHS_map = LinearMaps.LinearMap(
+                LHS_func_wrapper_order2,
+                2*prob.N_tot_levels, 2*prob.N_tot_levels
             )
+
             IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
             lambda_history[:,1+prob.nsteps] .= lambda
@@ -95,19 +101,8 @@ function discrete_adjoint(
                 copyto!(RHS,1,RHS_lambda_u,1,prob.N_tot_levels)
                 copyto!(RHS,1+prob.N_tot_levels,RHS_lambda_v,1,prob.N_tot_levels)
 
-                # NOTE: LHS and RHS Linear transformations use the SAME TIME
-
-                LHS_map = LinearMaps.LinearMap(
-                    x -> LHS_func(
-                        lambda_ut, lambda_vt, x[1:prob.N_tot_levels],
-                        x[1+prob.N_tot_levels:end], Ks_adj, Ss_adj,
-                        p_operator_adj, q_operator_adj, control.p[1],
-                        control.q[1], t, pcof, dt, prob.N_tot_levels
-                    ),
-                    2*prob.N_tot_levels,2*prob.N_tot_levels
-                )
-
                 IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+
                 lambda_history[:,1+n] .= lambda
                 lambda_u = lambda[1:prob.N_tot_levels]
                 lambda_v = lambda[1+prob.N_tot_levels:end]
@@ -145,15 +140,18 @@ function discrete_adjoint(
                 mul!(MT_lambda_21, p_operator_transpose, lambda_u)
                 mul!(MT_lambda_22, q_operator_transpose, lambda_v)
 
-                grad_contrib .+= control.grad_q[1](t, pcof) .* (dot(u, MT_lambda_11) + dot(v, MT_lambda_22))
-                grad_contrib .+= control.grad_p[1](t, pcof) .* (dot(u, MT_lambda_12) - dot(v, MT_lambda_21))
+                grad_contrib .+= grad_p .* (dot(u, MT_lambda_12) - dot(v, MT_lambda_21))
+                grad_contrib .+= grad_q .* (dot(u, MT_lambda_11) + dot(v, MT_lambda_22))
 
                 u = history[1:prob.N_tot_levels,     1+n+1, initial_condition_index]
                 v = history[1+prob.N_tot_levels:end, 1+n+1, initial_condition_index]
                 t = (n+1)*dt
 
-                grad_contrib .+= control.grad_q[1](t, pcof) .* (dot(u, MT_lambda_11) + dot(v, MT_lambda_22))
-                grad_contrib .+= control.grad_p[1](t, pcof) .* (dot(u, MT_lambda_12) - dot(v, MT_lambda_21))
+                grad_p = control.grad_p[1](t,pcof)
+                grad_q = control.grad_q[1](t,pcof)
+
+                grad_contrib .+= grad_p .* (dot(u, MT_lambda_12) - dot(v, MT_lambda_21))
+                grad_contrib .+= grad_q .* (dot(u, MT_lambda_11) + dot(v, MT_lambda_22))
             end
 
             grad .+=  (-0.5*dt) .* grad_contrib
@@ -164,15 +162,19 @@ function discrete_adjoint(
 
             RHS .= terminal_RHS[:,initial_condition_index]
 
-            LHS_map = LinearMaps.LinearMap(
-                x -> LHS_func_order4(
+            function LHS_func_wrapper_order4(x::AbstractVector{Float64})::Vector{Float64}
+                return LHS_func_order4(
                     lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
                     x[1:prob.N_tot_levels], x[1+prob.N_tot_levels:end],
                     Ks_adj, Ss_adj, p_operator_adj, q_operator_adj,
                     control.p[1], control.q[1], control.p[2], control.q[2], t,
                     pcof, dt, prob.N_tot_levels
-                ),
-                2*prob.N_tot_levels,2*prob.N_tot_levels
+                )
+            end
+
+            LHS_map = LinearMaps.LinearMap(
+                LHS_func_wrapper_order4,
+                2*prob.N_tot_levels, 2*prob.N_tot_levels
             )
 
             IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
@@ -210,18 +212,8 @@ function discrete_adjoint(
 
                 # NOTE: LHS and RHS Linear transformations use the SAME TIME
 
-                LHS_map = LinearMaps.LinearMap(
-                    x -> LHS_func_order4(
-                        lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
-                        x[1:prob.N_tot_levels], x[1+prob.N_tot_levels:end],
-                        Ks_adj, Ss_adj, p_operator_adj, q_operator_adj, 
-                        control.p[1], control.q[1], control.p[2], control.q[2],
-                        t, pcof, dt, prob.N_tot_levels
-                    ),
-                    2*prob.N_tot_levels,2*prob.N_tot_levels
-                )
-
                 IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+
                 lambda_history[:,1+n] .= lambda
                 lambda_u = lambda[1:prob.N_tot_levels]
                 lambda_v = lambda[1+prob.N_tot_levels:2*prob.N_tot_levels]

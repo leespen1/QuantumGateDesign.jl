@@ -49,6 +49,24 @@ function eval_forward_order2(
     ut = zeros(prob.N_tot_levels)
     vt = zeros(prob.N_tot_levels)
 
+
+    function LHS_func_wrapper(uv::AbstractVector{Float64})::Vector{Float64}
+        # Careful, make certain that I can do this overwrite without messing up anything else
+        u .= view(uv,1:prob.N_tot_levels)
+        v .= view(uv,1+prob.N_tot_levels:2*prob.N_tot_levels)
+        return LHS_func(
+            ut, vt, u, v,
+            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
+            control.p[1], control.q[1], t, pcof, dt, prob.N_tot_levels
+        )
+    end
+
+    LHS_map = LinearMaps.LinearMap(
+        LHS_func_wrapper,
+        2*prob.N_tot_levels, 2*prob.N_tot_levels
+    )
+
+
     # Order 2
     for n in 0:prob.nsteps-1
         utvt!(
@@ -71,17 +89,8 @@ function eval_forward_order2(
 
         t += dt
 
-        LHS_map = LinearMaps.LinearMap(
-            uv -> LHS_func(
-                ut, vt, uv[1:prob.N_tot_levels], uv[1+prob.N_tot_levels:end],
-                prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-                control.p[1], control.q[1], t, pcof, dt, prob.N_tot_levels
-            ),
-            2*prob.N_tot_levels,
-            2*prob.N_tot_levels
-        )
-
         IterativeSolvers.gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+
         uv_history[:,1+n+1] .= uv
         u = uv[1:prob.N_tot_levels]
         v = uv[1+prob.N_tot_levels:end]
@@ -171,7 +180,26 @@ function eval_forward_order4(
     utt = zeros(prob.N_tot_levels)
     vtt = zeros(prob.N_tot_levels)
 
+    function LHS_func_wrapper(uv::AbstractVector{Float64})::Vector{Float64}
+        # Careful, make certain that I can do this overwrite without messing up anything else
+        u .= view(uv,1:prob.N_tot_levels)
+        v .= view(uv,1+prob.N_tot_levels:2*prob.N_tot_levels)
+        return  LHS_func_order4(
+            utt, vtt, ut, vt, 
+            u, v,
+            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator, 
+            control.p[1], control.q[1], control.p[2], control.q[2],
+            t, pcof, dt, prob.N_tot_levels
+        )
+    end
+
+    LHS_map = LinearMaps.LinearMap(
+        LHS_func_wrapper,
+        2*prob.N_tot_levels, 2*prob.N_tot_levels
+    )
+
     # Order 4
+    weights = [1,1/3]
     for n in 0:prob.nsteps-1
         utvt!(
             ut, vt, u, v, prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
@@ -188,7 +216,6 @@ function eval_forward_order4(
         uttvtt_history[1:prob.N_tot_levels,     1+n] .= utt
         uttvtt_history[1+prob.N_tot_levels:end, 1+n] .= vtt
 
-        weights = [1,1/3]
         copy!(RHSu,u)
         axpy!(0.5*dt*weights[1],    ut,  RHSu)
         axpy!(0.25*dt^2*weights[2], utt, RHSu)
@@ -201,17 +228,6 @@ function eval_forward_order4(
         copyto!(RHS, 1+prob.N_tot_levels, RHSv, 1, prob.N_tot_levels)
 
         t += dt
-
-        LHS_map = LinearMaps.LinearMap(
-            uv -> LHS_func_order4(
-                utt, vtt, ut, vt, 
-                uv[1:prob.N_tot_levels], uv[1+prob.N_tot_levels:end],
-                prob.Ks, prob.Ss, prob.p_operator, prob.q_operator, 
-                control.p[1], control.q[1], control.p[2], control.q[2],
-                t, pcof, dt, prob.N_tot_levels
-            ),
-            2*prob.N_tot_levels, 2*prob.N_tot_levels
-        )
 
         IterativeSolvers.gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
         uv_history[:,1+n+1] .= uv
@@ -321,6 +337,24 @@ function eval_forward_forced_order2(
     utt = zeros(prob.N_tot_levels)
     vtt = zeros(prob.N_tot_levels)
 
+
+    function LHS_func_wrapper(uv::AbstractVector{Float64})::Vector{Float64}
+        # Careful, make certain that I can do this overwrite without messing up anything else
+        u .= view(uv,1:prob.N_tot_levels)
+        v .= view(uv,1+prob.N_tot_levels:2*prob.N_tot_levels)
+        return LHS_func(
+            ut, vt, u, v,
+            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
+            control.p[1], control.q[1], t, pcof, dt, prob.N_tot_levels
+        )
+    end
+
+    LHS_map = LinearMaps.LinearMap(
+        LHS_func_wrapper,
+        2*prob.N_tot_levels, 2*prob.N_tot_levels
+    )
+
+
     for n in 0:prob.nsteps-1
         utvt!(
             ut, vt, u, v,
@@ -342,17 +376,9 @@ function eval_forward_forced_order2(
 
         t += dt
 
-        LHS_map = LinearMaps.LinearMap(
-            uv -> LHS_func(
-                ut, vt, uv[1:prob.N_tot_levels], uv[1+prob.N_tot_levels:end],
-                prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-                control.p[1], control.q[1], t, pcof, dt, prob.N_tot_levels
-            ),
-            2*prob.N_tot_levels, 2*prob.N_tot_levels
-        )
-
         IterativeSolvers.gmres!(uv, LHS_map, RHS_uv, abstol=1e-15, reltol=1e-15)
         uv_history[:,1+n+1] .= uv
+
         u = uv[1:prob.N_tot_levels]
         v = uv[1+prob.N_tot_levels:end]
     end
@@ -387,6 +413,25 @@ function eval_forward_forced_order4(
     vt  = zeros(prob.N_tot_levels)
     utt = zeros(prob.N_tot_levels)
     vtt = zeros(prob.N_tot_levels)
+
+    function LHS_func_wrapper(uv::AbstractVector{Float64})::Vector{Float64}
+        # Careful, make certain that I can do this overwrite without messing up anything else
+        u .= view(uv,1:prob.N_tot_levels)
+        v .= view(uv,1+prob.N_tot_levels:2*prob.N_tot_levels)
+        return  LHS_func_order4(
+            utt, vtt, ut, vt, 
+            u, v,
+            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator, 
+            control.p[1], control.q[1], control.p[2], control.q[2],
+            t, pcof, dt, prob.N_tot_levels
+        )
+    end
+
+    LHS_map = LinearMaps.LinearMap(
+        LHS_func_wrapper,
+        2*prob.N_tot_levels, 2*prob.N_tot_levels
+    )
+
 
     weights     = [1, 1/3]
     weights_LHS = [1, -1/3]
@@ -444,17 +489,9 @@ function eval_forward_forced_order4(
         copyto!(RHS_uv, 1,                   RHSu, 1, prob.N_tot_levels)
         copyto!(RHS_uv, 1+prob.N_tot_levels, RHSv, 1, prob.N_tot_levels)
 
-        LHS_map = LinearMaps.LinearMap(
-            uv -> LHS_func_order4(
-                utt, vtt, ut, vt, uv[1:prob.N_tot_levels], uv[1+prob.N_tot_levels:end],
-                prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-                control.p[1], control.q[1], control.p[2], control.q[2],
-                t, pcof, dt, prob.N_tot_levels
-            ),
-            2*prob.N_tot_levels, 2*prob.N_tot_levels
-        )
 
         IterativeSolvers.gmres!(uv, LHS_map, RHS_uv, abstol=1e-15, reltol=1e-15)
+
         uv_history[:, 1+n+1] .= uv
         u = uv[1:prob.N_tot_levels]
         v = uv[1+prob.N_tot_levels:end]
