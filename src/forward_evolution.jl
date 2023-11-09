@@ -29,7 +29,7 @@ function eval_forward_order2(
         pcof::AbstractVector{Float64}; return_time_derivatives=false
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     
-    t = 0.0
+    t::Float64 = 0.0
     dt = prob.tf/prob.nsteps
 
     uv = zeros(2*prob.N_tot_levels)
@@ -44,16 +44,20 @@ function eval_forward_order2(
     RHSv::Vector{Float64} = zeros(prob.N_tot_levels)
     RHS::Vector{Float64} = zeros(2*prob.N_tot_levels)
 
-    u = copy(prob.u0)
-    v = copy(prob.v0)
+    u = zeros(prob.N_tot_levels)
+    v = zeros(prob.N_tot_levels)
+
+    u .= prob.u0
+    v .= prob.v0
+
     ut = zeros(prob.N_tot_levels)
     vt = zeros(prob.N_tot_levels)
 
 
     function LHS_func_wrapper(uv::AbstractVector{Float64})::Vector{Float64}
         # Careful, make certain that I can do this overwrite without messing up anything else
-        u .= view(uv,1:prob.N_tot_levels)
-        v .= view(uv,1+prob.N_tot_levels:2*prob.N_tot_levels)
+        copyto!(u, 1, uv, 1,                   prob.N_tot_levels)
+        copyto!(v, 1, uv, 1+prob.N_tot_levels, prob.N_tot_levels)
         return LHS_func(
             ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
@@ -92,8 +96,11 @@ function eval_forward_order2(
         IterativeSolvers.gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
         uv_history[:,1+n+1] .= uv
-        u = uv[1:prob.N_tot_levels]
-        v = uv[1+prob.N_tot_levels:end]
+        u .= uv[1:prob.N_tot_levels]
+        v .= uv[1+prob.N_tot_levels:end]
+        copyto!(u, 1, uv, 1,                   prob.N_tot_levels)
+        copyto!(v, 1, uv, 1+prob.N_tot_levels, prob.N_tot_levels)
+
     end
 
     # One last time, for utvt history at final time
