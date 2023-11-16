@@ -1,5 +1,68 @@
+#=================================================
+# 
+# Abstract Control Supertype
+#
+=================================================#
+"""
+Abstract supertype for all controls.
+
+Every concrete subtype must have the following methods defined:
+    eval_p(control::AbstractControl, t::Float64, pcof::AbstractArray{Float64})
+    eval_q(control::AbstractControl, t::Float64, pcof::AbstractArray{Float64})
+
+The following methods can also be defined, but have defaults implemented using
+automatic differentiation:
+    partial_p(control::Control, t::Float64, pcof::AbstractVector{Float64}, 
+              coefficient_index::Int, derivative_index::Int)
+    partial_q
+    eval_grad_p
+    eval_grad_q
+
+
+    eval_pt
+    eval_qt
+    eval_ptt
+    eval_qtt
+    ...
+    ...
+
+
+When I have multiple controls, I'm not sure if I should pass in a vector of
+control objects, or just one control object which evaluate each of the controls.
+I am leaning toward the former option, since it would be easier to implement.
+"""
 abstract type AbstractControl end
 
+
+"""
+I'm not sure if creating the lambda/anonymous function has a significant
+negative impact on performance. If so, I could remedy this by having storing
+pcof in the Control object. Then I could have a method eval_p(control, t) which
+uses the pcof in the object, and eval_p(control, t, pcof) would mutate the pcof
+in the control object.
+"""
+function eval_pt(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+    return ForwardDiff.derivative(t_dummy -> eval_p(t_dummy, pcof), t)
+end
+
+function eval_qt(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+    return ForwardDiff.derivative(t_dummy -> eval_q(t_dummy, pcof), t)
+end
+
+function eval_grad_p(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+    return ForwardDiff.gradient(pcof_dummy -> eval_p(control, t, pcof_dummy), pcof)
+end
+
+function eval_grad_q(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+    return ForwardDiff.gradient(pcof_dummy -> eval_q(control, t, pcof_dummy), pcof)
+end
+
+
+#=================================================
+# 
+# Bspline/Bcarrier 
+#
+=================================================#
 struct BSplineControl <: AbstractControl
     N_coeff::Int64
     bcpar::bcparams
@@ -38,6 +101,7 @@ function eval_grad_q(control::BSplineControl, t::Float64, pcof::AbstractArray{Fl
 end
 
 
+
 ################################################################################
 #
 # Old Code, need to keep it around while refactoring
@@ -71,33 +135,7 @@ struct Control{N_derivatives} <: AbstractControl
     end
 end
 
-"""
-Get a partial derivative of p.
 
-Currently just extracts the i-th entry of the gradient, but in the future I
-should calculate the partial derivative directly so I don't waste computation.
-"""
-function partial_p(
-        control::Control, t::Float64, pcof::AbstractVector{Float64}, 
-        coefficient_index::Int, derivative_index::Int
-    )
-
-    return control.grad_p[derivative_index](t, pcof)[coefficient_index]
-end
-
-"""
-Get a partial derivative of q.
-
-Currently just extracts the i-th entry of the gradient, but in the future I
-should calculate the partial derivative directly so I don't waste computation.
-"""
-function partial_q(
-        control::Control, t::Float64, pcof::AbstractVector{Float64}, 
-        coefficient_index::Int, derivative_index::Int
-    )
-
-    return control.grad_q[derivative_index](t, pcof)[coefficient_index]
-end
 
 function Control(p_vec::Vector{Function}, q_vec::Vector{Function}, N_coeff::Int)
     N_derivatives = length(p_vec)
@@ -115,6 +153,8 @@ function Control(p_vec::Vector{Function}, q_vec::Vector{Function}, N_coeff::Int)
 
     return Control(p_vec, q_vec, grad_p_vec, grad_q_vec, N_coeff)
 end
+
+
 
 """
 Alternative constructor. Use automatic differentiation to get derivatives of 

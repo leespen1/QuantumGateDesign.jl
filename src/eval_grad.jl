@@ -461,10 +461,13 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, control::Control,
 
     for control_param_index in 1:control.N_coeff
         for initial_condition_index = 1:size(prob.u0, 2)
-            dpda(t, pcof) = partial_p(control, t, pcof, control_param_index, 1)
-            dqda(t, pcof) = partial_q(control, t, pcof, control_param_index, 1)
-            d2p_dta(t, pcof) = partial_p(control, t, pcof, control_param_index, 2)
-            d2q_dta(t, pcof) = partial_q(control, t, pcof, control_param_index, 2)
+            # This could be more efficient by having functions which calculate
+            # only the intended partial derivative, not the whole gradient, but
+            # I am only focusing on optimizaiton for the discrete adjoint.
+            dpda(t, pcof) = eval_grad_p(control, t, pcof)[control_param_index]
+            dqda(t, pcof) = eval_grad_q(control, t, pcof)[control_param_index]
+            d2p_dta(t, pcof) = eval_grad_pt(control, t, pcof)[control_param_index]
+            d2q_dta(t, pcof) = eval_grad_qt(control, t, pcof)[control_param_index]
 
             # 2nd order version
             if order == 2
