@@ -12,22 +12,19 @@ Every concrete subtype must have the following methods defined:
 
 The following methods can also be defined, but have defaults implemented using
 automatic differentiation:
-    # For discrete adjoint 
+    # For discrete adjoint / forced gradient calculation
     eval_grad_p
     eval_grad_q
-
+    eval_grad_pt
+    eval_grad_qt
+    ...
+    ...
 
     # For higher order forward evolution 
     eval_pt
     eval_qt
     eval_ptt
     eval_qtt
-    ...
-    ...
-
-    # Needed only for gradient calculation when using forced method.
-    eval_grad_pt
-    eval_grad_qt
     ...
     ...
 

@@ -298,7 +298,7 @@ function eval_forward_order4(
 end
 
 function eval_forward_forced(
-        prob::SchrodingerProb{M, V}, control::Control,
+        prob::SchrodingerProb{M, V}, control::AbstractControl,
         pcof::AbstractVector{Float64}, forcing_ary; order=2
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     if order == 2
@@ -317,7 +317,7 @@ of forces at each discretized point in time.
 Maybe I should also do a one with forcing functions as well.
 """
 function eval_forward_forced_order2(
-        prob::SchrodingerProb{M, V}, control::Control, pcof::V,
+        prob::SchrodingerProb{M, V}, control::AbstractControl, pcof::V,
         forcing_ary::AbstractArray{Float64,3}, 
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
@@ -364,7 +364,7 @@ function eval_forward_forced_order2(
         utvt!(
             ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control.p[1], control.q[1], t, pcof
+            control, t, pcof
         )
 
         copy!(RHSu, u)
@@ -394,7 +394,7 @@ end
 
 
 function eval_forward_forced_order4(
-        prob::SchrodingerProb{M, V}, control::Control,  pcof::V, 
+        prob::SchrodingerProb{M, V}, control::AbstractControl,  pcof::V, 
         forcing_ary::AbstractArray{Float64,3},
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
@@ -427,7 +427,7 @@ function eval_forward_forced_order4(
             utt, vtt, ut, vt, 
             u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator, 
-            control.p[1], control.q[1], control.p[2], control.q[2],
+            control,
             t, pcof, dt, prob.N_tot_levels
         )
     end
@@ -445,7 +445,7 @@ function eval_forward_forced_order4(
         utvt!(
             ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control.p[1], control.q[1], t, pcof
+            control, t, pcof
         )
         axpy!(1.0, forcing_ary[1:prob.N_tot_levels,     1+n, 1], ut)
         axpy!(1.0, forcing_ary[1+prob.N_tot_levels:end, 1+n, 1], vt)
@@ -454,7 +454,7 @@ function eval_forward_forced_order4(
         uttvtt!(
             utt, vtt, ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control.p[1], control.q[1], control.p[2], control.q[2], t, pcof
+            control, t, pcof
         )
         axpy!(1.0, forcing_ary[1:prob.N_tot_levels,     1+n, 2], utt)
         axpy!(1.0, forcing_ary[1+prob.N_tot_levels:end, 1+n, 2], vtt)
@@ -485,7 +485,7 @@ function eval_forward_forced_order4(
             forcing_ary[1:prob.N_tot_levels, 1+n+1, 1],
             forcing_ary[1+prob.N_tot_levels:end, 1+n+1, 1],
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control.p[1], control.q[1], t, pcof
+            control, t, pcof
         )
 
         axpy!(0.25*dt^2*weights_LHS[2], ut, RHSu)

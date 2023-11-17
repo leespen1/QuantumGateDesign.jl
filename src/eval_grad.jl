@@ -6,10 +6,10 @@ gate and control parameter(s) pcof using the discrete adjoint method.
 Returns: gradient
 """
 function discrete_adjoint(
-        prob::SchrodingerProb, control::Control{Nderivatives},
+        prob::SchrodingerProb, control::AbstractControl,
         pcof::AbstractVector{Float64}, target::AbstractMatrix{Float64}; 
         order=2, cost_type=:Infidelity, return_lambda_history=false
-    ) where {Nderivatives}
+    )
 
     history = eval_forward(prob, control, pcof; order=order)
 
@@ -68,7 +68,7 @@ function discrete_adjoint(
                 return LHS_func(
                     lambda_ut, lambda_vt, x[1:prob.N_tot_levels],
                     x[1+prob.N_tot_levels:end], Ks_adj, Ss_adj, p_operator_adj,
-                    q_operator_adj, control.p[1], control.q[1], t, pcof, dt,
+                    q_operator_adj, control, t, pcof, dt,
                     prob.N_tot_levels
                 )
             end
@@ -89,7 +89,7 @@ function discrete_adjoint(
                 t -= dt
                 utvt!(
                     lambda_ut, lambda_vt, lambda_u, lambda_v, Ks_adj, Ss_adj,
-                    p_operator_adj, q_operator_adj, control.p[1], control.q[1],
+                    p_operator_adj, q_operator_adj, control,
                     t, pcof
                 )
                 copy!(RHS_lambda_u,lambda_u)
@@ -132,8 +132,8 @@ function discrete_adjoint(
                 v = history[1+prob.N_tot_levels:end, 1+n, initial_condition_index]
                 t = n*dt
 
-                grad_p = control.grad_p[1](t,pcof)
-                grad_q = control.grad_q[1](t,pcof)
+                grad_p = eval_grad_p(control, t, pcof)
+                grad_q = eval_grad_q(control, t, pcof)
 
                 mul!(MT_lambda_11, q_operator_transpose, lambda_u)
                 mul!(MT_lambda_12, p_operator_transpose, lambda_v)
@@ -147,8 +147,8 @@ function discrete_adjoint(
                 v = history[1+prob.N_tot_levels:end, 1+n+1, initial_condition_index]
                 t = (n+1)*dt
 
-                grad_p = control.grad_p[1](t,pcof)
-                grad_q = control.grad_q[1](t,pcof)
+                grad_p = eval_grad_p(control, t, pcof)
+                grad_q = eval_grad_q(control, t, pcof)
 
                 grad_contrib .+= grad_p .* (dot(u, MT_lambda_12) - dot(v, MT_lambda_21))
                 grad_contrib .+= grad_q .* (dot(u, MT_lambda_11) + dot(v, MT_lambda_22))
@@ -167,7 +167,7 @@ function discrete_adjoint(
                     lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
                     x[1:prob.N_tot_levels], x[1+prob.N_tot_levels:end],
                     Ks_adj, Ss_adj, p_operator_adj, q_operator_adj,
-                    control.p[1], control.q[1], control.p[2], control.q[2], t,
+                    control, t,
                     pcof, dt, prob.N_tot_levels
                 )
             end
@@ -189,13 +189,13 @@ function discrete_adjoint(
                 t -= dt
                 utvt!(
                     lambda_ut, lambda_vt, lambda_u, lambda_v, Ks_adj, Ss_adj,
-                    p_operator_adj, q_operator_adj, control.p[1], control.q[1],
+                    p_operator_adj, q_operator_adj, control,
                     t, pcof
                 )
                 uttvtt!(
                     lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u,
                     lambda_v, Ks_adj, Ss_adj, p_operator_adj, q_operator_adj,
-                    control.p[1], control.q[1], control.p[2], control.q[2], t,
+                    control, t,
                     pcof
                 )
 
@@ -270,10 +270,10 @@ function discrete_adjoint(
                 v = history[1+prob.N_tot_levels:end, 1+n, initial_condition_index]
                 t = n*dt
 
-                grad_p = control.grad_p[1](t, pcof)
-                grad_q = control.grad_q[1](t, pcof)
-                grad_pt = control.grad_p[2](t, pcof)
-                grad_qt = control.grad_q[2](t,pcof)
+                grad_p = eval_grad_p(control,   t, pcof)
+                grad_q = eval_grad_q(control,   t, pcof)
+                grad_pt = eval_grad_pt(control, t, pcof)
+                grad_qt = eval_grad_qt(control, t, pcof)
 
                 # H_α
                 grad_contrib .+= grad_q .* weights_n[1]*(
@@ -294,8 +294,8 @@ function discrete_adjoint(
                 
                 # H_α*H
                 # part 1
-                Hq .= prob.Ss .+ control.q[1](t,pcof) .* prob.q_operator
-                Hp .= prob.Ks .+ control.p[1](t,pcof) .* prob.p_operator
+                Hq .= prob.Ss .+ eval_q(control, t, pcof) .* prob.q_operator
+                Hp .= prob.Ks .+ eval_p(control, t, pcof) .* prob.p_operator
 
                 mul!(A, Hq, u)
                 mul!(A, Hp, v, -1, 1)
@@ -348,10 +348,10 @@ function discrete_adjoint(
                 v = history[1+prob.N_tot_levels:end, 1+n+1, initial_condition_index]
                 t = (n+1)*dt
 
-                grad_p = control.grad_p[1](t,pcof)
-                grad_q = control.grad_q[1](t,pcof)
-                grad_pt = control.grad_p[2](t,pcof)
-                grad_qt = control.grad_q[2](t,pcof)
+                grad_p = eval_grad_p(control, t, pcof)
+                grad_q = eval_grad_q(control, t,pcof)
+                grad_pt = eval_grad_pt(control, t,pcof)
+                grad_qt = eval_grad_qt(control, t,pcof)
 
                 # H_α
                 grad_contrib .+= grad_q .* weights_np1[1]*(
@@ -372,8 +372,8 @@ function discrete_adjoint(
                 
                 # H_α*H
                 # part 1
-                Hq .= prob.Ss .+ control.q[1](t,pcof) .* prob.q_operator
-                Hp .= prob.Ks .+ control.p[1](t,pcof) .* prob.p_operator
+                Hq .= prob.Ss .+ eval_q(control, t, pcof) .* prob.q_operator
+                Hp .= prob.Ks .+ eval_p(control, t, pcof) .* prob.p_operator
 
                 mul!(A, Hq, u)
                 mul!(A, Hp, v, -1, 1)
@@ -439,7 +439,7 @@ in the evolution of the original Schrodinger equation as a forcing term.
 
 Returns: gradient
 """
-function eval_grad_forced(prob::SchrodingerProb{M, VM}, control::Control,
+function eval_grad_forced(prob::SchrodingerProb{M, VM}, control::AbstractControl,
         pcof::AbstractVector{Float64}, target::VM; order=2, 
         cost_type=:Infidelity
     ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
