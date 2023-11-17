@@ -7,22 +7,27 @@
 Abstract supertype for all controls.
 
 Every concrete subtype must have the following methods defined:
-    eval_p(control::AbstractControl, t::Float64, pcof::AbstractArray{Float64})
-    eval_q(control::AbstractControl, t::Float64, pcof::AbstractArray{Float64})
+    eval_p(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+    eval_q(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
 
 The following methods can also be defined, but have defaults implemented using
 automatic differentiation:
-    partial_p(control::Control, t::Float64, pcof::AbstractVector{Float64}, 
-              coefficient_index::Int, derivative_index::Int)
-    partial_q
+    # For discrete adjoint 
     eval_grad_p
     eval_grad_q
 
 
+    # For higher order forward evolution 
     eval_pt
     eval_qt
     eval_ptt
     eval_qtt
+    ...
+    ...
+
+    # Needed only for gradient calculation when using forced method.
+    eval_grad_pt
+    eval_grad_qt
     ...
     ...
 
@@ -57,6 +62,14 @@ function eval_grad_q(control::AbstractControl, t::Float64, pcof::AbstractVector{
     return ForwardDiff.gradient(pcof_dummy -> eval_q(control, t, pcof_dummy), pcof)
 end
 
+function eval_grad_pt(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+    return ForwardDiff.gradient(pcof_dummy -> eval_pt(control, t, pcof_dummy), pcof)
+end
+
+function eval_grad_qt(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+    return ForwardDiff.gradient(pcof_dummy -> eval_qt(control, t, pcof_dummy), pcof)
+end
+
 
 #=================================================
 # 
@@ -76,30 +89,45 @@ function bspline_control(T::Float64, D1::Int, omega::AbstractVector{Float64})
 end
 
 
-function eval_p(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
+function eval_p(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
         return bcarrier2(t, control.bcpar, 0, pcof)
 end
 
-function eval_q(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
+function eval_q(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
     return bcarrier2(t, control.bcpar, 1, pcof)
 end
 
-function eval_pt(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
+function eval_pt(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
     return bcarrier2_dt(t, control.bcpar, 0, pcof)
 end
 
-function eval_qt(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
+function eval_qt(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
     return bcarrier2_dt(t, control.bcpar, 1, pcof)
 end
 
-function eval_grad_p(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
+function eval_grad_p(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
     return gradbcarrier2(t, control.bcpar, 0)
 end
 
-function eval_grad_q(control::BSplineControl, t::Float64, pcof::AbstractArray{Float64})
-    return gradbcarrier2_dt(t, control.bcpar, 1)
+function eval_grad_q(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
+    return gradbcarrier2(t, control.bcpar, 1)
 end
 
+function eval_grad_pt(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
+    return gradbcarrier2_dt(t, control.bcpar, 0)
+end
+
+function eval_grad_qt(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
+    return gradbcarrier2_dt(t, control.bcpar, 0)
+end
+
+#==============================================================================
+# 
+# GRAPE-style Control: piecewise constant control 
+# (unlike GRAPE, number of parameters is independent of number of timesteps,
+# and we use our methods of time stepping and gradient calculation)
+#
+==============================================================================#
 
 
 ################################################################################

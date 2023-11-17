@@ -26,10 +26,11 @@ export optimize_gate
 
 export get_populations, target_helper, plot_populations, real_to_complex, complex_to_real
 
-export Control
+export Control, AbstractControl, BSplineControl
 
 export rotating_frame_qubit
 export initial_basis
+
 
 include("SchrodingerProb.jl")
 include("bsplines.jl")

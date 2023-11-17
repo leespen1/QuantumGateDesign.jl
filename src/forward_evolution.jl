@@ -195,8 +195,7 @@ function eval_forward_order4(
             utt, vtt, ut, vt, 
             u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator, 
-            control.p[1], control.q[1], control.p[2], control.q[2],
-            t, pcof, dt, prob.N_tot_levels
+            control, t, pcof, dt, prob.N_tot_levels
         )
     end
 
@@ -210,12 +209,11 @@ function eval_forward_order4(
     for n in 0:prob.nsteps-1
         utvt!(
             ut, vt, u, v, prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control.p[1], control.q[1], t, pcof
+            control, t, pcof
         )
         uttvtt!(
             utt, vtt, ut, vt, u, v, prob.Ks, prob.Ss, prob.p_operator,
-            prob.q_operator, control.p[1], control.q[1], control.p[2],
-            control.q[2], t, pcof
+            prob.q_operator, control, t, pcof
         )
 
         utvt_history[1:prob.N_tot_levels,       1+n] .= ut
@@ -247,12 +245,12 @@ function eval_forward_order4(
     utvt!(
         ut, vt, u, v,
         prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-        control.p[1], control.q[1], t, pcof
+        control, t, pcof
     )
     uttvtt!(
         utt, vtt, ut, vt, u, v,
         prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-        control.p[1], control.q[1], control.p[2], control.q[2], t, pcof
+        control, t, pcof
     )
 
     utvt_history[1:prob.N_tot_levels,       1+prob.nsteps] .= ut
@@ -352,7 +350,7 @@ function eval_forward_forced_order2(
         return LHS_func(
             ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control.p[1], control.q[1], t, pcof, dt, prob.N_tot_levels
+            control, t, pcof, dt, prob.N_tot_levels
         )
     end
 

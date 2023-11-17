@@ -1,10 +1,15 @@
+#==============================================================================
+#
+# I should take a look at this again and give things more informative names
+#
+==============================================================================#
 function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
-        p::Function, q::Function, t, α)
+        p::Function, q::Function, t::Float64, pcof::AbstractVector{Float64})
     # Call the version of utvt! which uses the values of p and q
-    utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p(t,α), q(t,α))
+    utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p(t,pcof), q(t,pcof))
 
     return nothing
 end
@@ -16,7 +21,7 @@ function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         control::AbstractControl, t::Float64, pcof::AbstractArray{Float64})
 
     pval = eval_p(control, t, pcof)
-    qval = eval_p(control, t, pcof)
+    qval = eval_q(control, t, pcof)
 
     utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, pval, qval)
 
@@ -24,7 +29,7 @@ function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
 end
 
 """
-Values of p(t,α) and q(t,α) provided. Mutates ut and vt, leaves all other variables untouched.
+Values of p(t,pcof) and q(t,pcof) provided. Mutates ut and vt, leaves all other variables untouched.
 """
 function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
@@ -47,6 +52,7 @@ function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
     return nothing
 end
 
+
 function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
@@ -54,9 +60,9 @@ function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
         p::Function, q::Function,
         dpdt::Function, dqdt::Function,
-        t, α)
+        t::Float64, pcof::AbstractVector{Float64})
     uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag,
-            p(t,α), q(t,α), dpdt(t,α), dqdt(t,α))
+            p(t, pcof), q(t, pcof), dpdt(t, pcof), dqdt(t,pcof))
 
     return nothing
 end
@@ -81,6 +87,23 @@ function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
     return nothing
 end
 
+function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
+        ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
+        a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
+        control::AbstractControl, t::Float64, pcof::AbstractArray{Float64})
+
+    pval = eval_p(control, t, pcof)
+    qval = eval_q(control, t, pcof)
+    ptval = eval_pt(control, t, pcof)
+    qtval = eval_qt(control, t, pcof)
+
+    uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, pval, qval, ptval, qtval)
+
+    return nothing
+end
+
 
 
 """
@@ -91,7 +114,13 @@ LHS*uvⁿ⁺¹ = RHS*uvⁿ
 This function computes the action of LHS on a vector uv.
 That is, given an input uv (as two arguments u and v), return LHS*uv
 """
-function LHS_func(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, control, t, pcof, dt, N_tot)
+function LHS_func(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64}, 
+        a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
+        control::AbstractControl, t::Float64, pcof::AbstractVector{Float64},
+        dt::Float64, N_tot::Int64)
+
     utvt!(ut, vt, u, v,
           Ks, Ss, a_plus_adag, a_minus_adag,
           control, t, pcof)
@@ -108,16 +137,20 @@ function LHS_func(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, control, t, p
     return LHS_uv
 end
 
-function LHS_func_order4(utt, vtt, ut, vt, u, v,
-        Ks, Ss, a_plus_adag, a_minus_adag,
-        p, q, dpdt, dqdt, t, α, dt, N_tot)
+function LHS_func_order4(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
+        ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64}, 
+        a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
+        control::AbstractControl, t::Float64,
+        pcof::AbstractVector{Float64}, dt::Float64, N_tot::Int64)
 
     utvt!(ut, vt, u, v,
           Ks, Ss, a_plus_adag, a_minus_adag,
-          p, q, t, α)
+          control, t, pcof)
     uttvtt!(utt, vtt, ut, vt, u, v,
             Ks, Ss, a_plus_adag, a_minus_adag,
-            p, q, dpdt, dqdt, t, α)
+            control, t, pcof)
 
     weights = [1,-1/3]
     
