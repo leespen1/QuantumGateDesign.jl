@@ -54,6 +54,8 @@ function eval_forward_order2(
     vt = zeros(prob.N_tot_levels)
 
 
+    # This probably creates type-instability, as functions have singleton types, 
+    # and this function is (I'm pretty sure) not created until runtime
     function LHS_func_wrapper(uv::AbstractVector{Float64})::Vector{Float64}
         # Careful, make certain that I can do this overwrite without messing up anything else
         copyto!(u, 1, uv, 1,                   prob.N_tot_levels)
