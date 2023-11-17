@@ -489,7 +489,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, control::AbstractControl
                     utvt!(
                         ut, vt, u, v,
                         dKs_da, dSs_da, prob.p_operator, prob.q_operator,
-                        dpda, dqda, t, pcof
+                        dpda(t, pcof), dqda(t, pcof)
                     )
                     copyto!(forcing_vec, 1,                   ut, 1, prob.N_tot_levels)
                     copyto!(forcing_vec, 1+prob.N_tot_levels, vt, 1, prob.N_tot_levels)
@@ -521,7 +521,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, control::AbstractControl
                     utvt!(
                         ut, vt, u, v, 
                         dKs_da, dSs_da, prob.p_operator, prob.q_operator,
-                        dpda, dqda, t, pcof
+                        dpda(t, pcof), dqda(t, pcof)
                     )
                     forcing_vec2[1:prob.N_tot_levels]     .= ut
                     forcing_vec2[1+prob.N_tot_levels:end] .= vt
@@ -534,7 +534,8 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, control::AbstractControl
                     utvt!(
                         ut, vt, u, v,
                         dKs_da, dSs_da, prob.p_operator, prob.q_operator,
-                          d2p_dta, d2q_dta, t, pcof)
+                        d2p_dta(t, pcof), d2q_dta(t, pcof)
+                    )
                     forcing_vec4[1:prob.N_tot_levels]     .+= ut
                     forcing_vec4[1+prob.N_tot_levels:end] .+= vt
 
@@ -547,7 +548,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, control::AbstractControl
                     utvt!(
                         A, B, ut, vt,
                         dKs_da, dSs_da, prob.p_operator, prob.q_operator,
-                        dpda, dqda, t, pcof
+                        dpda(t, pcof), dqda(t, pcof)
                     )
 
                     forcing_vec4[1:prob.N_tot_levels]     .+= A

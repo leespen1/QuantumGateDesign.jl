@@ -7,17 +7,6 @@ function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
-        p::Function, q::Function, t::Float64, pcof::AbstractVector{Float64})
-    # Call the version of utvt! which uses the values of p and q
-    utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, p(t,pcof), q(t,pcof))
-
-    return nothing
-end
-
-function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
-        u::AbstractVector{Float64}, v::AbstractVector{Float64},
-        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
-        a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
         control::AbstractControl, t::Float64, pcof::AbstractArray{Float64})
 
     pval = eval_p(control, t, pcof)
@@ -35,54 +24,52 @@ function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
-        p::Float64, q::Float64)
+        p_val::Float64, q_val::Float64)
     # Non-Memory-Allocating Version (test performance)
-    # ut = (Ss + q(t)(a-a†))u - (Ks + p(t)(a+a†))v
+    # ut = (Ss + q(t)(a-a†))u + (Ks + p(t)(a+a†))v
     mul!(ut, Ss, u)
-    mul!(ut, a_minus_adag, u, q, 1)
-    mul!(ut, Ks, v, -1, 1)
-    mul!(ut, a_plus_adag, v, -p, 1)
+    mul!(ut, a_minus_adag, u, q_val, 1)
+    mul!(ut, Ks, v, 1, 1)
+    mul!(ut, a_plus_adag, v, p_val, 1)
 
-    # vt = (Ss + q(t)(a-a†))v + (Ks + p(t)(a+a†))u
+    # vt = (Ss + q(t)(a-a†))v - (Ks + p(t)(a+a†))u
     mul!(vt, Ss, v)
-    mul!(vt, a_minus_adag, v, q, 1)
-    mul!(vt, Ks, u, 1, 1)
-    mul!(vt, a_plus_adag,  u, p, 1)
+    mul!(vt, a_minus_adag, v, q_val, 1)
+    mul!(vt, Ks, u, -1, 1)
+    mul!(vt, a_plus_adag,  u, -p_val, 1)
 
     return nothing
 end
 
 
+"""
+Assumes that ut and vt have already been computed
+
+ψtt = Ht*ψ + H*ψt = Ht*ψ + H²*ψ
+
+Hψ is already calculated and stored in ut/vt. Therefore the call to utvt! with ut/vt in
+place of u/v computes H²ψ.
+
+The rest of the function computes Ht*ψb
+
+"""
 function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
-        p::Function, q::Function,
-        dpdt::Function, dqdt::Function,
-        t::Float64, pcof::AbstractVector{Float64})
-    uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag,
-            p(t, pcof), q(t, pcof), dpdt(t, pcof), dqdt(t,pcof))
-
-    return nothing
-end
-
-function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
-        ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
-        u::AbstractVector{Float64}, v::AbstractVector{Float64},
-        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
-        a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
-        p::Float64, q::Float64,
-        dpdt::Float64, dqdt::Float64
+        p_val::Float64, q_val::Float64,
+        dpdt_val::Float64, dqdt_val::Float64
         )
-    ## Make use of utvt!
-    utvt!(utt, vtt, ut, vt, Ks, Ss, a_plus_adag, a_minus_adag, p, q)
+    ## Make use of utvt! to compute H²ψ, make use of ψt already computed
+    utvt!(utt, vtt, ut, vt, Ks, Ss, a_plus_adag, a_minus_adag, p_val, q_val)
 
-    mul!(utt, a_minus_adag, u, dqdt, 1)
-    mul!(utt, a_plus_adag, v, -dpdt, 1)
+    # Add Ht*ψ. System/drift hamiltonian is time-independent, falls out in Ht
+    mul!(utt, a_minus_adag, u, dqdt_val, 1)
+    mul!(utt, a_plus_adag, v, dpdt_val, 1)
 
-    mul!(vtt, a_plus_adag,  u, dpdt, 1)
-    mul!(vtt, a_minus_adag, v, dqdt, 1)
+    mul!(vtt, a_plus_adag,  u, -dpdt_val, 1)
+    mul!(vtt, a_minus_adag, v, dqdt_val, 1)
 
     return nothing
 end
@@ -94,12 +81,13 @@ function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
         control::AbstractControl, t::Float64, pcof::AbstractArray{Float64})
 
-    pval = eval_p(control, t, pcof)
-    qval = eval_q(control, t, pcof)
-    ptval = eval_pt(control, t, pcof)
-    qtval = eval_qt(control, t, pcof)
+    p_val = eval_p(control, t, pcof)
+    q_val = eval_q(control, t, pcof)
+    pt_val = eval_pt(control, t, pcof)
+    qt_val = eval_qt(control, t, pcof)
 
-    uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, pval, qval, ptval, qtval)
+    uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag,
+            p_val, q_val, pt_val, qt_val)
 
     return nothing
 end
