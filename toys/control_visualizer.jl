@@ -1,5 +1,5 @@
-#using GLMakie
-using CairoMakie
+using GLMakie
+#using CairoMakie
 using HermiteOptimalControl
 
 function visualize_control(control, tf, npoints; prob=missing, 
@@ -16,9 +16,19 @@ function visualize_control(control, tf, npoints; prob=missing,
         startvalues .= pcof_init
     end
 
+    # Set up timing observables
+    n_points_o = Observable{Int64}(npoints)
+    tf_o = Observable{Float64}(tf)
+
+    # Time grid tracks final time
+    # Having the number of points in linrange seems to produce errors, but the plot still works
+    ts_o = lift((t,n) -> LinRange(0,t,n), tf_o, n_points_o)
+
+    pcof_range = LinRange(0, 1e-3, 10)
+
     if use_slidergrid
         pcof_slider_parameters = [
-            (label="pcof[$i]", range=range, startvalue=startvalues[i])
+            (label="pcof[$i]", range=pcof_range, startvalue=startvalues[i])
             for i in 1:control.N_coeff
         ]
         pcof_slidergrid = SliderGrid(fig[4,1], pcof_slider_parameters...)
@@ -36,13 +46,6 @@ function visualize_control(control, tf, npoints; prob=missing,
     end
 
 
-    # Set up timing observables
-    n_points_o = Observable{Int64}(npoints)
-    tf_o = Observable{Float64}(tf)
-
-    # Time grid tracks final time
-    # Having the number of points in linrange seems to produce errors, but the plot still works
-    ts_o = lift((t,n) -> LinRange(0,t,n), tf_o, n_points_o)
 
     if use_tboxes
         # Setup textbox for modification of final time, and number of grid points
@@ -65,8 +68,8 @@ function visualize_control(control, tf, npoints; prob=missing,
     # (in units of MHz, non angular)
     function update_graph()
         pcof = to_value.(pcof_o)
-        p_vals_o[] = [control.p[1](ts_o[][k], pcof)*1e3/(2*pi) for k in 1:n_points_o[]]
-        q_vals_o[] = [control.q[1](ts_o[][k], pcof)*1e3/(2*pi) for k in 1:n_points_o[]]
+        p_vals_o[] = [control.p[1](ts_o[][k], pcof)*1e3 for k in 1:n_points_o[]]
+        q_vals_o[] = [control.q[1](ts_o[][k], pcof)*1e3 for k in 1:n_points_o[]]
 
         # Update ylims to capture entire control; const args ensure ylims != (0,0)
         ylims!(ax, min(minimum(p_vals_o[]), minimum(q_vals_o[]))-1,
