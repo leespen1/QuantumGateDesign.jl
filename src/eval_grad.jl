@@ -34,9 +34,6 @@ function discrete_adjoint(
         throw("Invalid cost type: $cost_type")
     end
 
-    println("Terminal RHS:")
-    display(terminal_RHS)
-
     for initial_condition_index = 1:size(prob.u0,2)
         lambda = zeros(2*prob.N_tot_levels)
         lambda_history = zeros(2*prob.N_tot_levels,1+prob.nsteps)
@@ -101,8 +98,6 @@ function discrete_adjoint(
                 lambda_u = lambda[1:prob.N_tot_levels]
                 lambda_v = lambda[1+prob.N_tot_levels:end]
             end
-
-            display(lambda_history)
 
             grad .+= disc_adj_calc_grad(prob, controls, pcof,
                 view(history, :, :, initial_condition_index), lambda_history
