@@ -62,15 +62,17 @@ function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
     end
 
     # vt = (Ss + q(t)(a-a†))v - (Ks + p(t)(a+a†))u
+    #
+    mul!(vt, prob.system_asym, v)
+    for (i, operator) in enumerate(prob.asym_operators)
+        mul!(vt, operator, v, eval_q(controls[i], t, pcof), 1)
+    end
+
     mul!(vt, prob.system_sym, u, -1, 1)
     for (i, operator) in enumerate(prob.sym_operators)
         mul!(vt, operator,  u, -eval_p(controls[i], t, pcof), 1)
     end
 
-    mul!(vt, prob.system_asym, v)
-    for (i, operator) in enumerate(prob.asym_operators)
-        mul!(vt, operator, v, eval_q(controls[i], t, pcof), 1)
-    end
 
     return nothing
 end
