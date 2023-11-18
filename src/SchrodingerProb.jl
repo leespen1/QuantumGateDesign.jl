@@ -2,15 +2,12 @@
 Struct containing all the necessary information needed (except the value of the
 control vector and target gate) to evolve a state vector according to
 Schrodinger's equation and compute gradients.
-
-Should eventually change p_operator/q_operator to be more like Juqbox's coupled
-and uncoupled operators.
 """
 mutable struct SchrodingerProb{M, VM} 
-    Ks::M
-    Ss::M
-    p_operator::M # a + a^†
-    q_operator::M # a - a^†
+    system_sym::M
+    system_asym::M
+    sym_operators::Vector{M} # a + a^†
+    asym_operators::Vector{M} # a - a^†
     u0::VM
     v0::VM
     tf::Float64
@@ -24,10 +21,10 @@ mutable struct SchrodingerProb{M, VM}
     implemented order.
     """
     function SchrodingerProb(
-            Ks::M,
-            Ss::M,
-            p_operator::M,
-            q_operator::M,
+            system_sym::M,
+            system_asym::M,
+            sym_operators::Vector{M},
+            asym_operators::Vector{M},
             u0::VM,
             v0::VM,
             tf::Float64,
@@ -39,16 +36,24 @@ mutable struct SchrodingerProb{M, VM}
         # Check dimensions of all matrices and vectors
         @assert size(u0) == size(v0)
         @assert size(u0,1) == size(v0,1) == N_tot_levels
-        @assert size(Ks,1) == size(Ks,2) == N_tot_levels
-        @assert size(Ss,1) == size(Ss,2) == N_tot_levels
-        @assert size(p_operator,1) == size(p_operator,2) == N_tot_levels
-        @assert size(q_operator,1) == size(q_operator,2) == N_tot_levels
+        @assert length(sym_operators) == length(asym_operators)
+        @assert size(system_sym,1) == size(system_sym,2) == N_tot_levels
+        @assert size(system_asym,1) == size(system_asym,2) == N_tot_levels
+        for i in eachindex(sym_operators)
+            sym_op = sym_operators[i]
+            asym_op = asym_operators[i]
+            @assert size(sym_op,1) == size(sym_op,2) == N_tot_levels
+            @assert size(asym_op,1) == size(asym_op,2) == N_tot_levels
+        end
 
         # Copy arrays when creating a Schrodinger problem
-        new{M, VM}(copy(Ks), copy(Ss), copy(p_operator), copy(q_operator),
+        new{M, VM}(
+            copy(system_sym), copy(system_asym),
+            deepcopy(sym_operators), deepcopy(asym_operators),
             copy(u0), copy(v0),
             tf, nsteps,
-            N_ess_levels, N_guard_levels, N_tot_levels)
+            N_ess_levels, N_guard_levels, N_tot_levels
+        )
     end
 end
 
@@ -56,7 +61,8 @@ end
 
 function Base.copy(prob::SchrodingerProb{T}) where T
     return SchrodingerProb(
-        copy(prob.Ks), copy(prob.Ss), copy(prob.p_operator), copy(prob.q_operator),
+        copy(prob.system_sym), copy(prob.system_asym),
+        deepcopy(prob.sym_operators), deepcopy(prob.asym_operators),
         copy(prob.u0), copy(prob.v0),
         prob.tf, prob.nsteps,
         prob.N_ess_levels, prob.N_guard_levels
@@ -70,7 +76,8 @@ function VectorSchrodingerProb(
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     return SchrodingerProb(
-        copy(prob.Ks), copy(prob.Ss), copy(prob.p_operator), copy(prob.q_operator),
+        copy(prob.system_sym), copy(prob.system_asym),
+        deepcopy(prob.sym_operators), deepcopy(prob.asym_operators),
         prob.u0[:,initial_condition_index], prob.v0[:,initial_condition_index],
         prob.tf, prob.nsteps,
         prob.N_ess_levels, prob.N_guard_levels

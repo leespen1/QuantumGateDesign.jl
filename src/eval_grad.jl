@@ -6,24 +6,15 @@ gate and control parameter(s) pcof using the discrete adjoint method.
 Returns: gradient
 """
 function discrete_adjoint(
-        prob::SchrodingerProb, control::AbstractControl,
+        prob::SchrodingerProb, controls,
         pcof::AbstractVector{Float64}, target::AbstractMatrix{Float64}; 
         order=2, cost_type=:Infidelity, return_lambda_history=false
     )
 
-    history = eval_forward(prob, control, pcof; order=order)
+    history = eval_forward(prob, controls, pcof; order=order)
 
     R = target[:,:] # Copy target, converting to matrix if vector
     T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
-
-    # For adjoint evolution. Take transpose of entire matrix -> antisymmetric blocks change sign
-    Ks_adj = Matrix(transpose(-prob.Ks)) # NOTE THAT K changes sign!
-    Ss_adj = Matrix(transpose(prob.Ss))
-    p_operator_adj = Matrix(transpose(-prob.p_operator)) # NOTE THAT K changes sign!
-    q_operator_adj = Matrix(transpose(prob.q_operator))
-    
-    p_operator_transpose = Matrix(transpose(prob.p_operator)) # NOTE THAT K changes sign!
-    q_operator_transpose = Matrix(transpose(prob.q_operator))
 
     dt = prob.tf/prob.nsteps
 
@@ -42,6 +33,9 @@ function discrete_adjoint(
     else
         throw("Invalid cost type: $cost_type")
     end
+
+    println("Terminal RHS:")
+    display(terminal_RHS)
 
     for initial_condition_index = 1:size(prob.u0,2)
         lambda = zeros(2*prob.N_tot_levels)
@@ -67,8 +61,9 @@ function discrete_adjoint(
             function LHS_func_wrapper_order2(x::AbstractVector{Float64})::Vector{Float64}
                 return LHS_func(
                     lambda_ut, lambda_vt, x[1:prob.N_tot_levels],
-                    x[1+prob.N_tot_levels:end], Ks_adj, Ss_adj, p_operator_adj,
-                    q_operator_adj, control, t, pcof, dt,
+                    x[1+prob.N_tot_levels:end], 
+                    prob, controls,
+                    t, pcof, dt,
                     prob.N_tot_levels
                 )
             end
@@ -87,19 +82,18 @@ function discrete_adjoint(
             # Discrete Adjoint Scheme
             for n in prob.nsteps-1:-1:1
                 t -= dt
-                utvt!(
-                    lambda_ut, lambda_vt, lambda_u, lambda_v, Ks_adj, Ss_adj,
-                    p_operator_adj, q_operator_adj, control,
+                utvt_adj!(
+                    lambda_ut, lambda_vt, lambda_u, lambda_v, prob, controls,
                     t, pcof
                 )
-                copy!(RHS_lambda_u,lambda_u)
-                axpy!(0.5*dt,lambda_ut,RHS_lambda_u)
+                copy!(RHS_lambda_u, lambda_u)
+                axpy!(0.5*dt, lambda_ut, RHS_lambda_u)
 
-                copy!(RHS_lambda_v,lambda_v)
-                axpy!(0.5*dt,lambda_vt,RHS_lambda_v)
+                copy!(RHS_lambda_v, lambda_v)
+                axpy!(0.5*dt, lambda_vt, RHS_lambda_v)
 
-                copyto!(RHS,1,RHS_lambda_u,1,prob.N_tot_levels)
-                copyto!(RHS,1+prob.N_tot_levels,RHS_lambda_v,1,prob.N_tot_levels)
+                copyto!(RHS,1, RHS_lambda_u, 1, prob.N_tot_levels)
+                copyto!(RHS,1+prob.N_tot_levels, RHS_lambda_v, 1, prob.N_tot_levels)
 
                 IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
@@ -107,54 +101,14 @@ function discrete_adjoint(
                 lambda_u = lambda[1:prob.N_tot_levels]
                 lambda_v = lambda[1+prob.N_tot_levels:end]
             end
+
+            display(lambda_history)
+
+            grad .+= disc_adj_calc_grad(prob, controls, pcof,
+                view(history, :, :, initial_condition_index), lambda_history
+            )
         
-            zero_mat = zeros(prob.N_tot_levels,prob.N_tot_levels)
-            uv = zeros(2*prob.N_tot_levels)
-            u = zeros(prob.N_tot_levels)
-            v = zeros(prob.N_tot_levels)
-            # Won't actually hold ut and vt, but rather real/imag parts of dH/dα*ψ
-            ut = zeros(prob.N_tot_levels)
-            vt = zeros(prob.N_tot_levels)
-            dummy_u = zeros(prob.N_tot_levels)
-            dummy_v = zeros(prob.N_tot_levels)
-            dummy = zeros(2*prob.N_tot_levels)
 
-            MT_lambda_11 = zeros(prob.N_tot_levels)
-            MT_lambda_12 = zeros(prob.N_tot_levels)
-            MT_lambda_21 = zeros(prob.N_tot_levels)
-            MT_lambda_22 = zeros(prob.N_tot_levels)
-
-            for n in 0:prob.nsteps-1
-                lambda_u = lambda_history[1:prob.N_tot_levels,1+n+1]
-                lambda_v = lambda_history[1+prob.N_tot_levels:end,1+n+1]
-
-                u = history[1:prob.N_tot_levels,     1+n, initial_condition_index]
-                v = history[1+prob.N_tot_levels:end, 1+n, initial_condition_index]
-                t = n*dt
-
-                grad_p = eval_grad_p(control, t, pcof)
-                grad_q = eval_grad_q(control, t, pcof)
-
-                mul!(MT_lambda_11, q_operator_transpose, lambda_u)
-                mul!(MT_lambda_12, p_operator_transpose, lambda_v)
-                mul!(MT_lambda_21, p_operator_transpose, lambda_u)
-                mul!(MT_lambda_22, q_operator_transpose, lambda_v)
-
-                grad_contrib .+= grad_p .* (dot(u, MT_lambda_12) - dot(v, MT_lambda_21))
-                grad_contrib .+= grad_q .* (dot(u, MT_lambda_11) + dot(v, MT_lambda_22))
-
-                u = history[1:prob.N_tot_levels,     1+n+1, initial_condition_index]
-                v = history[1+prob.N_tot_levels:end, 1+n+1, initial_condition_index]
-                t = (n+1)*dt
-
-                grad_p = eval_grad_p(control, t, pcof)
-                grad_q = eval_grad_q(control, t, pcof)
-
-                grad_contrib .+= grad_p .* (dot(u, MT_lambda_12) - dot(v, MT_lambda_21))
-                grad_contrib .+= grad_q .* (dot(u, MT_lambda_11) + dot(v, MT_lambda_22))
-            end
-
-            grad .+=  (-0.5*dt) .* grad_contrib
 
         elseif order == 4
             # Terminal Condition
@@ -219,8 +173,6 @@ function discrete_adjoint(
                 lambda_v = lambda[1+prob.N_tot_levels:2*prob.N_tot_levels]
             end
 
-            zero_mat = zeros(prob.N_tot_levels,prob.N_tot_levels)
-            uv = zeros(2*prob.N_tot_levels)
             u = zeros(prob.N_tot_levels)
             v = zeros(prob.N_tot_levels)
 
@@ -432,6 +384,69 @@ function discrete_adjoint(
 end
 
 """
+Need better name
+"""
+function disc_adj_calc_grad(prob::SchrodingerProb, controls,
+        pcof::AbstractVector{Float64},
+        history::AbstractMatrix{Float64}, lambda_history::AbstractMatrix{Float64},
+        )
+    # Will change to a loop over them in the future
+    control = controls[1]
+    asym_op = prob.asym_operators[1]
+    sym_op = prob.sym_operators[1]
+
+    grad_contrib = zeros(control.N_coeff)
+    grad_p = zeros(control.N_coeff)
+    grad_q = zeros(control.N_coeff)
+
+    dt = prob.tf / prob.nsteps
+
+    u = zeros(prob.N_tot_levels)
+    v = zeros(prob.N_tot_levels)
+    lambda_u = zeros(prob.N_tot_levels)
+    lambda_v = zeros(prob.N_tot_levels)
+
+    asym_op_lambda_u = zeros(prob.N_tot_levels)
+    asym_op_lambda_v = zeros(prob.N_tot_levels)
+    sym_op_lambda_u = zeros(prob.N_tot_levels)
+    sym_op_lambda_v = zeros(prob.N_tot_levels)
+
+    # NOTE: Revising this for multiple controls will require some thought
+    for n in 0:prob.nsteps-1
+        lambda_u = lambda_history[1:prob.N_tot_levels,     1+n+1]
+        lambda_v = lambda_history[1+prob.N_tot_levels:end, 1+n+1]
+
+        u .= history[1:prob.N_tot_levels,     1+n]
+        v .= history[1+prob.N_tot_levels:end, 1+n]
+        t = n*dt
+
+        grad_p .= eval_grad_p(control, t, pcof)
+        grad_q .= eval_grad_q(control, t, pcof)
+
+        mul!(asym_op_lambda_u, asym_op, lambda_u)
+        mul!(asym_op_lambda_v, asym_op, lambda_v)
+        mul!(sym_op_lambda_u,  sym_op,  lambda_u)
+        mul!(sym_op_lambda_v,  sym_op,  lambda_v)
+
+
+        grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
+        grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
+
+        u = history[1:prob.N_tot_levels,     1+n+1]
+        v = history[1+prob.N_tot_levels:end, 1+n+1]
+        t = (n+1)*dt
+
+        grad_p = eval_grad_p(control, t, pcof)
+        grad_q = eval_grad_q(control, t, pcof)
+
+        grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
+        grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
+    end
+
+    return  (-0.5*dt) .* grad_contrib
+end
+
+"""
 Evaluates gradient of the provided Schrodinger problem with the given target
 gate and control parameter(s) pcof using the "forward differentiation" method,
 which evolves a differentiated Schrodinger equation, using the state vector
@@ -439,7 +454,7 @@ in the evolution of the original Schrodinger equation as a forcing term.
 
 Returns: gradient
 """
-function eval_grad_forced(prob::SchrodingerProb{M, VM}, control::AbstractControl,
+function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
         pcof::AbstractVector{Float64}, target::VM; order=2, 
         cost_type=:Infidelity
     ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}

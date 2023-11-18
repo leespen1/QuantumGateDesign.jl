@@ -35,6 +35,26 @@ I am leaning toward the former option, since it would be easier to implement.
 """
 abstract type AbstractControl end
 
+"""
+For compatibility between single and multiple controls.
+
+Similar to how `1[1]` works in Julia
+
+For multiple controls, should pass in a vector of controls. Each element should
+have a control which corresponds to a control operator/matrix. For a single
+qubit, there should be only one control object, because there is only one
+control operator.
+
+Although we might think about "multiple controls" in the
+sense that a bcarrier control for a single qubit consists of multiple controls
+with different frequencies, it should be considered as only one control.
+"""
+function Base.getindex(control::AbstractControl, index::Int64)
+    if index != 1
+        throw(BoundsError(control, index))
+    end
+    return control
+end
 
 """
 I'm not sure if creating the lambda/anonymous function has a significant
@@ -66,7 +86,6 @@ end
 function eval_grad_qt(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
     return ForwardDiff.gradient(pcof_dummy -> eval_qt(control, t, pcof_dummy), pcof)
 end
-
 
 #=================================================
 # 

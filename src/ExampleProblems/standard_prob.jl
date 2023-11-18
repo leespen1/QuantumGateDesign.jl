@@ -14,19 +14,21 @@ function rotating_frame_qubit(N_ess_levels::Int, N_guard_levels::Int;
 
     a = lowering_operator(N_tot_levels)
 
-    Ks = zeros(N_tot_levels, N_tot_levels)
-    Ss = zeros(N_tot_levels, N_tot_levels)
+    system_sym  = zeros(N_tot_levels, N_tot_levels)
+    system_sym .+= 2*pi*detuning_frequency .* (a'*a)
+    system_sym .-= (0.5*2*pi*self_kerr_coefficient) .* (a'*a'*a*a)
 
-    Ks .+= 2*pi*detuning_frequency .* (a'*a)
-    Ks .-= (0.5*2*pi*self_kerr_coefficient) .* (a'*a'*a*a)
+    system_asym = zeros(N_tot_levels, N_tot_levels)
 
-    p_operator = a + a'
-    q_operator = a - a'
+
+    sym_operator  = a + a'
+    asym_operator = a - a'
 
     u0, v0 = initial_basis(N_ess_levels, N_guard_levels)
 
     return SchrodingerProb(
-        Ks, Ss, p_operator, q_operator,
+        system_sym, system_asym,
+        [sym_operator], [asym_operator],
         u0, v0, 
         tf, nsteps,
         N_ess_levels, N_guard_levels

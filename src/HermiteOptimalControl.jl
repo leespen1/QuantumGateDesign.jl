@@ -33,8 +33,8 @@ export initial_basis
 
 
 include("SchrodingerProb.jl")
-include("bsplines.jl")
 include("Control.jl")
+include("bsplines.jl")
 include("convergence_test.jl")
 include("eval_grad.jl")
 include("forward_evolution.jl")

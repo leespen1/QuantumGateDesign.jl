@@ -5,14 +5,14 @@
 ==============================================================================#
 function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
-        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
+        system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64},
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
         control::AbstractControl, t::Float64, pcof::AbstractArray{Float64})
 
     pval = eval_p(control, t, pcof)
     qval = eval_q(control, t, pcof)
 
-    utvt!(ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag, pval, qval)
+    utvt!(ut, vt, u, v, system_sym, system_asym, a_plus_adag, a_minus_adag, pval, qval)
 
     return nothing
 end
@@ -22,21 +22,91 @@ Values of p(t,pcof) and q(t,pcof) provided. Mutates ut and vt, leaves all other 
 """
 function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
-        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
+        system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64},
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
         p_val::Float64, q_val::Float64)
     # Non-Memory-Allocating Version (test performance)
     # ut = (Ss + q(t)(a-a†))u + (Ks + p(t)(a+a†))v
-    mul!(ut, Ss, u)
+    mul!(ut, system_asym, u)
     mul!(ut, a_minus_adag, u, q_val, 1)
-    mul!(ut, Ks, v, 1, 1)
+    mul!(ut, system_sym, v, 1, 1)
     mul!(ut, a_plus_adag, v, p_val, 1)
 
     # vt = (Ss + q(t)(a-a†))v - (Ks + p(t)(a+a†))u
-    mul!(vt, Ss, v)
+    mul!(vt, system_asym, v)
     mul!(vt, a_minus_adag, v, q_val, 1)
-    mul!(vt, Ks, u, -1, 1)
+    mul!(vt, system_sym, u, -1, 1)
     mul!(vt, a_plus_adag,  u, -p_val, 1)
+
+    return nothing
+end
+
+"""
+Multiple control version
+"""
+function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        prob::SchrodingerProb, controls,
+        t::Float64, pcof::AbstractVector{Float64})
+
+    # Non-Memory-Allocating Version (test performance)
+    # ut = (Ss + q(t)(a-a†))u + (Ks + p(t)(a+a†))v
+    mul!(ut, prob.system_asym, u)
+    for (i, operator) in enumerate(prob.asym_operators)
+        mul!(ut, operator, u, eval_q(controls[i], t, pcof), 1)
+    end
+
+    mul!(ut, prob.system_sym, v, 1, 1)
+    for (i, operator) in enumerate(prob.sym_operators)
+        mul!(ut, operator, v, eval_p(controls[i], t, pcof), 1)
+    end
+
+    # vt = (Ss + q(t)(a-a†))v - (Ks + p(t)(a+a†))u
+    mul!(vt, prob.system_sym, u, -1, 1)
+    for (i, operator) in enumerate(prob.sym_operators)
+        mul!(vt, operator,  u, -eval_p(controls[i], t, pcof), 1)
+    end
+
+    mul!(vt, prob.system_asym, v)
+    for (i, operator) in enumerate(prob.asym_operators)
+        mul!(vt, operator, v, eval_q(controls[i], t, pcof), 1)
+    end
+
+    return nothing
+end
+
+"""
+Evaluate first derivative in adjoint equation.
+
+In the real-valued formulation `y = Ax`, the adjoint equation is `y = Aᵀx`.
+Because the Hamiltonian is Hermitian, for the adjoint equation we only need to
+do 
+[S K; -K S]ᵀ = [-S -K; K -S]
+"""
+function utvt_adj!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        prob::SchrodingerProb, controls,
+        t::Float64, pcof::AbstractVector{Float64})
+
+    mul!(ut, prob.system_asym, u)
+    for (i, operator) in enumerate(prob.asym_operators)
+        mul!(ut, operator, u, -eval_q(controls[i], t, pcof), 1)
+    end
+
+    mul!(ut, prob.system_sym, v, 1, 1)
+    for (i, operator) in enumerate(prob.sym_operators)
+        mul!(ut, operator, v, -eval_p(controls[i], t, pcof), 1)
+    end
+
+    mul!(vt, prob.system_sym, u, -1, 1)
+    for (i, operator) in enumerate(prob.sym_operators)
+        mul!(vt, operator,  u, eval_p(controls[i], t, pcof), 1)
+    end
+
+    mul!(vt, prob.system_asym, v)
+    for (i, operator) in enumerate(prob.asym_operators)
+        mul!(vt, operator, v, -eval_q(controls[i], t, pcof), 1)
+    end
 
     return nothing
 end
@@ -56,13 +126,13 @@ The rest of the function computes Ht*ψb
 function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
-        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
+        system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64},
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
         p_val::Float64, q_val::Float64,
         dpdt_val::Float64, dqdt_val::Float64
         )
     ## Make use of utvt! to compute H²ψ, make use of ψt already computed
-    utvt!(utt, vtt, ut, vt, Ks, Ss, a_plus_adag, a_minus_adag, p_val, q_val)
+    utvt!(utt, vtt, ut, vt, system_sym, system_asym, a_plus_adag, a_minus_adag, p_val, q_val)
 
     # Add Ht*ψ. System/drift hamiltonian is time-independent, falls out in Ht
     mul!(utt, a_minus_adag, u, dqdt_val, 1)
@@ -77,7 +147,7 @@ end
 function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
-        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64},
+        system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64},
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
         control::AbstractControl, t::Float64, pcof::AbstractArray{Float64})
 
@@ -86,7 +156,7 @@ function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
     pt_val = eval_pt(control, t, pcof)
     qt_val = eval_qt(control, t, pcof)
 
-    uttvtt!(utt, vtt, ut, vt, u, v, Ks, Ss, a_plus_adag, a_minus_adag,
+    uttvtt!(utt, vtt, ut, vt, u, v, system_sym, system_asym, a_plus_adag, a_minus_adag,
             p_val, q_val, pt_val, qt_val)
 
     return nothing
@@ -104,13 +174,13 @@ That is, given an input uv (as two arguments u and v), return LHS*uv
 """
 function LHS_func(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
-        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64}, 
+        system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64}, 
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
         control::AbstractControl, t::Float64, pcof::AbstractVector{Float64},
         dt::Float64, N_tot::Int64)
 
     utvt!(ut, vt, u, v,
-          Ks, Ss, a_plus_adag, a_minus_adag,
+          system_sym, system_asym, a_plus_adag, a_minus_adag,
           control, t, pcof)
     
     LHSu = copy(u)
@@ -119,8 +189,29 @@ function LHS_func(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
     axpy!(-0.5*dt,vt,LHSv)
 
     LHS_uv = zeros(Float64, 2*N_tot)
-    copyto!(LHS_uv,1,LHSu,1,N_tot)
-    copyto!(LHS_uv,1+N_tot,LHSv,1,N_tot)
+    copyto!(LHS_uv, 1,       LHSu, 1, N_tot)
+    copyto!(LHS_uv, 1+N_tot, LHSv, 1, N_tot)
+
+    return LHS_uv
+end
+
+function LHS_func(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        prob::SchrodingerProb, controls,
+        t::Float64, pcof::AbstractVector{Float64},
+        dt::Float64, N_tot::Int64)
+
+    utvt!(ut, vt, u, v,
+          prob, controls, t, pcof)
+    
+    LHSu = copy(u)
+    axpy!(-0.5*dt, ut, LHSu)
+    LHSv = copy(v)
+    axpy!(-0.5*dt, vt, LHSv)
+
+    LHS_uv = zeros(Float64, 2*N_tot)
+    copyto!(LHS_uv, 1,       LHSu, 1, N_tot)
+    copyto!(LHS_uv, 1+N_tot, LHSv, 1, N_tot)
 
     return LHS_uv
 end
@@ -128,30 +219,30 @@ end
 function LHS_func_order4(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
-        Ks::AbstractMatrix{Float64}, Ss::AbstractMatrix{Float64}, 
+        system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64}, 
         a_plus_adag::AbstractMatrix{Float64}, a_minus_adag::AbstractMatrix{Float64},
         control::AbstractControl, t::Float64,
         pcof::AbstractVector{Float64}, dt::Float64, N_tot::Int64)
 
     utvt!(ut, vt, u, v,
-          Ks, Ss, a_plus_adag, a_minus_adag,
+          system_sym, system_asym, a_plus_adag, a_minus_adag,
           control, t, pcof)
     uttvtt!(utt, vtt, ut, vt, u, v,
-            Ks, Ss, a_plus_adag, a_minus_adag,
+            system_sym, system_asym, a_plus_adag, a_minus_adag,
             control, t, pcof)
 
     weights = [1,-1/3]
     
     LHSu = copy(u)
-    axpy!(-0.5*dt*weights[1],ut,LHSu)
-    axpy!(-0.25*dt^2*weights[2],utt,LHSu)
+    axpy!(-0.5*dt*weights[1],    ut,  LHSu)
+    axpy!(-0.25*dt^2*weights[2], utt, LHSu)
     LHSv = copy(v)
-    axpy!(-0.5*dt*weights[1],vt,LHSv)
-    axpy!(-0.25*dt^2*weights[2],vtt,LHSv)
+    axpy!(-0.5*dt*weights[1],    vt,  LHSv)
+    axpy!(-0.25*dt^2*weights[2], vtt, LHSv)
 
     LHS = zeros(Float64, 2*N_tot)
-    copyto!(LHS,1,LHSu,1,N_tot)
-    copyto!(LHS,1+N_tot,LHSv,1,N_tot)
+    copyto!(LHS, 1,       LHSu, 1, N_tot)
+    copyto!(LHS, 1+N_tot, LHSv, 1, N_tot)
 
     return LHS
 end

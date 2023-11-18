@@ -1,7 +1,7 @@
 """
 """
 function eval_forward(
-        prob::SchrodingerProb, control::AbstractControl,
+        prob::SchrodingerProb, controls,
         pcof::AbstractVector{Float64}; order=2, return_time_derivatives=false
     )
 
@@ -12,9 +12,9 @@ function eval_forward(
     =#
 
     if order == 2
-        return eval_forward_order2(prob, control, pcof, return_time_derivatives=return_time_derivatives)
+        return eval_forward_order2(prob, controls, pcof, return_time_derivatives=return_time_derivatives)
     elseif order == 4
-        return eval_forward_order4(prob, control, pcof, return_time_derivatives=return_time_derivatives)
+        return eval_forward_order4(prob, controls, pcof, return_time_derivatives=return_time_derivatives)
     end
     throw("Invalid order: $order")
 end
@@ -25,7 +25,7 @@ end
 Evolve a single initial condition (vector).
 """
 function eval_forward_order2(
-        prob::SchrodingerProb{M, V}, control::AbstractControl,
+        prob::SchrodingerProb{M, V}, controls,
         pcof::AbstractVector{Float64}; return_time_derivatives=false
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     
@@ -60,11 +60,7 @@ function eval_forward_order2(
         # Careful, make certain that I can do this overwrite without messing up anything else
         copyto!(u, 1, uv, 1,                   prob.N_tot_levels)
         copyto!(v, 1, uv, 1+prob.N_tot_levels, prob.N_tot_levels)
-        return LHS_func(
-            ut, vt, u, v,
-            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control, t, pcof, dt, prob.N_tot_levels
-        )
+        return LHS_func(ut, vt, u, v, prob, controls, t, pcof, dt, prob.N_tot_levels)
     end
 
     LHS_map = LinearMaps.LinearMap(
@@ -75,20 +71,16 @@ function eval_forward_order2(
 
     # Order 2
     for n in 0:prob.nsteps-1
-        utvt!(
-            ut, vt, u, v,
-            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control, t, pcof
-        )
+        utvt!(ut, vt, u, v, prob, controls, t, pcof)
 
         utvt_history[1:prob.N_tot_levels,     1+n] .= ut
         utvt_history[1+prob.N_tot_levels:end, 1+n] .= vt
 
-        copy!(RHSu,u)
-        axpy!(0.5*dt,ut,RHSu)
+        copy!(RHSu, u)
+        axpy!(0.5*dt, ut, RHSu)
 
-        copy!(RHSv,v)
-        axpy!(0.5*dt,vt,RHSv)
+        copy!(RHSv, v)
+        axpy!(0.5*dt, vt, RHSv)
 
         copyto!(RHS, 1, RHSu, 1, prob.N_tot_levels)
         copyto!(RHS, 1+prob.N_tot_levels, RHSv, 1, prob.N_tot_levels)
@@ -106,9 +98,7 @@ function eval_forward_order2(
     end
 
     # One last time, for utvt history at final time
-    utvt!(ut, vt, u, v,
-          prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-          control, t, pcof)
+    utvt!(ut, vt, u, v, prob, controls, t, pcof)
 
     utvt_history[1:prob.N_tot_levels,1+prob.nsteps] .= ut
     utvt_history[1+prob.N_tot_levels:end,1+prob.nsteps] .= vt
@@ -124,7 +114,7 @@ end
 Evolve a matrix where each column is an iniital condition.
 """
 function eval_forward_order2(
-        prob::SchrodingerProb{M1, M2}, control::AbstractControl,
+        prob::SchrodingerProb{M1, M2}, controls,
         pcof::AbstractVector{Float64}; return_time_derivatives=false
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
@@ -139,11 +129,11 @@ function eval_forward_order2(
         # Call vector version of forward evolution
         if return_time_derivatives
             uv_utvt_history[:,:,:,initial_condition_index] .= eval_forward_order2(
-                vector_prob, control, pcof, return_time_derivatives=true
+                vector_prob, controls, pcof, return_time_derivatives=true
             )
         else
             uv_history[:,:,initial_condition_index] .= eval_forward_order2(
-                vector_prob, control, pcof, return_time_derivatives=false
+                vector_prob, controls, pcof, return_time_derivatives=false
             )
         end
     end
@@ -161,7 +151,7 @@ end
 Evolve a single initial condition (vector).
 """
 function eval_forward_order4(
-        prob::SchrodingerProb{M, V}, control::AbstractControl,
+        prob::SchrodingerProb{M, V}, controls,
         pcof::AbstractVector{Float64}; return_time_derivatives=false
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
@@ -197,7 +187,7 @@ function eval_forward_order4(
             utt, vtt, ut, vt, 
             u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator, 
-            control, t, pcof, dt, prob.N_tot_levels
+            controls, t, pcof, dt, prob.N_tot_levels
         )
     end
 
@@ -211,11 +201,11 @@ function eval_forward_order4(
     for n in 0:prob.nsteps-1
         utvt!(
             ut, vt, u, v, prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control, t, pcof
+            controls, t, pcof
         )
         uttvtt!(
             utt, vtt, ut, vt, u, v, prob.Ks, prob.Ss, prob.p_operator,
-            prob.q_operator, control, t, pcof
+            prob.q_operator, controls, t, pcof
         )
 
         utvt_history[1:prob.N_tot_levels,       1+n] .= ut
@@ -247,12 +237,12 @@ function eval_forward_order4(
     utvt!(
         ut, vt, u, v,
         prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-        control, t, pcof
+        controls, t, pcof
     )
     uttvtt!(
         utt, vtt, ut, vt, u, v,
         prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-        control, t, pcof
+        controls, t, pcof
     )
 
     utvt_history[1:prob.N_tot_levels,       1+prob.nsteps] .= ut
@@ -267,7 +257,7 @@ function eval_forward_order4(
 end
 
 function eval_forward_order4(
-        prob::SchrodingerProb{M1, M2}, control::AbstractControl,
+        prob::SchrodingerProb{M1, M2}, controls,
         pcof::AbstractVector{Float64}; return_time_derivatives=false
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
@@ -283,11 +273,11 @@ function eval_forward_order4(
         # Call vector version of forward evolution
         if return_time_derivatives
             uv_and_derivatives_history[:,:,:,initial_condition_index] .= eval_forward_order4(
-                vector_prob, control, pcof, return_time_derivatives=true
+                vector_prob, controls, pcof, return_time_derivatives=true
             )
         else
             uv_history[:,:,initial_condition_index] .= eval_forward_order4(
-                vector_prob, control, pcof, return_time_derivatives=false
+                vector_prob, controls, pcof, return_time_derivatives=false
             )
         end
     end
@@ -300,13 +290,13 @@ function eval_forward_order4(
 end
 
 function eval_forward_forced(
-        prob::SchrodingerProb{M, V}, control::AbstractControl,
+        prob::SchrodingerProb{M, V}, controls,
         pcof::AbstractVector{Float64}, forcing_ary; order=2
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     if order == 2
-        return eval_forward_forced_order2(prob, control, pcof, forcing_ary)
+        return eval_forward_forced_order2(prob, controls, pcof, forcing_ary)
     elseif order == 4
-        return eval_forward_forced_order4(prob, control, pcof, forcing_ary)
+        return eval_forward_forced_order4(prob, controls, pcof, forcing_ary)
     end
 
     throw("Invalid Order: $order")
@@ -319,7 +309,7 @@ of forces at each discretized point in time.
 Maybe I should also do a one with forcing functions as well.
 """
 function eval_forward_forced_order2(
-        prob::SchrodingerProb{M, V}, control::AbstractControl, pcof::V,
+        prob::SchrodingerProb{M, V}, controls, pcof::V,
         forcing_ary::AbstractArray{Float64,3}, 
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
@@ -352,7 +342,7 @@ function eval_forward_forced_order2(
         return LHS_func(
             ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control, t, pcof, dt, prob.N_tot_levels
+            controls, t, pcof, dt, prob.N_tot_levels
         )
     end
 
@@ -366,7 +356,7 @@ function eval_forward_forced_order2(
         utvt!(
             ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control, t, pcof
+            controls, t, pcof
         )
 
         copy!(RHSu, u)
@@ -396,7 +386,7 @@ end
 
 
 function eval_forward_forced_order4(
-        prob::SchrodingerProb{M, V}, control::AbstractControl,  pcof::V, 
+        prob::SchrodingerProb{M, V}, controls,  pcof::V, 
         forcing_ary::AbstractArray{Float64,3},
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
@@ -429,7 +419,7 @@ function eval_forward_forced_order4(
             utt, vtt, ut, vt, 
             u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator, 
-            control,
+            controls,
             t, pcof, dt, prob.N_tot_levels
         )
     end
@@ -447,7 +437,7 @@ function eval_forward_forced_order4(
         utvt!(
             ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control, t, pcof
+            controls, t, pcof
         )
         axpy!(1.0, forcing_ary[1:prob.N_tot_levels,     1+n, 1], ut)
         axpy!(1.0, forcing_ary[1+prob.N_tot_levels:end, 1+n, 1], vt)
@@ -456,7 +446,7 @@ function eval_forward_forced_order4(
         uttvtt!(
             utt, vtt, ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control, t, pcof
+            controls, t, pcof
         )
         axpy!(1.0, forcing_ary[1:prob.N_tot_levels,     1+n, 2], utt)
         axpy!(1.0, forcing_ary[1+prob.N_tot_levels:end, 1+n, 2], vtt)
@@ -487,7 +477,7 @@ function eval_forward_forced_order4(
             forcing_ary[1:prob.N_tot_levels, 1+n+1, 1],
             forcing_ary[1+prob.N_tot_levels:end, 1+n+1, 1],
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            control, t, pcof
+            controls, t, pcof
         )
 
         axpy!(0.25*dt^2*weights_LHS[2], ut, RHSu)
