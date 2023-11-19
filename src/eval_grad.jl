@@ -99,7 +99,7 @@ function discrete_adjoint(
                 lambda_v = lambda[1+prob.N_tot_levels:end]
             end
 
-            grad .+= disc_adj_calc_grad(prob, controls, pcof,
+            disc_adj_calc_grad!(grad, prob, controls, pcof,
                 view(history, :, :, initial_condition_index), lambda_history
             )
         
@@ -381,18 +381,11 @@ end
 """
 Need better name
 """
-function disc_adj_calc_grad(prob::SchrodingerProb, controls,
+function disc_adj_calc_grad!(gradient::AbstractVector{Float64}, prob::SchrodingerProb, controls,
         pcof::AbstractVector{Float64},
         history::AbstractMatrix{Float64}, lambda_history::AbstractMatrix{Float64},
         )
-    # Will change to a loop over them in the future
-    control = controls[1]
-    asym_op = prob.asym_operators[1]
-    sym_op = prob.sym_operators[1]
 
-    grad_contrib = zeros(control.N_coeff)
-    grad_p = zeros(control.N_coeff)
-    grad_q = zeros(control.N_coeff)
 
     dt = prob.tf / prob.nsteps
 
@@ -407,38 +400,54 @@ function disc_adj_calc_grad(prob::SchrodingerProb, controls,
     sym_op_lambda_v = zeros(prob.N_tot_levels)
 
     # NOTE: Revising this for multiple controls will require some thought
-    for n in 0:prob.nsteps-1
-        lambda_u = lambda_history[1:prob.N_tot_levels,     1+n+1]
-        lambda_v = lambda_history[1+prob.N_tot_levels:end, 1+n+1]
+    for i in 1:length(controls)
+        control = controls[i]
+        asym_op = prob.asym_operators[i]
+        sym_op = prob.sym_operators[i]
+        this_pcof = get_control_vector_slice(pcof, controls, i)
 
-        u .= history[1:prob.N_tot_levels,     1+n]
-        v .= history[1+prob.N_tot_levels:end, 1+n]
-        t = n*dt
+        grad_contrib = zeros(control.N_coeff)
+        grad_p = zeros(control.N_coeff)
+        grad_q = zeros(control.N_coeff)
 
-        grad_p .= eval_grad_p(control, t, pcof)
-        grad_q .= eval_grad_q(control, t, pcof)
+        for n in 0:prob.nsteps-1
+            lambda_u = lambda_history[1:prob.N_tot_levels,     1+n+1]
+            lambda_v = lambda_history[1+prob.N_tot_levels:end, 1+n+1]
 
-        mul!(asym_op_lambda_u, asym_op, lambda_u)
-        mul!(asym_op_lambda_v, asym_op, lambda_v)
-        mul!(sym_op_lambda_u,  sym_op,  lambda_u)
-        mul!(sym_op_lambda_v,  sym_op,  lambda_v)
+            u .= history[1:prob.N_tot_levels,     1+n]
+            v .= history[1+prob.N_tot_levels:end, 1+n]
+            t = n*dt
+
+            grad_p .= eval_grad_p(control, t, this_pcof)
+            grad_q .= eval_grad_q(control, t, this_pcof)
+
+            mul!(asym_op_lambda_u, asym_op, lambda_u)
+            mul!(asym_op_lambda_v, asym_op, lambda_v)
+            mul!(sym_op_lambda_u,  sym_op,  lambda_u)
+            mul!(sym_op_lambda_v,  sym_op,  lambda_v)
 
 
-        grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
-        grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
+            grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
+            grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
 
-        u = history[1:prob.N_tot_levels,     1+n+1]
-        v = history[1+prob.N_tot_levels:end, 1+n+1]
-        t = (n+1)*dt
+            u = history[1:prob.N_tot_levels,     1+n+1]
+            v = history[1+prob.N_tot_levels:end, 1+n+1]
+            t = (n+1)*dt
 
-        grad_p = eval_grad_p(control, t, pcof)
-        grad_q = eval_grad_q(control, t, pcof)
+            grad_p = eval_grad_p(control, t, this_pcof)
+            grad_q = eval_grad_q(control, t, this_pcof)
 
-        grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
-        grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
+            grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
+            grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
+        end
+
+        grad_contrib .*= -0.5*dt
+
+        grad_slice = get_control_vector_slice(gradient, controls, i)
+        grad_slice .+= grad_contrib
     end
 
-    return  (-0.5*dt) .* grad_contrib
+    return nothing
 end
 
 """
@@ -708,7 +717,7 @@ Calculates the infidelity for the given state vector 'ψ' and target state
 
 Returns: Infidelity
 """
-function infidelity(ψ::AbstractVector{Float64}, target::AbstractVector{Float64}, N_ess::Int64) where {V <: AbstractVector{Float64}}
+function infidelity(ψ::AbstractVector{Float64}, target::AbstractVector{Float64}, N_ess::Int64)
     R = copy(target)
     N_tot = size(target,1)÷2
     T = vcat(R[1+N_tot:end], -R[1:N_tot])
@@ -729,3 +738,4 @@ function infidelity(Q::AbstractMatrix{Float64}, target::AbstractMatrix{Float64},
     T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
     return 1 - (tr(Q'*R)^2 + tr(Q'*T)^2)/(N_ess^2)
 end
+
