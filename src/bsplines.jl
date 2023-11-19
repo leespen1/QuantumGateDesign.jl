@@ -859,7 +859,7 @@ Evaluate a B-spline function with carrier waves. See also the `bcparams` constru
 SPENCER: To get cross derivative (d2/dtda, just remove the pcofs in the below,
 since the controls are linear in them)
 """
-@inline function bcarrier2_dt(t::Float64, bcpar::bcparams, func::Int64, pcof::Vector{Float64})
+@inline function bcarrier2_dt(t::Float64, bcpar::bcparams, func::Int64, pcof::AbstractVector{Float64})
     # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
     # in general, 0 <= func < 2*(Ncoupled + Nunc)
 
