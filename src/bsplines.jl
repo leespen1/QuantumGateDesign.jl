@@ -780,7 +780,7 @@ Evaluate a B-spline function with carrier waves. See also the `bcparams` constru
 - `param::params`: Parameters for the spline
 - `func::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function bcarrier2(t::Float64, bcpar::bcparams, func::Int64, pcof::Vector{Float64})
+@inline function bcarrier2(t::Float64, bcpar::bcparams, func::Int64, pcof::AbstractVector{Float64})
     # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
     # in general, 0 <= func < 2*(Ncoupled + Nunc)
 
