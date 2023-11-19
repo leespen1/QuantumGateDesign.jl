@@ -45,36 +45,37 @@ end
 Unused, but need a function to provide to ipopt.
 """
 function optimize_gate(
-        schro_prob::SchrodingerProb{M, VM}, control::Control,
+        schro_prob::SchrodingerProb{M, VM}, controls,
         pcof_init::AbstractVector{Float64}, target::VM;
         order=4,
         pcof_L=missing,
         pcof_U=missing
-    ) where {V<:AbstractVector{Float64}, VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
+    ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
     # Right now I am unnecessarily doing a full forward evolution to compute the
     # infidelity, when this should be done already in the gradient computation.
     function eval_f(pcof::Vector{Float64})
         #println(pcof)
-        history = eval_forward(schro_prob, control, pcof, order=order)
+        history = eval_forward(schro_prob, controls, pcof, order=order)
         QN = @view history[:,end,:]
         return infidelity(QN, target, schro_prob.N_ess_levels)
     end
 
     function eval_grad_f!(pcof::Vector{Float64}, grad_f::Vector{Float64})
-        grad_f .= discrete_adjoint(schro_prob, control, pcof, target, order=order)
+        grad_f .= discrete_adjoint(schro_prob, controls, pcof, target, order=order)
     end
 
+    N_parameters = length(pcof_init)
 
     if ismissing(pcof_L)
-        pcof_L = -ones(control.N_coeff) # A GHz control is pretty generous
+        pcof_L = -ones(N_parameters) # A GHz control is pretty generous
     elseif isa(pcof_L, Real)
-        pcof_L = ones(control.N_coeff) .* pcof_L
+        pcof_L = ones(N_parameters) .* pcof_L
     end
     if ismissing(pcof_U)
-        pcof_U = ones(control.N_coeff)
+        pcof_U = ones(N_parameters)
     elseif isa(pcof_U, Real)
-        pcof_U = ones(control.N_coeff) .* pcof_U
+        pcof_U = ones(N_parameters) .* pcof_U
     end
 
     @assert isa(pcof_L, Vector{Float64})
@@ -88,7 +89,7 @@ function optimize_gate(
     nele_hessian = 0
 
     ipopt_prob = Ipopt.CreateIpoptProblem(
-        control.N_coeff,
+        N_parameters,
         pcof_L,
         pcof_U,
         N_constraints,
