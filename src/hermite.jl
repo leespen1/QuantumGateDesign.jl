@@ -245,9 +245,10 @@ function LHS_func_adj!(LHS_uv::AbstractVector{Float64},
 
     utvt_adj!(ut, vt, u, v, prob, controls, t, pcof)
     
-    LHS_uv[1:N_tot] .= u
+    copyto!(LHS_uv, 1, u, 1, N_tot)
     axpy!(-0.5*dt, ut, view(LHS_uv, 1:N_tot))
-    LHS_uv[1+N_tot:end] .= v
+
+    copyto!(LHS_uv, 1+N_tot, v, 1, N_tot)
     axpy!(-0.5*dt, vt, view(LHS_uv, 1+N_tot:2*N_tot))
 
     return nothing
@@ -295,6 +296,22 @@ function LHS_func_order4(utt::AbstractVector{Float64}, vtt::AbstractVector{Float
 
     utvt!(ut, vt, u, v, prob, controls, t, pcof)
     uttvtt!(utt, vtt, ut, vt, u, v, prob, controls, t, pcof)
+
+    weights = [1,-1/3]
+    
+    LHSu = copy(u)
+    axpy!(-0.5*dt*weights[1],    ut,  LHSu)
+    axpy!(-0.25*dt^2*weights[2], utt, LHSu)
+    LHSv = copy(v)
+    axpy!(-0.5*dt*weights[1],    vt,  LHSv)
+    axpy!(-0.25*dt^2*weights[2], vtt, LHSv)
+
+    LHS = zeros(Float64, 2*N_tot)
+    copyto!(LHS, 1,       LHSu, 1, N_tot)
+    copyto!(LHS, 1+N_tot, LHSv, 1, N_tot)
+
+    return LHS
+
     
     LHSu = copy(u)
     axpy!(-0.5*dt, ut, LHSu)
