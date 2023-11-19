@@ -51,28 +51,26 @@ function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
 
     # Non-Memory-Allocating Version (test performance)
     # ut = (Ss + q(t)(a-a†))u + (Ks + p(t)(a+a†))v
-    mul!(ut, prob.system_asym, u)
-    for (i, operator) in enumerate(prob.asym_operators)
-        mul!(ut, operator, u, eval_q(controls[i], t, pcof), 1)
-    end
-
-    mul!(ut, prob.system_sym, v, 1, 1)
-    for (i, operator) in enumerate(prob.sym_operators)
-        mul!(ut, operator, v, eval_p(controls[i], t, pcof), 1)
-    end
-
     # vt = (Ss + q(t)(a-a†))v - (Ks + p(t)(a+a†))u
-    #
+    
+    mul!(ut, prob.system_asym, u)
+    mul!(ut, prob.system_sym, v, 1, 1)
+
     mul!(vt, prob.system_asym, v)
-    for (i, operator) in enumerate(prob.asym_operators)
-        mul!(vt, operator, v, eval_q(controls[i], t, pcof), 1)
-    end
-
     mul!(vt, prob.system_sym, u, -1, 1)
-    for (i, operator) in enumerate(prob.sym_operators)
-        mul!(vt, operator,  u, -eval_p(controls[i], t, pcof), 1)
-    end
 
+    for i in 1:length(controls)
+        control = controls[i]
+        sym_op = prob.sym_operators[i]
+        asym_op = prob.asym_operators[i]
+        this_pcof = get_control_vector_slice(pcof, controls, i)
+
+        mul!(ut, asym_op, u, eval_q(control, t, this_pcof), 1)
+        mul!(ut, sym_op, v, eval_p(control, t, this_pcof), 1)
+
+        mul!(vt, asym_op, v, eval_q(control, t, this_pcof), 1)
+        mul!(vt, sym_op,  u, -eval_p(control, t, this_pcof), 1)
+    end
 
     return nothing
 end
@@ -90,24 +88,26 @@ function utvt_adj!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         prob::SchrodingerProb, controls,
         t::Float64, pcof::AbstractVector{Float64})
 
+    # System / Drift Part of Hamiltonian
     mul!(ut, prob.system_asym, u)
-    for (i, operator) in enumerate(prob.asym_operators)
-        mul!(ut, operator, u, -eval_q(controls[i], t, pcof), 1)
-    end
-
     mul!(ut, prob.system_sym, v, 1, 1)
-    for (i, operator) in enumerate(prob.sym_operators)
-        mul!(ut, operator, v, -eval_p(controls[i], t, pcof), 1)
-    end
-
-    mul!(vt, prob.system_sym, u, -1, 1)
-    for (i, operator) in enumerate(prob.sym_operators)
-        mul!(vt, operator,  u, eval_p(controls[i], t, pcof), 1)
-    end
 
     mul!(vt, prob.system_asym, v)
-    for (i, operator) in enumerate(prob.asym_operators)
-        mul!(vt, operator, v, -eval_q(controls[i], t, pcof), 1)
+    mul!(vt, prob.system_sym, u, -1, 1)
+
+    for i in 1:length(controls)
+        control = controls[i]
+        sym_op = prob.sym_operators[i]
+        asym_op = prob.asym_operators[i]
+
+        # Get part of control vector corresponding to this control
+        this_pcof = get_control_vector_slice(pcof, controls, i)
+
+        mul!(ut, asym_op, u, -eval_q(control, t, this_pcof), 1)
+        mul!(ut, sym_op, v, -eval_p(control, t, this_pcof), 1)
+
+        mul!(vt, sym_op,  u, eval_p(control, t, this_pcof), 1)
+        mul!(vt, asym_op, v, -eval_q(control, t, this_pcof), 1)
     end
 
     return nothing
