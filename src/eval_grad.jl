@@ -412,11 +412,11 @@ function disc_adj_calc_grad!(gradient::AbstractVector{Float64}, prob::Schrodinge
         grad_q = zeros(control.N_coeff)
 
         for n in 0:prob.nsteps-1
-            lambda_u = lambda_history[1:prob.N_tot_levels,     1+n+1]
-            lambda_v = lambda_history[1+prob.N_tot_levels:end, 1+n+1]
+            lambda_u .= @view lambda_history[1:prob.N_tot_levels,     1+n+1]
+            lambda_v .= @view lambda_history[1+prob.N_tot_levels:end, 1+n+1]
 
-            u .= history[1:prob.N_tot_levels,     1+n]
-            v .= history[1+prob.N_tot_levels:end, 1+n]
+            u .= @view history[1:prob.N_tot_levels,     1+n]
+            v .= @view history[1+prob.N_tot_levels:end, 1+n]
             t = n*dt
 
             grad_p .= eval_grad_p(control, t, this_pcof)
@@ -431,12 +431,12 @@ function disc_adj_calc_grad!(gradient::AbstractVector{Float64}, prob::Schrodinge
             grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
             grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
 
-            u = history[1:prob.N_tot_levels,     1+n+1]
-            v = history[1+prob.N_tot_levels:end, 1+n+1]
+            u .= @view history[1:prob.N_tot_levels,     1+n+1]
+            v .= @view history[1+prob.N_tot_levels:end, 1+n+1]
             t = (n+1)*dt
 
-            grad_p = eval_grad_p(control, t, this_pcof)
-            grad_q = eval_grad_q(control, t, this_pcof)
+            grad_p .= eval_grad_p(control, t, this_pcof)
+            grad_q .= eval_grad_q(control, t, this_pcof)
 
             grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
             grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
