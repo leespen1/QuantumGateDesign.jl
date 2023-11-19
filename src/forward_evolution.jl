@@ -33,7 +33,7 @@ function eval_forward_order2(
     dt = prob.tf/prob.nsteps
 
     uv = zeros(2*prob.N_tot_levels)
-    copyto!(uv,1, prob.u0, 1, prob.N_tot_levels)
+    copyto!(uv, 1, prob.u0, 1, prob.N_tot_levels)
     copyto!(uv, 1+prob.N_tot_levels, prob.v0, 1, prob.N_tot_levels)
 
     uv_history = Matrix{Float64}(undef,   2*prob.N_tot_levels, 1+prob.nsteps)
@@ -56,16 +56,18 @@ function eval_forward_order2(
 
     # This probably creates type-instability, as functions have singleton types, 
     # and this function is (I'm pretty sure) not created until runtime
-    function LHS_func_wrapper(uv::AbstractVector{Float64})::Vector{Float64}
+    function LHS_func_wrapper(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
         # Careful, make certain that I can do this overwrite without messing up anything else
-        copyto!(u, 1, uv, 1,                   prob.N_tot_levels)
-        copyto!(v, 1, uv, 1+prob.N_tot_levels, prob.N_tot_levels)
-        return LHS_func(ut, vt, u, v, prob, controls, t, pcof, dt, prob.N_tot_levels)
+        copyto!(u, 1, uv_in, 1,                   prob.N_tot_levels)
+        copyto!(v, 1, uv_in, 1+prob.N_tot_levels, prob.N_tot_levels)
+        LHS_func!(uv_out, ut, vt, u, v, prob, controls, t, pcof, dt, prob.N_tot_levels)
+        return nothing
     end
 
     LHS_map = LinearMaps.LinearMap(
         LHS_func_wrapper,
-        2*prob.N_tot_levels, 2*prob.N_tot_levels
+        2*prob.N_tot_levels, 2*prob.N_tot_levels,
+        ismutating=true
     )
 
 
@@ -90,8 +92,6 @@ function eval_forward_order2(
         IterativeSolvers.gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
         uv_history[:,1+n+1] .= uv
-        u .= uv[1:prob.N_tot_levels]
-        v .= uv[1+prob.N_tot_levels:end]
         copyto!(u, 1, uv, 1,                   prob.N_tot_levels)
         copyto!(v, 1, uv, 1+prob.N_tot_levels, prob.N_tot_levels)
 
@@ -184,10 +184,7 @@ function eval_forward_order4(
         u .= view(uv,1:prob.N_tot_levels)
         v .= view(uv,1+prob.N_tot_levels:2*prob.N_tot_levels)
         return  LHS_func_order4(
-            utt, vtt, ut, vt, 
-            u, v,
-            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator, 
-            controls, t, pcof, dt, prob.N_tot_levels
+            utt, vtt, ut, vt, u, v, prob, controls, t, pcof, dt, prob.N_tot_levels
         )
     end
 
@@ -199,14 +196,8 @@ function eval_forward_order4(
     # Order 4
     weights = [1,1/3]
     for n in 0:prob.nsteps-1
-        utvt!(
-            ut, vt, u, v, prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            controls, t, pcof
-        )
-        uttvtt!(
-            utt, vtt, ut, vt, u, v, prob.Ks, prob.Ss, prob.p_operator,
-            prob.q_operator, controls, t, pcof
-        )
+        utvt!(ut, vt, u, v, prob, controls, t, pcof)
+        uttvtt!(utt, vtt, ut, vt, u, v, prob, controls, t, pcof)
 
         utvt_history[1:prob.N_tot_levels,       1+n] .= ut
         utvt_history[1+prob.N_tot_levels:end,   1+n] .= vt
@@ -234,16 +225,8 @@ function eval_forward_order4(
     end
 
     # One last time, for utvt history at final time
-    utvt!(
-        ut, vt, u, v,
-        prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-        controls, t, pcof
-    )
-    uttvtt!(
-        utt, vtt, ut, vt, u, v,
-        prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-        controls, t, pcof
-    )
+    utvt!(ut, vt, u, v, prob, controls, t, pcof)
+    uttvtt!(utt, vtt, ut, vt, u, v, prob, controls, t, pcof)
 
     utvt_history[1:prob.N_tot_levels,       1+prob.nsteps] .= ut
     utvt_history[1+prob.N_tot_levels:end,   1+prob.nsteps] .= vt

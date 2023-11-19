@@ -37,6 +37,8 @@ function discrete_adjoint(
     for initial_condition_index = 1:size(prob.u0,2)
         lambda = zeros(2*prob.N_tot_levels)
         lambda_history = zeros(2*prob.N_tot_levels,1+prob.nsteps)
+        lambda_u  = zeros(prob.N_tot_levels)
+        lambda_v  = zeros(prob.N_tot_levels)
         lambda_ut  = zeros(prob.N_tot_levels)
         lambda_vt  = zeros(prob.N_tot_levels)
         lambda_utt = zeros(prob.N_tot_levels)
@@ -48,33 +50,32 @@ function discrete_adjoint(
 
         grad_contrib = zeros(len_pcof)
 
-
         if order == 2
             # Terminal Condition
             t = prob.tf
 
             RHS .= terminal_RHS[:,initial_condition_index]
 
-            function LHS_func_wrapper_order2(x::AbstractVector{Float64})::Vector{Float64}
-                return LHS_func(
-                    lambda_ut, lambda_vt, x[1:prob.N_tot_levels],
-                    x[1+prob.N_tot_levels:end], 
-                    prob, controls,
-                    t, pcof, dt,
-                    prob.N_tot_levels
+            function LHS_func_wrapper_order2(lambda_out::AbstractVector{Float64}, lambda_in::AbstractVector{Float64})
+                copyto!(lambda_u, 1, lambda_in, 1,                   prob.N_tot_levels)
+                copyto!(lambda_v, 1, lambda_in, 1+prob.N_tot_levels, prob.N_tot_levels)
+                LHS_func_adj!(
+                    lambda_out, lambda_ut, lambda_vt, lambda_u, lambda_v, 
+                    prob, controls, t, pcof, dt, prob.N_tot_levels
                 )
             end
 
             LHS_map = LinearMaps.LinearMap(
                 LHS_func_wrapper_order2,
-                2*prob.N_tot_levels, 2*prob.N_tot_levels
+                2*prob.N_tot_levels, 2*prob.N_tot_levels,
+                ismutating=true
             )
 
             IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
             lambda_history[:,1+prob.nsteps] .= lambda
-            lambda_u = copy(lambda[1:prob.N_tot_levels])
-            lambda_v = copy(lambda[1+prob.N_tot_levels:2*prob.N_tot_levels])
+            copyto!(lambda_u, 1, lambda, 1,                   prob.N_tot_levels)
+            copyto!(lambda_v, 1, lambda, 1+prob.N_tot_levels, prob.N_tot_levels)
             
             # Discrete Adjoint Scheme
             for n in prob.nsteps-1:-1:1
@@ -95,8 +96,8 @@ function discrete_adjoint(
                 IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
                 lambda_history[:,1+n] .= lambda
-                lambda_u = lambda[1:prob.N_tot_levels]
-                lambda_v = lambda[1+prob.N_tot_levels:end]
+                copyto!(lambda_u, 1, lambda, 1,                   prob.N_tot_levels)
+                copyto!(lambda_v, 1, lambda, 1+prob.N_tot_levels, prob.N_tot_levels)
             end
 
             disc_adj_calc_grad!(grad, prob, controls, pcof,
