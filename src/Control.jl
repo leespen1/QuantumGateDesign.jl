@@ -10,6 +10,9 @@ Every concrete subtype must have the following methods defined:
     eval_p(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
     eval_q(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
 
+Every concrete subtype must have the following parameters
+    N_coeff::Int
+
 The following methods can also be defined, but have defaults implemented using
 automatic differentiation:
     # For discrete adjoint / forced gradient calculation
@@ -55,6 +58,27 @@ function Base.getindex(control::AbstractControl, index::Int64)
     end
     return control
 end
+
+function Base.length(control::AbstractControl)
+    return 1
+end
+
+
+"""
+Get the slice (view) of the control vector which corresponds to the given control index.
+
+Does additions, but doesn't allocate memory.
+"""
+function get_control_vector_slice(pcof::AbstractVector{Float64}, controls, control_index::Int64)
+    start_index = 1
+    for k in 1:(control_index-1)
+        start_index += controls[k].N_coeff
+    end
+    end_index = start_index + controls[control_index].N_coeff - 1
+
+    return view(pcof, start_index:end_index)
+end
+
 
 """
 I'm not sure if creating the lambda/anonymous function has a significant
