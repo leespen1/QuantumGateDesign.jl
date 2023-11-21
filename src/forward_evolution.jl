@@ -33,7 +33,7 @@ function eval_forward_order2(
     dt = prob.tf/prob.nsteps
 
     uv = zeros(2*prob.N_tot_levels)
-    copyto!(uv, 1, prob.u0, 1, prob.N_tot_levels)
+    copyto!(uv, 1,                   prob.u0, 1, prob.N_tot_levels)
     copyto!(uv, 1+prob.N_tot_levels, prob.v0, 1, prob.N_tot_levels)
 
     uv_history = Matrix{Float64}(undef,   2*prob.N_tot_levels, 1+prob.nsteps)
@@ -84,7 +84,7 @@ function eval_forward_order2(
         copy!(RHSv, v)
         axpy!(0.5*dt, vt, RHSv)
 
-        copyto!(RHS, 1, RHSu, 1, prob.N_tot_levels)
+        copyto!(RHS, 1,                   RHSu, 1, prob.N_tot_levels)
         copyto!(RHS, 1+prob.N_tot_levels, RHSv, 1, prob.N_tot_levels)
 
         t += dt
@@ -100,8 +100,8 @@ function eval_forward_order2(
     # One last time, for utvt history at final time
     utvt!(ut, vt, u, v, prob, controls, t, pcof)
 
-    utvt_history[1:prob.N_tot_levels,1+prob.nsteps] .= ut
-    utvt_history[1+prob.N_tot_levels:end,1+prob.nsteps] .= vt
+    utvt_history[1:prob.N_tot_levels,     1+prob.nsteps] .= ut
+    utvt_history[1+prob.N_tot_levels:end, 1+prob.nsteps] .= vt
 
     if return_time_derivatives
         return cat(uv_history, utvt_history, dims=3)
