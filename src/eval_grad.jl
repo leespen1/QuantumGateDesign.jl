@@ -33,11 +33,11 @@ function discrete_adjoint(
         throw("Invalid cost type: $cost_type")
     end
 
-    full_lambda_history = zeros(2*prob.N_tot_levels,1+prob.nsteps, prob.N_ess_levels)
+    full_lambda_history = zeros(prob.real_system_size,1+prob.nsteps, prob.N_ess_levels)
 
     for initial_condition_index = 1:size(prob.u0,2)
-        lambda = zeros(2*prob.N_tot_levels)
-        lambda_history = zeros(2*prob.N_tot_levels,1+prob.nsteps)
+        lambda = zeros(prob.real_system_size)
+        lambda_history = zeros(prob.real_system_size,1+prob.nsteps)
         lambda_u  = zeros(prob.N_tot_levels)
         lambda_v  = zeros(prob.N_tot_levels)
         lambda_ut  = zeros(prob.N_tot_levels)
@@ -47,7 +47,7 @@ function discrete_adjoint(
 
         RHS_lambda_u::Vector{Float64} = zeros(prob.N_tot_levels)
         RHS_lambda_v::Vector{Float64} = zeros(prob.N_tot_levels)
-        RHS::Vector{Float64} = zeros(2*prob.N_tot_levels)
+        RHS::Vector{Float64} = zeros(prob.real_system_size)
 
         grad_contrib = zeros(len_pcof)
 
@@ -68,7 +68,7 @@ function discrete_adjoint(
 
             LHS_map = LinearMaps.LinearMap(
                 LHS_func_wrapper_order2,
-                2*prob.N_tot_levels, 2*prob.N_tot_levels,
+                prob.real_system_size, prob.real_system_size,
                 ismutating=true
             )
 
@@ -126,7 +126,7 @@ function discrete_adjoint(
 
             LHS_map = LinearMaps.LinearMap(
                 LHS_func_wrapper_order4,
-                2*prob.N_tot_levels, 2*prob.N_tot_levels,
+                prob.real_system_size, prob.real_system_size,
                 ismutating=true
             )
 
@@ -206,7 +206,7 @@ function disc_adj_calc_grad!(gradient::AbstractVector{Float64}, prob::Schrodinge
     sym_op_lambda_v = zeros(prob.N_tot_levels)
 
     # NOTE: Revising this for multiple controls will require some thought
-    for i in 1:length(controls)
+    for i in 1:prob.N_operators
         control = controls[i]
         asym_op = prob.asym_operators[i]
         sym_op = prob.sym_operators[i]
@@ -294,7 +294,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
     len_pcof = length(pcof)
 
     # NOTE: Revising this for multiple controls will require some thought
-    for i in 1:length(controls)
+    for i in 1:prob.N_operators
         control = controls[i]
         asym_op = prob.asym_operators[i]
         sym_op = prob.sym_operators[i]
@@ -320,7 +320,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
 
             # Qn contribution
             u .= view(history, 1:prob.N_tot_levels,                     1+n)
-            v .= view(history, 1+prob.N_tot_levels:2*prob.N_tot_levels, 1+n)
+            v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1+n)
             t = n*dt
 
             grad_p =  eval_grad_p(control,  t, this_pcof)
@@ -398,7 +398,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             # uv n+1 contribution
 
             u .= view(history, 1:prob.N_tot_levels,                     1+n+1)
-            v .= view(history, 1+prob.N_tot_levels:2*prob.N_tot_levels, 1+n+1)
+            v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1+n+1)
             t = (n+1)*dt
 
             grad_p  = eval_grad_p(control,  t, this_pcof)
@@ -506,7 +506,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
 
     gradient = zeros(controls.N_coeff)
 
-    forcing_ary = zeros(2*prob.N_tot_levels, 1+prob.nsteps, div(order, 2), size(prob.u0, 2))
+    forcing_ary = zeros(prob.real_system_size, 1+prob.nsteps, div(order, 2), size(prob.u0, 2))
 
     for control_param_index in 1:controls.N_coeff
         for initial_condition_index = 1:size(prob.u0, 2)
@@ -520,7 +520,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
 
             # 2nd order version
             if order == 2
-                forcing_vec = zeros(2*prob.N_tot_levels)
+                forcing_vec = zeros(prob.real_system_size)
 
                 u  = zeros(prob.N_tot_levels)
                 v  = zeros(prob.N_tot_levels)
@@ -550,8 +550,8 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
 
             # 4th order version
             elseif order == 4
-                forcing_vec2 = zeros(2*prob.N_tot_levels)
-                forcing_vec4 = zeros(2*prob.N_tot_levels)
+                forcing_vec2 = zeros(prob.real_system_size)
+                forcing_vec4 = zeros(prob.real_system_size)
 
                 u  = zeros(prob.N_tot_levels)
                 v  = zeros(prob.N_tot_levels)
@@ -578,7 +578,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
                     forcing_ary[:, 1+n, 1, initial_condition_index] .= forcing_vec2
 
                     # Fourth Order Forcing
-                    forcing_vec4 = zeros(2*prob.N_tot_levels)
+                    forcing_vec4 = zeros(prob.real_system_size)
 
                     utvt!(
                         ut, vt, u, v,

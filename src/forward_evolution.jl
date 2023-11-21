@@ -32,17 +32,17 @@ function eval_forward_order2(
     t::Float64 = 0.0
     dt = prob.tf/prob.nsteps
 
-    uv = zeros(2*prob.N_tot_levels)
+    uv = zeros(prob.real_system_size)
     copyto!(uv, 1,                   prob.u0, 1, prob.N_tot_levels)
     copyto!(uv, 1+prob.N_tot_levels, prob.v0, 1, prob.N_tot_levels)
 
-    uv_history = Matrix{Float64}(undef,   2*prob.N_tot_levels, 1+prob.nsteps)
+    uv_history = Matrix{Float64}(undef,   prob.real_system_size, 1+prob.nsteps)
     uv_history[:,1] .= uv
-    utvt_history = Matrix{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps)
+    utvt_history = Matrix{Float64}(undef, prob.real_system_size, 1+prob.nsteps)
 
     RHSu::Vector{Float64} = zeros(prob.N_tot_levels)
     RHSv::Vector{Float64} = zeros(prob.N_tot_levels)
-    RHS::Vector{Float64} = zeros(2*prob.N_tot_levels)
+    RHS::Vector{Float64} = zeros(prob.real_system_size)
 
     u = zeros(prob.N_tot_levels)
     v = zeros(prob.N_tot_levels)
@@ -66,7 +66,7 @@ function eval_forward_order2(
 
     LHS_map = LinearMaps.LinearMap(
         LHS_func_wrapper,
-        2*prob.N_tot_levels, 2*prob.N_tot_levels,
+        prob.real_system_size, prob.real_system_size,
         ismutating=true
     )
 
@@ -118,8 +118,8 @@ function eval_forward_order2(
         pcof::AbstractVector{Float64}; return_time_derivatives=false
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
-    uv_history = Array{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps, prob.N_ess_levels)
-    uv_utvt_history = Array{Float64}(undef,2*prob.N_tot_levels,1+prob.nsteps, 2, prob.N_ess_levels)
+    uv_history = Array{Float64}(undef, prob.real_system_size, 1+prob.nsteps, prob.N_ess_levels)
+    uv_utvt_history = Array{Float64}(undef,prob.real_system_size,1+prob.nsteps, 2, prob.N_ess_levels)
 
     # Handle i-th initial condition (THREADS HERE)
     for initial_condition_index=1:prob.N_ess_levels
@@ -162,15 +162,15 @@ function eval_forward_order4(
     copyto!(uv, 1,                   prob.u0, 1, prob.N_tot_levels)
     copyto!(uv, 1+prob.N_tot_levels, prob.v0, 1, prob.N_tot_levels)
 
-    uv_history = Matrix{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps)
+    uv_history = Matrix{Float64}(undef, prob.real_system_size, 1+prob.nsteps)
     uv_history[:,1] .= uv
 
-    utvt_history   = Matrix{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps)
-    uttvtt_history = Matrix{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps)
+    utvt_history   = Matrix{Float64}(undef, prob.real_system_size, 1+prob.nsteps)
+    uttvtt_history = Matrix{Float64}(undef, prob.real_system_size, 1+prob.nsteps)
 
     RHSu::Vector{Float64} = zeros(prob.N_tot_levels)
     RHSv::Vector{Float64} = zeros(prob.N_tot_levels)
-    RHS::Vector{Float64}  = zeros(2*prob.N_tot_levels)
+    RHS::Vector{Float64}  = zeros(prob.real_system_size)
 
     u = copy(prob.u0)
     v = copy(prob.v0)
@@ -191,7 +191,7 @@ function eval_forward_order4(
 
     LHS_map = LinearMaps.LinearMap(
         LHS_func_wrapper,
-        2*prob.N_tot_levels, 2*prob.N_tot_levels,
+        prob.real_system_size, prob.real_system_size,
         ismutating=true
     )
 
@@ -247,8 +247,8 @@ function eval_forward_order4(
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_init_cond = size(prob.u0,2)
-    uv_history = Array{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps, N_init_cond)
-    uv_and_derivatives_history = Array{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps, 3, N_init_cond)
+    uv_history = Array{Float64}(undef, prob.real_system_size, 1+prob.nsteps, N_init_cond)
+    uv_and_derivatives_history = Array{Float64}(undef, prob.real_system_size, 1+prob.nsteps, 3, N_init_cond)
 
     # Handle i-th initial condition (THREADS HERE)
     for initial_condition_index=1:N_init_cond
@@ -302,15 +302,15 @@ function eval_forward_forced_order2(
     t = 0.0
     dt = prob.tf/prob.nsteps
 
-    uv = zeros(2*prob.N_tot_levels)
+    uv = zeros(prob.real_system_size)
     copyto!(uv, 1,                   prob.u0, 1, prob.N_tot_levels)
     copyto!(uv, 1+prob.N_tot_levels, prob.v0, 1, prob.N_tot_levels)
-    uv_history = Matrix{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps)
+    uv_history = Matrix{Float64}(undef, prob.real_system_size, 1+prob.nsteps)
     uv_history[:,1] .= uv
 
     RHSu::Vector{Float64}   = zeros(prob.N_tot_levels)
     RHSv::Vector{Float64}   = zeros(prob.N_tot_levels)
-    RHS_uv::Vector{Float64} = zeros(2*prob.N_tot_levels)
+    RHS_uv::Vector{Float64} = zeros(prob.real_system_size)
 
     u = copy(prob.u0)
     v = copy(prob.v0)
@@ -333,7 +333,7 @@ function eval_forward_forced_order2(
 
     LHS_map = LinearMaps.LinearMap(
         LHS_func_wrapper,
-        2*prob.N_tot_levels, 2*prob.N_tot_levels,
+        prob.real_system_size, prob.real_system_size,
         ismutating=true
     )
 
@@ -379,16 +379,16 @@ function eval_forward_forced_order4(
     t = 0.0
     dt = prob.tf/prob.nsteps
 
-    uv = zeros(2*prob.N_tot_levels)
+    uv = zeros(prob.real_system_size)
     copyto!(uv, 1,                   prob.u0, 1, prob.N_tot_levels)
     copyto!(uv, 1+prob.N_tot_levels, prob.v0, 1, prob.N_tot_levels)
 
-    uv_history = Matrix{Float64}(undef, 2*prob.N_tot_levels, 1+prob.nsteps)
+    uv_history = Matrix{Float64}(undef, prob.real_system_size, 1+prob.nsteps)
     uv_history[:,1] .= uv
 
     RHSu::Vector{Float64}   = zeros(prob.N_tot_levels)
     RHSv::Vector{Float64}   = zeros(prob.N_tot_levels)
-    RHS_uv::Vector{Float64} = zeros(2*prob.N_tot_levels)
+    RHS_uv::Vector{Float64} = zeros(prob.real_system_size)
 
     u = copy(prob.u0)
     v = copy(prob.v0)
@@ -411,13 +411,13 @@ function eval_forward_forced_order4(
 
     LHS_map = LinearMaps.LinearMap(
         LHS_func_wrapper,
-        2*prob.N_tot_levels, 2*prob.N_tot_levels,
+        prob.real_system_size, prob.real_system_size,
         ismutating=true
     )
 
 
-    weights     = [1, 1/3]
-    weights_LHS = [1, -1/3]
+    weights     = (1, 1/3)
+    weights_LHS = (1, -1/3)
     for n in 0:prob.nsteps-1
         # First time derivative at current timestep
         utvt!(

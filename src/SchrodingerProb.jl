@@ -15,6 +15,8 @@ mutable struct SchrodingerProb{M, VM}
     N_ess_levels::Int64
     N_guard_levels::Int64
     N_tot_levels::Int64
+    N_operators::Int64 # Number of "control Hamiltonians"
+    real_system_size::Int64
     """
     SchrodingerProb inner constructor, for when all necessary information is
     provided to do forward evolution and gradient calculation to any
@@ -39,6 +41,8 @@ mutable struct SchrodingerProb{M, VM}
         @assert length(sym_operators) == length(asym_operators)
         @assert size(system_sym,1) == size(system_sym,2) == N_tot_levels
         @assert size(system_asym,1) == size(system_asym,2) == N_tot_levels
+        N_operators = length(sym_operators)
+        real_system_size = 2*N_tot_levels
         for i in eachindex(sym_operators)
             sym_op = sym_operators[i]
             asym_op = asym_operators[i]
@@ -52,7 +56,8 @@ mutable struct SchrodingerProb{M, VM}
             deepcopy(sym_operators), deepcopy(asym_operators),
             copy(u0), copy(v0),
             tf, nsteps,
-            N_ess_levels, N_guard_levels, N_tot_levels
+            N_ess_levels, N_guard_levels, N_tot_levels,
+            N_operators, real_system_size
         )
     end
 end
@@ -60,10 +65,11 @@ end
 
 
 function Base.copy(prob::SchrodingerProb{T}) where T
+    # Mutable parameters are copied in the constructor, don't need to copy them again
     return SchrodingerProb(
-        copy(prob.system_sym), copy(prob.system_asym),
-        deepcopy(prob.sym_operators), deepcopy(prob.asym_operators),
-        copy(prob.u0), copy(prob.v0),
+        prob.system_sym, prob.system_asym,
+        prob.sym_operators, prob.asym_operators,
+        prob.u0, prob.v0,
         prob.tf, prob.nsteps,
         prob.N_ess_levels, prob.N_guard_levels
     )
@@ -76,8 +82,8 @@ function VectorSchrodingerProb(
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     return SchrodingerProb(
-        copy(prob.system_sym), copy(prob.system_asym),
-        deepcopy(prob.sym_operators), deepcopy(prob.asym_operators),
+        prob.system_sym, prob.system_asym,
+        prob.sym_operators, prob.asym_operators,
         prob.u0[:,initial_condition_index], prob.v0[:,initial_condition_index],
         prob.tf, prob.nsteps,
         prob.N_ess_levels, prob.N_guard_levels
