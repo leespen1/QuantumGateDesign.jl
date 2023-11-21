@@ -190,6 +190,26 @@ function uttvtt_adj!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
 
 end
 
+function LHS_func!(LHS_uv::AbstractVector{Float64},
+        ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64},
+        control_op_sym::AbstractMatrix{Float64}, control_op_asym::AbstractMatrix{Float64},
+        p_val::Float64, q_val::Float64, dt::Float64, N_tot::Int64)
+
+    utvt!(ut, vt, u, v, system_sym, system_asym, control_op_sym, control_op_asym, p_val, q_val)
+
+    LHS_u = view(LHS_uv, 1:N_tot)
+    LHS_v = view(LHS_uv, 1+N_tot:2*N_tot)
+    
+    LHS_u .= u
+    axpy!(-0.5*dt, ut, LHS_u)
+    LHS_v .= v
+    axpy!(-0.5*dt, vt, LHS_v)
+
+    return nothing
+end
+
 """
 In the Hermite timestepping method, we arrive at an equation like
 
@@ -198,29 +218,6 @@ LHS*uvⁿ⁺¹ = RHS*uvⁿ
 This function computes the action of LHS on a vector uv.
 That is, given an input uv (as two arguments u and v), return LHS*uv
 """
-function LHS_func(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
-        u::AbstractVector{Float64}, v::AbstractVector{Float64},
-        system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64}, 
-        control_op_sym::AbstractMatrix{Float64}, control_op_asym::AbstractMatrix{Float64},
-        control::AbstractControl, t::Float64, pcof::AbstractVector{Float64},
-        dt::Float64, N_tot::Int64)
-
-    utvt!(ut, vt, u, v,
-          system_sym, system_asym, control_op_sym, control_op_asym,
-          control, t, pcof)
-    
-    LHSu = copy(u)
-    axpy!(-0.5*dt,ut,LHSu)
-    LHSv = copy(v)
-    axpy!(-0.5*dt,vt,LHSv)
-
-    LHS_uv = zeros(Float64, 2*N_tot)
-    copyto!(LHS_uv, 1,       LHSu, 1, N_tot)
-    copyto!(LHS_uv, 1+N_tot, LHSv, 1, N_tot)
-
-    return LHS_uv
-end
-
 function LHS_func!(LHS_uv::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
@@ -261,38 +258,6 @@ function LHS_func_adj!(LHS_uv::AbstractVector{Float64},
     return nothing
 end
 
-
-
-function LHS_func_order4(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
-        ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
-        u::AbstractVector{Float64}, v::AbstractVector{Float64},
-        system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64}, 
-        control_op_sym::AbstractMatrix{Float64}, control_op_asym::AbstractMatrix{Float64},
-        control::AbstractControl, t::Float64,
-        pcof::AbstractVector{Float64}, dt::Float64, N_tot::Int64)
-
-    utvt!(ut, vt, u, v,
-          system_sym, system_asym, control_op_sym, control_op_asym,
-          control, t, pcof)
-    uttvtt!(utt, vtt, ut, vt, u, v,
-            system_sym, system_asym, control_op_sym, control_op_asym,
-            control, t, pcof)
-
-    weights = (1,-1/3)
-    
-    LHSu = copy(u)
-    axpy!(-0.5*dt*weights[1],    ut,  LHSu)
-    axpy!(-0.25*dt^2*weights[2], utt, LHSu)
-    LHSv = copy(v)
-    axpy!(-0.5*dt*weights[1],    vt,  LHSv)
-    axpy!(-0.25*dt^2*weights[2], vtt, LHSv)
-
-    LHS = zeros(Float64, 2*N_tot)
-    copyto!(LHS, 1,       LHSu, 1, N_tot)
-    copyto!(LHS, 1+N_tot, LHSv, 1, N_tot)
-
-    return LHS
-end
 
 function LHS_func_order4!(LHS_uv::AbstractVector{Float64},
         utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
