@@ -114,19 +114,21 @@ function discrete_adjoint(
 
             RHS .= terminal_RHS[:,initial_condition_index]
 
-            function LHS_func_wrapper_order4(x::AbstractVector{Float64})::Vector{Float64}
-                return LHS_func_order4(
-                    lambda_utt, lambda_vtt, lambda_ut, lambda_vt,
-                    x[1:prob.N_tot_levels], x[1+prob.N_tot_levels:end],
-                    Ks_adj, Ss_adj, p_operator_adj, q_operator_adj,
-                    control, t,
-                    pcof, dt, prob.N_tot_levels
+            function LHS_func_wrapper_order4(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
+                copyto!(lambda_u, 1, uv_in, 1,                   prob.N_tot_levels)
+                copyto!(lambda_v, 1, uv_in, 1+prob.N_tot_levels, prob.N_tot_levels)
+                LHS_func_order4!(
+                    uv_out, lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u, lambda_v,
+                    prob, controls, t, pcof, dt, prob.N_tot_levels
                 )
+
+                return nothing
             end
 
             LHS_map = LinearMaps.LinearMap(
                 LHS_func_wrapper_order4,
-                2*prob.N_tot_levels, 2*prob.N_tot_levels
+                2*prob.N_tot_levels, 2*prob.N_tot_levels,
+                ismutating=true
             )
 
             IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
@@ -139,36 +141,30 @@ function discrete_adjoint(
             # Discrete Adjoint Scheme
             for n in prob.nsteps-1:-1:1
                 t -= dt
-                utvt!(
-                    lambda_ut, lambda_vt, lambda_u, lambda_v, Ks_adj, Ss_adj,
-                    p_operator_adj, q_operator_adj, control,
-                    t, pcof
-                )
+                utvt!(lambda_ut, lambda_vt, lambda_u, lambda_v, prob, controls, t, pcof)
                 uttvtt!(
-                    lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u,
-                    lambda_v, Ks_adj, Ss_adj, p_operator_adj, q_operator_adj,
-                    control, t,
-                    pcof
+                    lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u, lambda_v,
+                    prob, controls, t, pcof
                 )
 
                 copy!(RHS_lambda_u,lambda_u)
-                axpy!(0.5*dt*weights[1],lambda_ut,RHS_lambda_u)
-                axpy!(0.25*dt^2*weights[2],lambda_utt,RHS_lambda_u)
+                axpy!(0.5*dt*weights[1],    lambda_ut,  RHS_lambda_u)
+                axpy!(0.25*dt^2*weights[2], lambda_utt, RHS_lambda_u)
 
                 copy!(RHS_lambda_v,lambda_v)
-                axpy!(0.5*dt*weights[1],lambda_vt,RHS_lambda_v)
-                axpy!(0.25*dt^2*weights[2],lambda_vtt,RHS_lambda_v)
+                axpy!(0.5*dt*weights[1],   lambda_vt,  RHS_lambda_v)
+                axpy!(0.25*dt^2*weights[2],lambda_vtt, RHS_lambda_v)
 
-                copyto!(RHS,1,RHS_lambda_u,1,prob.N_tot_levels)
-                copyto!(RHS,1+prob.N_tot_levels,RHS_lambda_v,1,prob.N_tot_levels)
+                copyto!(RHS, 1,                   RHS_lambda_u, 1, prob.N_tot_levels)
+                copyto!(RHS, 1+prob.N_tot_levels, RHS_lambda_v, 1, prob.N_tot_levels)
 
                 # NOTE: LHS and RHS Linear transformations use the SAME TIME
 
                 IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
                 lambda_history[:,1+n] .= lambda
-                lambda_u = lambda[1:prob.N_tot_levels]
-                lambda_v = lambda[1+prob.N_tot_levels:2*prob.N_tot_levels]
+                copyto!(lambda_u, 1,                   lambda, 1, prob.N_tot_levels)
+                copyto!(lambda_v, 1+prob.N_tot_levels, lambda, 1, prob.N_tot_levels)
             end
 
             u = zeros(prob.N_tot_levels)
@@ -411,9 +407,9 @@ function disc_adj_calc_grad!(gradient::AbstractVector{Float64}, prob::Schrodinge
         sym_op = prob.sym_operators[i]
         this_pcof = get_control_vector_slice(pcof, controls, i)
 
-        grad_contrib = zeros(control.N_coeff)
-        grad_p = zeros(control.N_coeff)
-        grad_q = zeros(control.N_coeff)
+        grad_contrib = zeros(controls.N_coeff)
+        grad_p = zeros(controls.N_coeff)
+        grad_q = zeros(controls.N_coeff)
 
         for n in 0:prob.nsteps-1
             lambda_u .= @view lambda_history[1:prob.N_tot_levels,     1+n+1]
@@ -467,10 +463,10 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
         pcof::AbstractVector{Float64}, target::VM; order=2, 
         cost_type=:Infidelity
     ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
-    @assert length(pcof) == control.N_coeff
+    @assert length(pcof) == controls.N_coeff
 
     # Get state vector history
-    history = eval_forward(prob, control, pcof, order=order, return_time_derivatives=true)
+    history = eval_forward(prob, controls, pcof, order=order, return_time_derivatives=true)
 
     ## Compute forcing array (-idH/dα ψ)
     # Prepare dH/dα
@@ -479,11 +475,11 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
     dKs_da::Matrix{Float64} = zeros(prob.N_tot_levels, prob.N_tot_levels)
     dSs_da::Matrix{Float64} = zeros(prob.N_tot_levels, prob.N_tot_levels)
 
-    gradient = zeros(control.N_coeff)
+    gradient = zeros(controls.N_coeff)
 
     forcing_ary = zeros(2*prob.N_tot_levels, 1+prob.nsteps, div(order, 2), size(prob.u0, 2))
 
-    for control_param_index in 1:control.N_coeff
+    for control_param_index in 1:controls.N_coeff
         for initial_condition_index = 1:size(prob.u0, 2)
             # This could be more efficient by having functions which calculate
             # only the intended partial derivative, not the whole gradient, but
@@ -639,23 +635,25 @@ size of dpcof is used when perturbing the components of the control vector pcof.
 Returns: gradient
 """
 function eval_grad_finite_difference(
-        prob::SchrodingerProb, control::Control,
+        prob::SchrodingerProb, controls,
         pcof::AbstractVector{Float64}, target::AbstractMatrix{Float64}, 
         dpcof=1e-5; order=2, cost_type=:Infidelity,
     )
 
     grad = zeros(length(pcof))
+    pcof_l = zeros(controls.N_coeff)
+    pcof_r = zeros(controls.N_coeff)
 
     for i in 1:length(pcof)
         # Centered Difference Approximation
-        pcof_r = copy(pcof)
+        pcof_r .= pcof
         pcof_r[i] += dpcof
 
-        pcof_l = copy(pcof)
+        pcof_l .= pcof
         pcof_l[i] -= dpcof
 
-        history_r = eval_forward(prob, control, pcof_r, order=order)
-        history_l = eval_forward(prob, control, pcof_l, order=order)
+        history_r = eval_forward(prob, controls, pcof_r, order=order)
+        history_l = eval_forward(prob, controls, pcof_l, order=order)
         ψf_r = history_r[:,end,:]
         ψf_l = history_l[:,end,:]
         if cost_type == :Infidelity
@@ -677,23 +675,25 @@ function eval_grad_finite_difference(
 end
 
 function eval_grad_finite_difference(
-        prob::SchrodingerProb{M, V}, control::Control, 
+        prob::SchrodingerProb{M, V}, controls, 
         pcof::AbstractVector{Float64}, target::V; dpcof=1e-5, order=2, 
         cost_type=:Infidelity
     ) where {M<: AbstractMatrix{Float64}, V <: AbstractVector{Float64}}
 
-    grad = zeros(control.N_coeff)
+    grad = zeros(controls.N_coeff)
+    pcof_l = zeros(controls.N_coeff)
+    pcof_r = zeros(controls.N_coeff)
 
     for i in 1:length(pcof)
         # Centered Difference Approximation
-        pcof_r = copy(pcof)
+        pcof_r .= pcof
         pcof_r[i] += dpcof
 
-        pcof_l = copy(pcof)
+        pcof_l .= pcof
         pcof_l[i] -= dpcof
 
-        history_r = eval_forward(prob, control, pcof_r, order=order)
-        history_l = eval_forward(prob, control, pcof_l, order=order)
+        history_r = eval_forward(prob, controls, pcof_r, order=order)
+        history_l = eval_forward(prob, controls, pcof_l, order=order)
         ψf_r = history_r[:, end]
         ψf_l = history_l[:, end]
         if cost_type == :Infidelity

@@ -179,18 +179,20 @@ function eval_forward_order4(
     utt = zeros(prob.N_tot_levels)
     vtt = zeros(prob.N_tot_levels)
 
-    function LHS_func_wrapper(uv::AbstractVector{Float64})::Vector{Float64}
+    function LHS_func_wrapper(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
         # Careful, make certain that I can do this overwrite without messing up anything else
-        u .= view(uv,1:prob.N_tot_levels)
-        v .= view(uv,1+prob.N_tot_levels:2*prob.N_tot_levels)
-        return  LHS_func_order4(
-            utt, vtt, ut, vt, u, v, prob, controls, t, pcof, dt, prob.N_tot_levels
+        copyto!(u, 1, uv_in, 1,                   prob.N_tot_levels)
+        copyto!(v, 1, uv_in, 1+prob.N_tot_levels, prob.N_tot_levels)
+        LHS_func_order4!(
+            uv_out, utt, vtt, ut, vt, u, v, prob, controls, t, pcof, dt, prob.N_tot_levels
         )
+        return nothing
     end
 
     LHS_map = LinearMaps.LinearMap(
         LHS_func_wrapper,
-        2*prob.N_tot_levels, 2*prob.N_tot_levels
+        2*prob.N_tot_levels, 2*prob.N_tot_levels,
+        ismutating=true
     )
 
     # Order 4
@@ -220,8 +222,8 @@ function eval_forward_order4(
         IterativeSolvers.gmres!(uv, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
         uv_history[:,1+n+1] .= uv
 
-        u = uv[1:prob.N_tot_levels]
-        v = uv[1+prob.N_tot_levels:end]
+        copyto!(u, 1, uv, 1,                   prob.N_tot_levels)
+        copyto!(v, 1, uv, 1+prob.N_tot_levels, prob.N_tot_levels)
     end
 
     # One last time, for utvt history at final time
@@ -318,12 +320,12 @@ function eval_forward_forced_order2(
     vtt = zeros(prob.N_tot_levels)
 
 
-    function LHS_func_wrapper(uv::AbstractVector{Float64})::Vector{Float64}
+    function LHS_func_wrapper(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
         # Careful, make certain that I can do this overwrite without messing up anything else
-        u .= view(uv,1:prob.N_tot_levels)
-        v .= view(uv,1+prob.N_tot_levels:2*prob.N_tot_levels)
+        copyto!(u, 1, uv_in, 1,                   prob.N_tot_levels)
+        copyto!(v, 1, uv_in, 1+prob.N_tot_levels, prob.N_tot_levels)
         return LHS_func(
-            ut, vt, u, v,
+            uv_out, ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
             controls, t, pcof, dt, prob.N_tot_levels
         )
@@ -331,7 +333,8 @@ function eval_forward_forced_order2(
 
     LHS_map = LinearMaps.LinearMap(
         LHS_func_wrapper,
-        2*prob.N_tot_levels, 2*prob.N_tot_levels
+        2*prob.N_tot_levels, 2*prob.N_tot_levels,
+        ismutating=true
     )
 
 
@@ -359,8 +362,8 @@ function eval_forward_forced_order2(
         IterativeSolvers.gmres!(uv, LHS_map, RHS_uv, abstol=1e-15, reltol=1e-15)
         uv_history[:,1+n+1] .= uv
 
-        u = uv[1:prob.N_tot_levels]
-        v = uv[1+prob.N_tot_levels:end]
+        copyto!(u, 1, uv, 1,                   prob.N_tot_levels)
+        copyto!(v, 1, uv, 1+prob.N_tot_levels, prob.N_tot_levels)
     end
     
     return uv_history
@@ -394,13 +397,12 @@ function eval_forward_forced_order4(
     utt = zeros(prob.N_tot_levels)
     vtt = zeros(prob.N_tot_levels)
 
-    function LHS_func_wrapper(uv::AbstractVector{Float64})::Vector{Float64}
+    function LHS_func_wrapper(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
         # Careful, make certain that I can do this overwrite without messing up anything else
-        u .= view(uv,1:prob.N_tot_levels)
-        v .= view(uv,1+prob.N_tot_levels:2*prob.N_tot_levels)
+        copyto!(u, 1, uv_in, 1,                   prob.N_tot_levels)
+        copyto!(v, 1, uv_in, 1+prob.N_tot_levels, prob.N_tot_levels)
         return  LHS_func_order4(
-            utt, vtt, ut, vt, 
-            u, v,
+            uv_out, utt, vtt, ut, vt, u, v,
             prob.Ks, prob.Ss, prob.p_operator, prob.q_operator, 
             controls,
             t, pcof, dt, prob.N_tot_levels
@@ -409,7 +411,8 @@ function eval_forward_forced_order4(
 
     LHS_map = LinearMaps.LinearMap(
         LHS_func_wrapper,
-        2*prob.N_tot_levels, 2*prob.N_tot_levels
+        2*prob.N_tot_levels, 2*prob.N_tot_levels,
+        ismutating=true
     )
 
 
@@ -469,12 +472,11 @@ function eval_forward_forced_order4(
         copyto!(RHS_uv, 1,                   RHSu, 1, prob.N_tot_levels)
         copyto!(RHS_uv, 1+prob.N_tot_levels, RHSv, 1, prob.N_tot_levels)
 
-
         IterativeSolvers.gmres!(uv, LHS_map, RHS_uv, abstol=1e-15, reltol=1e-15)
 
         uv_history[:, 1+n+1] .= uv
-        u = uv[1:prob.N_tot_levels]
-        v = uv[1+prob.N_tot_levels:end]
+        copyto!(u, 1, uv, 1,                   prob.N_tot_levels)
+        copyto!(v, 1, uv, 1+prob.N_tot_levels, prob.N_tot_levels)
     end
     
     return uv_history

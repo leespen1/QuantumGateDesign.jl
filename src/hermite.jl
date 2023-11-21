@@ -229,11 +229,14 @@ function LHS_func!(LHS_uv::AbstractVector{Float64},
         dt::Float64, N_tot::Int64)
 
     utvt!(ut, vt, u, v, prob, controls, t, pcof)
+
+    LHS_u = view(LHS_uv, 1:N_tot)
+    LHS_v = view(LHS_uv, 1+N_tot:2*N_tot)
     
-    LHS_uv[1:N_tot] .= u
-    axpy!(-0.5*dt, ut, view(LHS_uv, 1:N_tot))
-    LHS_uv[1+N_tot:end] .= v
-    axpy!(-0.5*dt, vt, view(LHS_uv, 1+N_tot:2*N_tot))
+    LHS_u .= u
+    axpy!(-0.5*dt, ut, LHS_u)
+    LHS_v .= v
+    axpy!(-0.5*dt, vt, LHS_v)
 
     return nothing
 end
@@ -247,11 +250,13 @@ function LHS_func_adj!(LHS_uv::AbstractVector{Float64},
 
     utvt_adj!(ut, vt, u, v, prob, controls, t, pcof)
     
-    copyto!(LHS_uv, 1, u, 1, N_tot)
-    axpy!(-0.5*dt, ut, view(LHS_uv, 1:N_tot))
+    LHS_u = view(LHS_uv, 1:N_tot)
+    LHS_v = view(LHS_uv, 1+N_tot:2*N_tot)
 
-    copyto!(LHS_uv, 1+N_tot, v, 1, N_tot)
-    axpy!(-0.5*dt, vt, view(LHS_uv, 1+N_tot:2*N_tot))
+    LHS_u .= u
+    axpy!(-0.5*dt, ut, LHS_u)
+    LHS_v .= v
+    axpy!(-0.5*dt, vt, LHS_v)
 
     return nothing
 end
@@ -273,7 +278,7 @@ function LHS_func_order4(utt::AbstractVector{Float64}, vtt::AbstractVector{Float
             system_sym, system_asym, control_op_sym, control_op_asym,
             control, t, pcof)
 
-    weights = [1,-1/3]
+    weights = (1,-1/3)
     
     LHSu = copy(u)
     axpy!(-0.5*dt*weights[1],    ut,  LHSu)
@@ -289,7 +294,8 @@ function LHS_func_order4(utt::AbstractVector{Float64}, vtt::AbstractVector{Float
     return LHS
 end
 
-function LHS_func_order4(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
+function LHS_func_order4!(LHS_uv::AbstractVector{Float64},
+        utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         prob::SchrodingerProb, controls,
@@ -299,30 +305,43 @@ function LHS_func_order4(utt::AbstractVector{Float64}, vtt::AbstractVector{Float
     utvt!(ut, vt, u, v, prob, controls, t, pcof)
     uttvtt!(utt, vtt, ut, vt, u, v, prob, controls, t, pcof)
 
-    weights = [1,-1/3]
+    weights = (1,-1/3)
+
+    LHS_u = view(LHS_uv, 1:N_tot)
+    LHS_v = view(LHS_uv, 1+N_tot:2*N_tot)
     
-    LHSu = copy(u)
-    axpy!(-0.5*dt*weights[1],    ut,  LHSu)
-    axpy!(-0.25*dt^2*weights[2], utt, LHSu)
-    LHSv = copy(v)
-    axpy!(-0.5*dt*weights[1],    vt,  LHSv)
-    axpy!(-0.25*dt^2*weights[2], vtt, LHSv)
+    LHS_u .= u
+    axpy!(-0.5*dt*weights[1],    ut,  LHS_u)
+    axpy!(-0.25*dt^2*weights[2], utt, LHS_u)
+    LHS_v .= v
+    axpy!(-0.5*dt*weights[1],    vt,  LHS_v)
+    axpy!(-0.25*dt^2*weights[2], vtt, LHS_v)
 
-    LHS = zeros(Float64, 2*N_tot)
-    copyto!(LHS, 1,       LHSu, 1, N_tot)
-    copyto!(LHS, 1+N_tot, LHSv, 1, N_tot)
+    return nothing
+end
 
-    return LHS
+function LHS_func_order4_adj!(LHS_uv::AbstractVector{Float64},
+        utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
+        ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        prob::SchrodingerProb, controls,
+        t::Float64, pcof::AbstractVector{Float64},
+        dt::Float64, N_tot::Int64)
 
+    utvt_adj!(ut, vt, u, v, prob, controls, t, pcof)
+    uttvtt_adj!(utt, vtt, ut, vt, u, v, prob, controls, t, pcof)
+
+    weights = (1,-1/3)
+
+    LHS_u = view(LHS_uv, 1:N_tot)
+    LHS_v = view(LHS_uv, 1+N_tot,2*N_tot)
     
-    LHSu = copy(u)
-    axpy!(-0.5*dt, ut, LHSu)
-    LHSv = copy(v)
-    axpy!(-0.5*dt, vt, LHSv)
+    LHS_u .= u
+    axpy!(-0.5*dt*weights[1],    ut,  LHS_u)
+    axpy!(-0.25*dt^2*weights[2], utt, LHS_u)
+    LHS_v .= v
+    axpy!(-0.5*dt*weights[1],    vt,  LHS_v)
+    axpy!(-0.25*dt^2*weights[2], vtt, LHS_v)
 
-    LHS_uv = zeros(Float64, 2*N_tot)
-    copyto!(LHS_uv, 1,       LHSu, 1, N_tot)
-    copyto!(LHS_uv, 1+N_tot, LHSv, 1, N_tot)
-
-    return LHS_uv
+    return nothing
 end
