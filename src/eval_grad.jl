@@ -34,6 +34,8 @@ function discrete_adjoint(
         throw("Invalid cost type: $cost_type")
     end
 
+    full_lambda_history = zeros(2*prob.N_tot_levels,1+prob.nsteps, prob.N_ess_levels)
+
     for initial_condition_index = 1:size(prob.u0,2)
         lambda = zeros(2*prob.N_tot_levels)
         lambda_history = zeros(2*prob.N_tot_levels,1+prob.nsteps)
@@ -371,10 +373,12 @@ function discrete_adjoint(
         else
             throw("Invalid order: $order")
         end
+
+        full_lambda_history[:,:,initial_condition_index] .= lambda_history
     end
 
     if return_lambda_history
-        return grad, history, lambda_history
+        return grad, history, full_lambda_history
     end
     return grad
 end
