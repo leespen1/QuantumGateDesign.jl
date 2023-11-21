@@ -104,6 +104,9 @@ function discrete_adjoint(
             disc_adj_calc_grad!(grad, prob, controls, pcof,
                 view(history, :, :, initial_condition_index), lambda_history
             )
+            #disc_adj_calc_grad_naive!(grad, prob, controls, pcof,
+            #    view(history, :, :, initial_condition_index), lambda_history
+            #)
         
 
 
@@ -187,11 +190,9 @@ end
 """
 Need better name
 """
-function disc_adj_calc_grad!(gradient::AbstractVector{Float64}, prob::SchrodingerProb, controls,
-        pcof::AbstractVector{Float64},
-        history::AbstractMatrix{Float64}, lambda_history::AbstractMatrix{Float64},
-        )
-
+function disc_adj_calc_grad!(gradient::AbstractVector{Float64},
+        prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
+        history::AbstractMatrix{Float64}, lambda_history::AbstractMatrix{Float64})
 
     dt = prob.tf / prob.nsteps
 
@@ -205,7 +206,6 @@ function disc_adj_calc_grad!(gradient::AbstractVector{Float64}, prob::Schrodinge
     sym_op_lambda_u = zeros(prob.N_tot_levels)
     sym_op_lambda_v = zeros(prob.N_tot_levels)
 
-    # NOTE: Revising this for multiple controls will require some thought
     for i in 1:prob.N_operators
         control = controls[i]
         asym_op = prob.asym_operators[i]
@@ -248,6 +248,94 @@ function disc_adj_calc_grad!(gradient::AbstractVector{Float64}, prob::Schrodinge
         end
 
         grad_contrib .*= -0.5*dt
+
+        grad_slice = get_control_vector_slice(gradient, controls, i)
+        grad_slice .+= grad_contrib
+    end
+
+    return nothing
+end
+
+"""
+A simpler version, but less prone to mistakes by the programmer.
+"""
+function disc_adj_calc_grad_naive!(gradient::AbstractVector{Float64},
+        prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
+        history::AbstractMatrix{Float64}, lambda_history::AbstractMatrix{Float64})
+
+
+    dt = prob.tf / prob.nsteps
+
+    # "Dummy" system operator, since the partial derivative takes them to zero
+    zero_system_op = zeros(prob.N_tot_levels, prob.N_tot_levels)
+
+    u_n = zeros(prob.N_tot_levels)
+    v_n = zeros(prob.N_tot_levels)
+    u_np1 = zeros(prob.N_tot_levels)
+    v_np1 = zeros(prob.N_tot_levels)
+    ut = zeros(prob.N_tot_levels)
+    vt = zeros(prob.N_tot_levels)
+
+    left_inner_prod = zeros(prob.real_system_size)
+    lambda_np1 = zeros(prob.real_system_size)
+
+    uv = zeros(prob.real_system_size)
+    lambda_uv = zeros(prob.real_system_size)
+
+    for i in 1:prob.N_operators
+        control = controls[i]
+        asym_op = prob.asym_operators[i]
+        sym_op = prob.sym_operators[i]
+        this_pcof = get_control_vector_slice(pcof, controls, i)
+
+        grad_contrib = zeros(control.N_coeff)
+
+        grad_p_n = zeros(control.N_coeff)
+        grad_q_n = zeros(control.N_coeff)
+        grad_p_np1 = zeros(control.N_coeff)
+        grad_q_np1 = zeros(control.N_coeff)
+
+        for n in 0:prob.nsteps-1
+
+            lambda_np1 .= lambda_history[:, 1+n+1]
+
+            u_n .= @view history[1:prob.N_tot_levels,     1+n]
+            v_n .= @view history[1+prob.N_tot_levels:end, 1+n]
+            t_n = n*dt
+            grad_p_n .= eval_grad_p(control, t_n, this_pcof)
+            grad_q_n .= eval_grad_q(control, t_n, this_pcof)
+
+            u_np1 .= @view history[1:prob.N_tot_levels,     1+n+1]
+            v_np1 .= @view history[1+prob.N_tot_levels:end, 1+n+1]
+            t_np1 = (n+1)*dt
+            grad_p_np1 .= eval_grad_p(control, t_np1, this_pcof)
+            grad_q_np1 .= eval_grad_q(control, t_np1, this_pcof)
+
+            # Do the "explicit" part
+            for i in 1:length(grad_contrib)
+                p_val = grad_p_n[i]
+                q_val = grad_q_n[i]
+                utvt!(
+                    ut, vt, u_n, v_n, 
+                    zero_system_op, zero_system_op, sym_op, asym_op,
+                    p_val, q_val
+                )
+                left_inner_prod[1:prob.N_tot_levels]     .= (0.5*dt) .* ut
+                left_inner_prod[1+prob.N_tot_levels:end] .= (0.5*dt) .* vt
+
+                p_val = grad_p_np1[i]
+                q_val = grad_q_np1[i]
+                utvt!(
+                    ut, vt, u_np1, v_np1, 
+                    zero_system_op, zero_system_op, sym_op, asym_op,
+                    p_val, q_val
+                )
+                left_inner_prod[1:prob.N_tot_levels]     .+= (0.5*dt) .* ut
+                left_inner_prod[1+prob.N_tot_levels:end] .+= (0.5*dt) .* vt
+
+                grad_contrib[i] -= dot(left_inner_prod, lambda_np1)
+            end
+        end
 
         grad_slice = get_control_vector_slice(gradient, controls, i)
         grad_slice .+= grad_contrib
@@ -323,8 +411,8 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1+n)
             t = n*dt
 
-            grad_p =  eval_grad_p(control,  t, this_pcof)
-            grad_q =  eval_grad_q(control,  t, this_pcof)
+            grad_p  = eval_grad_p(control,  t, this_pcof)
+            grad_q  = eval_grad_q(control,  t, this_pcof)
             grad_pt = eval_grad_pt(control, t, this_pcof)
             grad_qt = eval_grad_qt(control, t, this_pcof)
 
