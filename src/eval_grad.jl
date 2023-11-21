@@ -212,9 +212,9 @@ function disc_adj_calc_grad!(gradient::AbstractVector{Float64}, prob::Schrodinge
         sym_op = prob.sym_operators[i]
         this_pcof = get_control_vector_slice(pcof, controls, i)
 
-        grad_contrib = zeros(controls.N_coeff)
-        grad_p = zeros(controls.N_coeff)
-        grad_q = zeros(controls.N_coeff)
+        grad_contrib = zeros(control.N_coeff)
+        grad_p = zeros(control.N_coeff)
+        grad_q = zeros(control.N_coeff)
 
         for n in 0:prob.nsteps-1
             lambda_u .= @view lambda_history[1:prob.N_tot_levels,     1+n+1]
@@ -301,9 +301,9 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
 
         this_pcof = get_control_vector_slice(pcof, controls, i)
 
-        grad_contrib = zeros(controls.N_coeff)
-        grad_p = zeros(controls.N_coeff)
-        grad_q = zeros(controls.N_coeff)
+        grad_contrib = zeros(control.N_coeff)
+        grad_p = zeros(control.N_coeff)
+        grad_q = zeros(control.N_coeff)
 
         # Accumulate Gradient
         # Efficient way, possibly incorrect
