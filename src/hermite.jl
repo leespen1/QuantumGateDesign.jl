@@ -76,10 +76,12 @@ function utvt_adj!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
 
     # System / Drift Part of Hamiltonian
     mul!(ut, prob.system_asym, u)
-    mul!(ut, prob.system_sym, v, 1, 1)
+    ut .*= -1 # Want to do ut=Sᵀu = -Su, this is the best way to get the negative without allocating memory
+    mul!(ut, prob.system_sym, v, -1, 1)
 
     mul!(vt, prob.system_asym, v)
-    mul!(vt, prob.system_sym, u, -1, 1)
+    vt .*= -1 # Get negative without allocating memory
+    mul!(vt, prob.system_sym, u, 1, 1)
 
     for i in 1:length(controls)
         control = controls[i]
