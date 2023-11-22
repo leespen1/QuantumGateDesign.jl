@@ -120,7 +120,7 @@ function discrete_adjoint(
             function LHS_func_wrapper_order4(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
                 copyto!(lambda_u, 1, uv_in, 1,                   prob.N_tot_levels)
                 copyto!(lambda_v, 1, uv_in, 1+prob.N_tot_levels, prob.N_tot_levels)
-                LHS_func_order4!(
+                LHS_func_order4_adj!(
                     uv_out, lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u, lambda_v,
                     prob, controls, t, pcof, dt, prob.N_tot_levels
                 )
@@ -137,8 +137,8 @@ function discrete_adjoint(
             IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
             lambda_history[:,1+prob.nsteps] .= lambda
-            lambda_u = copy(lambda[1:prob.N_tot_levels])
-            lambda_v = copy(lambda[1+prob.N_tot_levels:end])
+            copyto!(lambda_u, 1, lambda, 1,                   prob.N_tot_levels)
+            copyto!(lambda_v, 1, lambda, 1+prob.N_tot_levels, prob.N_tot_levels)
             
             weights = [1,1/3]
             # Discrete Adjoint Scheme
@@ -150,13 +150,13 @@ function discrete_adjoint(
                     prob, controls, t, pcof
                 )
 
-                copy!(RHS_lambda_u,lambda_u)
-                axpy!(0.5*dt*weights[1],    lambda_ut,  RHS_lambda_u)
-                axpy!(0.25*dt^2*weights[2], lambda_utt, RHS_lambda_u)
+                copy!(RHS_lambda_u, lambda_u)
+                axpy!(0.5*dt*weights[1],     lambda_ut,  RHS_lambda_u)
+                axpy!(0.25*dt*dt*weights[2], lambda_utt, RHS_lambda_u)
 
-                copy!(RHS_lambda_v,lambda_v)
-                axpy!(0.5*dt*weights[1],   lambda_vt,  RHS_lambda_v)
-                axpy!(0.25*dt^2*weights[2],lambda_vtt, RHS_lambda_v)
+                copy!(RHS_lambda_v, lambda_v)
+                axpy!(0.5*dt*weights[1],     lambda_vt,  RHS_lambda_v)
+                axpy!(0.25*dt*dt*weights[2], lambda_vtt, RHS_lambda_v)
 
                 copyto!(RHS, 1,                   RHS_lambda_u, 1, prob.N_tot_levels)
                 copyto!(RHS, 1+prob.N_tot_levels, RHS_lambda_v, 1, prob.N_tot_levels)
