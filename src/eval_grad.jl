@@ -33,7 +33,7 @@ function discrete_adjoint(
         throw("Invalid cost type: $cost_type")
     end
 
-    println(terminal_RHS)
+    println("Terminal RHS\n", terminal_RHS)
 
     full_lambda_history = zeros(prob.real_system_size,1+prob.nsteps, prob.N_ess_levels)
 
@@ -136,8 +136,28 @@ function discrete_adjoint(
                 ismutating=true
             )
 
+            println("Before terminal solve:")
+            println("lambda_u: ",   lambda_u)
+            println("lambda_v: ",   lambda_v)
+            println("lambda_ut: ",  lambda_ut)
+            println("lambda_vt: ",  lambda_vt)
+            println("lambda_utt: ", lambda_utt)
+            println("lambda_vtt: ", lambda_vtt)
+            println("lambda: ", lambda)
+            println()
+
             # Terminal Condition
             IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+
+            println("After terminal solve:")
+            println("lambda_u: ",   lambda_u)
+            println("lambda_v: ",   lambda_v)
+            println("lambda_ut: ",  lambda_ut)
+            println("lambda_vt: ",  lambda_vt)
+            println("lambda_utt: ", lambda_utt)
+            println("lambda_vtt: ", lambda_vtt)
+            println("lambda: ", lambda)
+            println()
 
             lambda_history[:,1+prob.nsteps] .= lambda
             copyto!(lambda_u, 1, lambda, 1,                   prob.N_tot_levels)
