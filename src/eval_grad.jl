@@ -326,25 +326,24 @@ function disc_adj_calc_grad_naive!(gradient::AbstractVector{Float64},
             u_n .= @view history[1:prob.N_tot_levels,     1+n]
             v_n .= @view history[1+prob.N_tot_levels:end, 1+n]
             t_n = n*dt
+
             p_val_n = eval_p(control, t_n, this_pcof)
             q_val_n = eval_q(control, t_n, this_pcof)
             grad_p_n .= eval_grad_p(control, t_n, this_pcof)
             grad_q_n .= eval_grad_q(control, t_n, this_pcof)
+            grad_pt_n .= eval_grad_pt(control, t_n, this_pcof)
+            grad_qt_n .= eval_grad_qt(control, t_n, this_pcof)
 
             u_np1 .= @view history[1:prob.N_tot_levels,     1+n+1]
             v_np1 .= @view history[1+prob.N_tot_levels:end, 1+n+1]
             t_np1 = (n+1)*dt
+
             p_val_np1 = eval_p(control, t_np1, this_pcof)
             q_val_np1 = eval_q(control, t_np1, this_pcof)
             grad_p_np1 .= eval_grad_p(control, t_np1, this_pcof)
             grad_q_np1 .= eval_grad_q(control, t_np1, this_pcof)
-
-            if (order == 4)
-                grad_pt_n .= eval_grad_pt(control, t_n, this_pcof)
-                grad_qt_n .= eval_grad_qt(control, t_n, this_pcof)
-                grad_pt_np1 .= eval_grad_pt(control, t_np1, this_pcof)
-                grad_qt_np1 .= eval_grad_qt(control, t_np1, this_pcof)
-            end
+            grad_pt_np1 .= eval_grad_pt(control, t_np1, this_pcof)
+            grad_qt_np1 .= eval_grad_qt(control, t_np1, this_pcof)
 
             for i in 1:length(grad_contrib)
 
