@@ -45,7 +45,7 @@ function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
     mul!(vt, prob.system_asym, v)
     mul!(vt, prob.system_sym, u, -1, 1)
 
-    for i in 1:length(controls)
+    for i in 1:prob.N_controls
         control = controls[i]
         sym_op = prob.sym_operators[i]
         asym_op = prob.asym_operators[i]
@@ -83,7 +83,7 @@ function utvt_adj!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
     vt .*= -1 # Get negative without allocating memory
     mul!(vt, prob.system_sym, u, 1, 1)
 
-    for i in 1:length(controls)
+    for i in 1:prob.N_controls
         control = controls[i]
         sym_op = prob.sym_operators[i]
         asym_op = prob.asym_operators[i]
@@ -146,7 +146,7 @@ function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
     utvt!(utt, vtt, ut, vt, prob, controls, t, pcof)
 
     # Calculate Hₜψ (time derivative means drift hamiltonian goes away)
-    for i in 1:length(controls)
+    for i in 1:prob.N_controls
         control = controls[i]
         sym_op = prob.sym_operators[i]
         asym_op = prob.asym_operators[i]
@@ -173,7 +173,7 @@ function uttvtt_adj!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
     utvt_adj!(utt, vtt, ut, vt, prob, controls, t, pcof)
 
     # Calculate Hₜψ (time derivative means drift hamiltonian goes away)
-    for i in 1:length(controls)
+    for i in 1:prob.N_controls
         control = controls[i]
         sym_op = prob.sym_operators[i]
         asym_op = prob.asym_operators[i]
