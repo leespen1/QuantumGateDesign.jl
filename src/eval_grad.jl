@@ -148,8 +148,8 @@ function discrete_adjoint(
             weights = (1, 1/3)
             for n in prob.nsteps-1:-1:1
                 t -= dt
-                utvt!(lambda_ut, lambda_vt, lambda_u, lambda_v, prob, controls, t, pcof)
-                uttvtt!(
+                utvt_adj!(lambda_ut, lambda_vt, lambda_u, lambda_v, prob, controls, t, pcof)
+                uttvtt_adj!(
                     lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u, lambda_v,
                     prob, controls, t, pcof
                 )
@@ -169,7 +169,7 @@ function discrete_adjoint(
 
                 IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
-                lambda_history[:,1+n] .= lambda
+                lambda_history[:, 1+n] .= lambda
                 copyto!(lambda_u, 1, lambda, 1,                   prob.N_tot_levels)
                 copyto!(lambda_v, 1, lambda, 1+prob.N_tot_levels, prob.N_tot_levels)
             end
