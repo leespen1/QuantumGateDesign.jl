@@ -33,6 +33,8 @@ function discrete_adjoint(
         throw("Invalid cost type: $cost_type")
     end
 
+    println(terminal_RHS)
+
     full_lambda_history = zeros(prob.real_system_size,1+prob.nsteps, prob.N_ess_levels)
 
     for initial_condition_index = 1:size(prob.u0,2)
