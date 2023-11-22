@@ -297,13 +297,6 @@ function LHS_func_order4_adj!(LHS_uv::AbstractVector{Float64},
     utvt_adj!(ut, vt, u, v, prob, controls, t, pcof)
     uttvtt_adj!(utt, vtt, ut, vt, u, v, prob, controls, t, pcof)
 
-    println("u: ", u)
-    println("v: ", v)
-    println("ut: ", ut)
-    println("vt: ", vt)
-    println("utt: ", utt)
-    println("vtt: ", vtt)
-
     weights = (1,-1/3)
     LHS_u = view(LHS_uv, 1:N_tot)
     LHS_v = view(LHS_uv, 1+N_tot:2*N_tot)
