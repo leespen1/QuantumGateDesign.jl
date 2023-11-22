@@ -40,46 +40,50 @@ function discrete_adjoint(
     for initial_condition_index = 1:size(prob.u0,2)
         lambda = zeros(prob.real_system_size)
         lambda_history = zeros(prob.real_system_size,1+prob.nsteps)
-        lambda_u  = zeros(prob.N_tot_levels)
-        lambda_v  = zeros(prob.N_tot_levels)
+
+        lambda_u   = zeros(prob.N_tot_levels)
+        lambda_v   = zeros(prob.N_tot_levels)
         lambda_ut  = zeros(prob.N_tot_levels)
         lambda_vt  = zeros(prob.N_tot_levels)
         lambda_utt = zeros(prob.N_tot_levels)
         lambda_vtt = zeros(prob.N_tot_levels)
 
-        RHS_lambda_u::Vector{Float64} = zeros(prob.N_tot_levels)
-        RHS_lambda_v::Vector{Float64} = zeros(prob.N_tot_levels)
         RHS::Vector{Float64} = zeros(prob.real_system_size)
 
-        grad_contrib = zeros(len_pcof)
+        RHS_lambda_u::Vector{Float64} = zeros(prob.N_tot_levels)
+        RHS_lambda_v::Vector{Float64} = zeros(prob.N_tot_levels)
+
+
+        t = prob.tf
+        RHS .= terminal_RHS[:,initial_condition_index]
 
         if order == 2
-            # Terminal Condition
-            t = prob.tf
 
-            RHS .= terminal_RHS[:,initial_condition_index]
-
-            function LHS_func_wrapper_order2(lambda_out::AbstractVector{Float64}, lambda_in::AbstractVector{Float64})
+            function LHS_func_adj_wrapper_order2(lambda_out::AbstractVector{Float64}, lambda_in::AbstractVector{Float64})
                 copyto!(lambda_u, 1, lambda_in, 1,                   prob.N_tot_levels)
                 copyto!(lambda_v, 1, lambda_in, 1+prob.N_tot_levels, prob.N_tot_levels)
                 LHS_func_adj!(
                     lambda_out, lambda_ut, lambda_vt, lambda_u, lambda_v, 
                     prob, controls, t, pcof, dt, prob.N_tot_levels
                 )
+
+                return nothing
             end
 
             LHS_map = LinearMaps.LinearMap(
-                LHS_func_wrapper_order2,
+                LHS_func_adj_wrapper_order2,
                 prob.real_system_size, prob.real_system_size,
                 ismutating=true
             )
 
+            # Terminal Condition
             IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
             lambda_history[:,1+prob.nsteps] .= lambda
             copyto!(lambda_u, 1, lambda, 1,                   prob.N_tot_levels)
             copyto!(lambda_v, 1, lambda, 1+prob.N_tot_levels, prob.N_tot_levels)
             
+
             # Discrete Adjoint Scheme
             for n in prob.nsteps-1:-1:1
                 t -= dt
@@ -114,16 +118,12 @@ function discrete_adjoint(
 
 
         elseif order == 4
-            # Terminal Condition
-            t = prob.tf
 
-            RHS .= terminal_RHS[:,initial_condition_index]
-
-            function LHS_func_wrapper_order4(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
-                copyto!(lambda_u, 1, uv_in, 1,                   prob.N_tot_levels)
-                copyto!(lambda_v, 1, uv_in, 1+prob.N_tot_levels, prob.N_tot_levels)
+            function LHS_func_adj_wrapper_order4(lambda_out::AbstractVector{Float64}, lambda_in::AbstractVector{Float64})
+                copyto!(lambda_u, 1, lambda_in, 1,                   prob.N_tot_levels)
+                copyto!(lambda_v, 1, lambda_in, 1+prob.N_tot_levels, prob.N_tot_levels)
                 LHS_func_order4_adj!(
-                    uv_out, lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u, lambda_v,
+                    lambda_out, lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u, lambda_v,
                     prob, controls, t, pcof, dt, prob.N_tot_levels
                 )
 
@@ -131,19 +131,21 @@ function discrete_adjoint(
             end
 
             LHS_map = LinearMaps.LinearMap(
-                LHS_func_wrapper_order4,
+                LHS_func_adj_wrapper_order4,
                 prob.real_system_size, prob.real_system_size,
                 ismutating=true
             )
 
+            # Terminal Condition
             IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
 
             lambda_history[:,1+prob.nsteps] .= lambda
             copyto!(lambda_u, 1, lambda, 1,                   prob.N_tot_levels)
             copyto!(lambda_v, 1, lambda, 1+prob.N_tot_levels, prob.N_tot_levels)
             
-            weights = [1,1/3]
+
             # Discrete Adjoint Scheme
+            weights = (1, 1/3)
             for n in prob.nsteps-1:-1:1
                 t -= dt
                 utvt!(lambda_ut, lambda_vt, lambda_u, lambda_v, prob, controls, t, pcof)
