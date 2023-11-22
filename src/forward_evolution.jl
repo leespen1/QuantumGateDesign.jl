@@ -196,7 +196,7 @@ function eval_forward_order4(
     )
 
     # Order 4
-    weights = [1,1/3]
+    weights = (1, 1/3)
     for n in 0:prob.nsteps-1
         utvt!(ut, vt, u, v, prob, controls, t, pcof)
         uttvtt!(utt, vtt, ut, vt, u, v, prob, controls, t, pcof)
