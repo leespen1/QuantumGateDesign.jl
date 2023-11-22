@@ -101,12 +101,13 @@ function discrete_adjoint(
                 copyto!(lambda_v, 1, lambda, 1+prob.N_tot_levels, prob.N_tot_levels)
             end
 
-            disc_adj_calc_grad!(grad, prob, controls, pcof,
-                view(history, :, :, initial_condition_index), lambda_history
-            )
-            #disc_adj_calc_grad_naive!(grad, prob, controls, pcof,
+            #disc_adj_calc_grad!(grad, prob, controls, pcof,
             #    view(history, :, :, initial_condition_index), lambda_history
             #)
+            disc_adj_calc_grad_naive!(grad, prob, controls, pcof,
+                view(history, :, :, initial_condition_index), lambda_history,
+                order=order
+            )
         
 
 
@@ -169,8 +170,12 @@ function discrete_adjoint(
                 copyto!(lambda_v, 1, lambda, 1+prob.N_tot_levels, prob.N_tot_levels)
             end
 
-            disc_adj_calc_grad_order_4!(grad, prob, controls, pcof,
-                view(history, :, :, initial_condition_index), lambda_history
+            #disc_adj_calc_grad_order_4!(grad, prob, controls, pcof,
+            #    view(history, :, :, initial_condition_index), lambda_history
+            #)
+            disc_adj_calc_grad_naive!(grad, prob, controls, pcof,
+                view(history, :, :, initial_condition_index), lambda_history,
+                order=order
             )
 
 
@@ -261,8 +266,9 @@ A simpler version, but less prone to mistakes by the programmer.
 """
 function disc_adj_calc_grad_naive!(gradient::AbstractVector{Float64},
         prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
-        history::AbstractMatrix{Float64}, lambda_history::AbstractMatrix{Float64})
-
+        history::AbstractMatrix{Float64}, lambda_history::AbstractMatrix{Float64};
+        order=2
+    )
 
     dt = prob.tf / prob.nsteps
 
@@ -275,6 +281,8 @@ function disc_adj_calc_grad_naive!(gradient::AbstractVector{Float64},
     v_np1 = zeros(prob.N_tot_levels)
     ut = zeros(prob.N_tot_levels)
     vt = zeros(prob.N_tot_levels)
+    utt = zeros(prob.N_tot_levels)
+    vtt = zeros(prob.N_tot_levels)
 
     left_inner_prod = zeros(prob.real_system_size)
     lambda_np1 = zeros(prob.real_system_size)
@@ -292,8 +300,24 @@ function disc_adj_calc_grad_naive!(gradient::AbstractVector{Float64},
 
         grad_p_n = zeros(control.N_coeff)
         grad_q_n = zeros(control.N_coeff)
+        grad_pt_n = zeros(control.N_coeff)
+        grad_qt_n = zeros(control.N_coeff)
+
         grad_p_np1 = zeros(control.N_coeff)
         grad_q_np1 = zeros(control.N_coeff)
+        grad_pt_np1 = zeros(control.N_coeff)
+        grad_qt_np1 = zeros(control.N_coeff)
+
+        if (order == 2)
+            weights_n = 1
+            weights_np1 = 1
+        elseif (order == 4)
+            weights_n = (1, 1/3)
+            weights_np1 = (1, -1/3)
+        else
+            throw("Invalid Order: $order")
+        end
+
 
         for n in 0:prob.nsteps-1
 
@@ -302,36 +326,135 @@ function disc_adj_calc_grad_naive!(gradient::AbstractVector{Float64},
             u_n .= @view history[1:prob.N_tot_levels,     1+n]
             v_n .= @view history[1+prob.N_tot_levels:end, 1+n]
             t_n = n*dt
+            p_val_n = eval_p(control, t_n, this_pcof)
+            q_val_n = eval_q(control, t_n, this_pcof)
             grad_p_n .= eval_grad_p(control, t_n, this_pcof)
             grad_q_n .= eval_grad_q(control, t_n, this_pcof)
 
             u_np1 .= @view history[1:prob.N_tot_levels,     1+n+1]
             v_np1 .= @view history[1+prob.N_tot_levels:end, 1+n+1]
             t_np1 = (n+1)*dt
+            p_val_np1 = eval_p(control, t_np1, this_pcof)
+            q_val_np1 = eval_q(control, t_np1, this_pcof)
             grad_p_np1 .= eval_grad_p(control, t_np1, this_pcof)
             grad_q_np1 .= eval_grad_q(control, t_np1, this_pcof)
 
-            # Do the "explicit" part
+            if (order == 4)
+                grad_pt_n .= eval_grad_pt(control, t_n, this_pcof)
+                grad_qt_n .= eval_grad_qt(control, t_n, this_pcof)
+                grad_pt_np1 .= eval_grad_pt(control, t_np1, this_pcof)
+                grad_qt_np1 .= eval_grad_qt(control, t_np1, this_pcof)
+            end
+
             for i in 1:length(grad_contrib)
-                p_val = grad_p_n[i]
-                q_val = grad_q_n[i]
+
+                # Do the "explicit" part
+
+                # (∂H/∂θₖ)ψ
                 utvt!(
                     ut, vt, u_n, v_n, 
                     zero_system_op, zero_system_op, sym_op, asym_op,
-                    p_val, q_val
+                    grad_p_n[i], grad_q_n[i]
                 )
-                left_inner_prod[1:prob.N_tot_levels]     .= (0.5*dt) .* ut
-                left_inner_prod[1+prob.N_tot_levels:end] .= (0.5*dt) .* vt
+                left_inner_prod[1:prob.N_tot_levels]     .= (0.5*dt*weights_n[1]) .* ut
+                left_inner_prod[1+prob.N_tot_levels:end] .= (0.5*dt*weights_n[1]) .* vt
 
-                p_val = grad_p_np1[i]
-                q_val = grad_q_np1[i]
+                # Fourth order contribution
+                if (order == 4)
+                    # (∂H/∂θₖ)Hψ
+                    utvt!(
+                        ut, vt, u_n, v_n, 
+                        prob.system_sym, prob.system_asym, sym_op, asym_op,
+                        p_val_n, q_val_n
+                    )
+                    utvt!(
+                        utt, vtt, ut, ut, 
+                        zero_system_op, zero_system_op, sym_op, asym_op,
+                        grad_p_n[i], grad_q_n[i]
+                    )
+
+                    left_inner_prod[1:prob.N_tot_levels]     .+= (0.25*dt*dt*weights_n[2]) .* utt
+                    left_inner_prod[1+prob.N_tot_levels:end] .+= (0.25*dt*dt*weights_n[2]) .* vtt
+                    
+                    # H(∂H/∂θₖ)ψ
+                    utvt!(
+                        ut, vt, u_n, v_n, 
+                        zero_system_op, zero_system_op, sym_op, asym_op,
+                        grad_p_n[i], grad_q_n[i]
+                    )
+                    utvt!(
+                        utt, vtt, ut, ut, 
+                        prob.system_sym, prob.system_asym, sym_op, asym_op,
+                        p_val_n, q_val_n,
+                    )
+
+                    left_inner_prod[1:prob.N_tot_levels]     .+= (0.25*dt*dt*weights_n[2]) .* utt
+                    left_inner_prod[1+prob.N_tot_levels:end] .+= (0.25*dt*dt*weights_n[2]) .* vtt
+
+                    # (∂Hₜ/∂θₖ)ψ
+                    utvt!(
+                        ut, vt, u_n, v_n, 
+                        zero_system_op, zero_system_op, sym_op, asym_op,
+                        grad_pt_n[i], grad_qt_n[i]
+                    )
+
+                    left_inner_prod[1:prob.N_tot_levels]     .+= (0.25*dt*dt*weights_n[2]) .* ut
+                    left_inner_prod[1+prob.N_tot_levels:end] .+= (0.25*dt*dt*weights_n[2]) .* vt
+                end
+
+                # Do the "implicit" part
+
+                # (∂H/∂θₖ)ψ
                 utvt!(
                     ut, vt, u_np1, v_np1, 
                     zero_system_op, zero_system_op, sym_op, asym_op,
-                    p_val, q_val
+                    grad_p_np1[i], grad_q_np1[i]
                 )
-                left_inner_prod[1:prob.N_tot_levels]     .+= (0.5*dt) .* ut
-                left_inner_prod[1+prob.N_tot_levels:end] .+= (0.5*dt) .* vt
+                left_inner_prod[1:prob.N_tot_levels]     .+= (0.5*dt*weights_np1[1]) .* ut
+                left_inner_prod[1+prob.N_tot_levels:end] .+= (0.5*dt*weights_np1[1]) .* vt
+
+                # Fourth order contribution
+                if (order == 4)
+                    # (∂H/∂θₖ)Hψ
+                    utvt!(
+                        ut, vt, u_np1, v_np1, 
+                        prob.system_sym, prob.system_asym, sym_op, asym_op,
+                        p_val_np1, q_val_np1
+                    )
+                    utvt!(
+                        utt, vtt, ut, ut, 
+                        zero_system_op, zero_system_op, sym_op, asym_op,
+                        grad_p_np1[i], grad_q_np1[i]
+                    )
+
+                    left_inner_prod[1:prob.N_tot_levels]     .+= (0.25*dt*dt*weights_np1[2]) .* utt
+                    left_inner_prod[1+prob.N_tot_levels:end] .+= (0.25*dt*dt*weights_np1[2]) .* vtt
+                    
+                    # H(∂H/∂θₖ)ψ
+                    utvt!(
+                        ut, vt, u_np1, v_np1, 
+                        zero_system_op, zero_system_op, sym_op, asym_op,
+                        grad_p_np1[i], grad_q_np1[i]
+                    )
+                    utvt!(
+                        utt, vtt, ut, ut, 
+                        prob.system_sym, prob.system_asym, sym_op, asym_op,
+                        p_val_np1, q_val_np1,
+                    )
+
+                    left_inner_prod[1:prob.N_tot_levels]     .+= (0.25*dt*dt*weights_np1[2]) .* utt
+                    left_inner_prod[1+prob.N_tot_levels:end] .+= (0.25*dt*dt*weights_np1[2]) .* vtt
+
+                    # (∂Hₜ/∂θₖ)ψ
+                    utvt!(
+                        ut, vt, u_np1, v_np1, 
+                        zero_system_op, zero_system_op, sym_op, asym_op,
+                        grad_pt_np1[i], grad_qt_np1[i]
+                    )
+
+                    left_inner_prod[1:prob.N_tot_levels]     .+= (0.25*dt*dt*weights_np1[2]) .* ut
+                    left_inner_prod[1+prob.N_tot_levels:end] .+= (0.25*dt*dt*weights_np1[2]) .* vt
+                end
 
                 grad_contrib[i] -= dot(left_inner_prod, lambda_np1)
             end
@@ -401,10 +524,10 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             lambda_u .= lambda_history[1:prob.N_tot_levels,     1+n+1]
             lambda_v .= lambda_history[1+prob.N_tot_levels:end, 1+n+1]
 
-            mul!(MT_lambda_11, -asym_op, lambda_u)
-            mul!(MT_lambda_12, -sym_op, lambda_v)
-            mul!(MT_lambda_21, -sym_op, lambda_u)
-            mul!(MT_lambda_22, -asym_op, lambda_v)
+            mul!(MT_lambda_11, asym_op, lambda_u)
+            mul!(MT_lambda_12, sym_op, lambda_v)
+            mul!(MT_lambda_21, sym_op, lambda_u)
+            mul!(MT_lambda_22, asym_op, lambda_v)
 
             # Qn contribution
             u .= view(history, 1:prob.N_tot_levels,                     1+n)
