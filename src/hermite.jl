@@ -274,10 +274,11 @@ function LHS_func_order4!(LHS_uv::AbstractVector{Float64},
 
     LHS_u = view(LHS_uv, 1:N_tot)
     LHS_v = view(LHS_uv, 1+N_tot:2*N_tot)
-    
+
     LHS_u .= u
     axpy!(-0.5*dt*weights[1],     ut,  LHS_u)
     axpy!(-0.25*dt*dt*weights[2], utt, LHS_u)
+
     LHS_v .= v
     axpy!(-0.5*dt*weights[1],     vt,  LHS_v)
     axpy!(-0.25*dt*dt*weights[2], vtt, LHS_v)
@@ -296,8 +297,14 @@ function LHS_func_order4_adj!(LHS_uv::AbstractVector{Float64},
     utvt_adj!(ut, vt, u, v, prob, controls, t, pcof)
     uttvtt_adj!(utt, vtt, ut, vt, u, v, prob, controls, t, pcof)
 
-    weights = (1,-1/3)
+    println("u: ", u)
+    println("v: ", v)
+    println("ut: ", ut)
+    println("vt: ", vt)
+    println("utt: ", utt)
+    println("vtt: ", vtt)
 
+    weights = (1,-1/3)
     LHS_u = view(LHS_uv, 1:N_tot)
     LHS_v = view(LHS_uv, 1+N_tot:2*N_tot)
     
