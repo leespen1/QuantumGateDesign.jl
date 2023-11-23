@@ -181,11 +181,11 @@ function uttvtt_adj!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         # Get part of control vector corresponding to this control
         this_pcof = get_control_vector_slice(pcof, controls, i)
 
-        mul!(ut, asym_op, u, -eval_qt(control, t, this_pcof), 1)
-        mul!(ut, sym_op,  v, -eval_pt(control, t, this_pcof), 1)
+        mul!(utt, asym_op, u, -eval_qt(control, t, this_pcof), 1)
+        mul!(utt, sym_op,  v, -eval_pt(control, t, this_pcof), 1)
 
-        mul!(vt, sym_op,  u, eval_pt(control,  t, this_pcof), 1)
-        mul!(vt, asym_op, v, -eval_qt(control, t, this_pcof), 1)
+        mul!(vtt, sym_op,  u, eval_pt(control,  t, this_pcof), 1)
+        mul!(vtt, asym_op, v, -eval_qt(control, t, this_pcof), 1)
     end
 
 end
