@@ -33,8 +33,6 @@ function discrete_adjoint(
         throw("Invalid cost type: $cost_type")
     end
 
-    println("Terminal RHS\n", terminal_RHS)
-
     full_lambda_history = zeros(prob.real_system_size,1+prob.nsteps, prob.N_ess_levels)
 
     for initial_condition_index = 1:size(prob.u0,2)
@@ -136,66 +134,24 @@ function discrete_adjoint(
                 ismutating=true
             )
 
-            println("Before terminal solve:")
-            println("lambda_u: ",   lambda_u)
-            println("lambda_v: ",   lambda_v)
-            println("lambda_ut: ",  lambda_ut)
-            println("lambda_vt: ",  lambda_vt)
-            println("lambda_utt: ", lambda_utt)
-            println("lambda_vtt: ", lambda_vtt)
-            println("lambda: ", lambda)
-            println()
-
             # Terminal Condition
             IterativeSolvers.gmres!(lambda, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
-
-            println("After terminal solve:")
-            println("lambda_u: ",   lambda_u)
-            println("lambda_v: ",   lambda_v)
-            println("lambda_ut: ",  lambda_ut)
-            println("lambda_vt: ",  lambda_vt)
-            println("lambda_utt: ", lambda_utt)
-            println("lambda_vtt: ", lambda_vtt)
-            println("lambda: ", lambda)
-            println()
-
-            # Hard coding terminal condition solution for now, just to make sure the rest of the discrete adjoint is working
-            if (initial_condition_index == 1)
-                lambda .= [5.527915645763109e-5, -0.02904448149149305, 6.491288613439479e-5, 8.316362046780711e-5, -0.5664687741704361, -0.00012541820871003146]
-            elseif (initial_condition_index == 2)
-                lambda .= [-0.02904448280653733, 4.648355618134985e-5, 1.4062335662362185e-8, -0.5664687975609893, -8.838128711852334e-5, -8.756174912019356e-9]
-            end
 
             lambda_history[:,1+prob.nsteps] .= lambda
             copyto!(lambda_u, 1, lambda, 1,                   prob.N_tot_levels)
             copyto!(lambda_v, 1, lambda, 1+prob.N_tot_levels, prob.N_tot_levels)
-            
+
 
             # Discrete Adjoint Scheme
             weights = (1, 1/3)
             for n in prob.nsteps-1:-1:1
                 t -= dt
                 utvt_adj!(lambda_ut, lambda_vt, lambda_u, lambda_v, prob, controls, t, pcof)
-                if (n == prob.nsteps-1)
-                    println("After utvt in Explicit Part of First Adjoint Step:")
-                    println("lambda_u: ",   lambda_u)
-                    println("lambda_v: ",   lambda_v)
-                    println("lambda_ut: ",  lambda_ut)
-                    println("lambda_vt: ",  lambda_vt)
-                end
+
                 uttvtt_adj!(
                     lambda_utt, lambda_vtt, lambda_ut, lambda_vt, lambda_u, lambda_v,
                     prob, controls, t, pcof
                 )
-                if (n == prob.nsteps-1)
-                    println("After uttvtt in Explicit Part of First Adjoint Step:")
-                    println("lambda_u: ",   lambda_u)
-                    println("lambda_v: ",   lambda_v)
-                    println("lambda_ut: ",  lambda_ut)
-                    println("lambda_vt: ",  lambda_vt)
-                    println("lambda_utt: ",  lambda_utt)
-                    println("lambda_vtt: ",  lambda_vtt)
-                end
 
                 copy!(RHS_lambda_u, lambda_u)
                 axpy!(0.5*dt*weights[1],     lambda_ut,  RHS_lambda_u)
