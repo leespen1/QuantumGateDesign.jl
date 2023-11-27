@@ -173,13 +173,13 @@ function discrete_adjoint(
                 copyto!(lambda_v, 1, lambda, 1+prob.N_tot_levels, prob.N_tot_levels)
             end
 
-            #disc_adj_calc_grad_order_4!(grad, prob, controls, pcof,
-            #    view(history, :, :, initial_condition_index), lambda_history
-            #)
-            disc_adj_calc_grad_naive!(grad, prob, controls, pcof,
-                view(history, :, :, initial_condition_index), lambda_history,
-                order=order
+            disc_adj_calc_grad_order_4!(grad, prob, controls, pcof,
+                view(history, :, :, initial_condition_index), lambda_history
             )
+            #disc_adj_calc_grad_naive!(grad, prob, controls, pcof,
+            #    view(history, :, :, initial_condition_index), lambda_history,
+            #    order=order
+            #)
 
 
         else
@@ -477,37 +477,40 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
 
     dt = prob.tf / prob.nsteps
 
-    u = zeros(prob.N_tot_levels)
-    v = zeros(prob.N_tot_levels)
-    lambda_u = zeros(prob.N_tot_levels)
-    lambda_v = zeros(prob.N_tot_levels)
-
-    MT_lambda_11 = zeros(prob.N_tot_levels)
-    MT_lambda_12 = zeros(prob.N_tot_levels)
-    MT_lambda_21 = zeros(prob.N_tot_levels)
-    MT_lambda_22 = zeros(prob.N_tot_levels)
-
-    A = zeros(prob.N_tot_levels)
-    B = zeros(prob.N_tot_levels)
-    C = zeros(prob.N_tot_levels)
-
-    Ap = zeros(prob.N_tot_levels, prob.N_tot_levels)
-    Bp = zeros(prob.N_tot_levels, prob.N_tot_levels)
-    Am = zeros(prob.N_tot_levels, prob.N_tot_levels)
-    Bm = zeros(prob.N_tot_levels, prob.N_tot_levels)
-
-    Cu = zeros(prob.N_tot_levels)
-    Cv = zeros(prob.N_tot_levels)
-    Du = zeros(prob.N_tot_levels)
-    Dv = zeros(prob.N_tot_levels)
-
-    Hq = zeros(prob.N_tot_levels, prob.N_tot_levels)
-    Hp = zeros(prob.N_tot_levels, prob.N_tot_levels)
 
     len_pcof = length(pcof)
 
     # NOTE: Revising this for multiple controls will require some thought
     for i in 1:prob.N_operators
+
+        u = zeros(prob.N_tot_levels)
+        v = zeros(prob.N_tot_levels)
+        lambda_u = zeros(prob.N_tot_levels)
+        lambda_v = zeros(prob.N_tot_levels)
+
+        MT_lambda_11 = zeros(prob.N_tot_levels)
+        MT_lambda_12 = zeros(prob.N_tot_levels)
+        MT_lambda_21 = zeros(prob.N_tot_levels)
+        MT_lambda_22 = zeros(prob.N_tot_levels)
+
+        A = zeros(prob.N_tot_levels)
+        B = zeros(prob.N_tot_levels)
+        C = zeros(prob.N_tot_levels)
+
+        Ap = zeros(prob.N_tot_levels, prob.N_tot_levels)
+        Bp = zeros(prob.N_tot_levels, prob.N_tot_levels)
+        Am = zeros(prob.N_tot_levels, prob.N_tot_levels)
+        Bm = zeros(prob.N_tot_levels, prob.N_tot_levels)
+
+        Cu = zeros(prob.N_tot_levels)
+        Cv = zeros(prob.N_tot_levels)
+        Du = zeros(prob.N_tot_levels)
+        Dv = zeros(prob.N_tot_levels)
+
+        Hq = zeros(prob.N_tot_levels, prob.N_tot_levels)
+        Hp = zeros(prob.N_tot_levels, prob.N_tot_levels)
+
+
         control = controls[i]
         asym_op = prob.asym_operators[i]
         sym_op = prob.sym_operators[i]
@@ -526,13 +529,17 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             lambda_u .= lambda_history[1:prob.N_tot_levels,     1+n+1]
             lambda_v .= lambda_history[1+prob.N_tot_levels:end, 1+n+1]
 
-            mul!(MT_lambda_11, asym_op, lambda_u)
-            mul!(MT_lambda_12, sym_op, lambda_v)
-            mul!(MT_lambda_21, sym_op, lambda_u)
-            mul!(MT_lambda_22, asym_op, lambda_v)
+            mul!(MT_lambda_11, transpose(asym_op), lambda_u)
+            mul!(MT_lambda_12, transpose(sym_op),  lambda_v)
+            mul!(MT_lambda_21, transpose(sym_op),  lambda_u)
+            mul!(MT_lambda_22, transpose(asym_op), lambda_v)
+            #MT_lambda_11 .*= -1
+            #MT_lambda_12 .*= -1
+            #MT_lambda_21 .*= -1
+            #MT_lambda_22 .*= -1
 
             # Qn contribution
-            u .= view(history, 1:prob.N_tot_levels,                     1+n)
+            u .= view(history, 1:prob.N_tot_levels,                       1+n)
             v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1+n)
             t = n*dt
 
@@ -610,7 +617,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
 
             # uv n+1 contribution
 
-            u .= view(history, 1:prob.N_tot_levels,                     1+n+1)
+            u .= view(history, 1:prob.N_tot_levels,                       1+n+1)
             v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1+n+1)
             t = (n+1)*dt
 
