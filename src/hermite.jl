@@ -5,6 +5,12 @@
 ==============================================================================#
 """
 Values of p(t,pcof) and q(t,pcof) provided. Mutates ut and vt, leaves all other variables untouched.
+
+Could do this with fewer matrix multiplications by having a storage matrix
+where I store system_sym + p(t)*sym_op, and the corresponding asym part. This
+would reduce the number of matrix multiplications by half, at the cost of
+matrix additions. For N controls, it would reduce the number of matrix
+multiplications by 1/N.
 """
 function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
