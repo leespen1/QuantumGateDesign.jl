@@ -158,7 +158,7 @@ function eval_grad_pt(control::BSplineControl, t::Float64, pcof::AbstractVector{
 end
 
 function eval_grad_qt(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
-    return gradbcarrier2_dt(t, control.bcpar, 0)
+    return gradbcarrier2_dt(t, control.bcpar, 1)
 end
 
 #==============================================================================
