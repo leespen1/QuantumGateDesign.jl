@@ -30,13 +30,17 @@ export Control, AbstractControl, BSplineControl
 
 export rotating_frame_qubit
 export initial_basis
+export infidelity
 
 
 include("SchrodingerProb.jl")
 include("bsplines.jl")
 include("Control.jl")
 include("convergence_test.jl")
-include("eval_grad.jl")
+include("infidelity.jl")
+include("eval_grad_discrete_adjoint.jl")
+include("eval_grad_finite_difference.jl")
+include("eval_grad_forced.jl")
 include("forward_evolution.jl")
 include("gradient_test.jl")
 include("hamiltonian_construction.jl")
