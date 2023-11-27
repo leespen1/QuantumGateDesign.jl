@@ -266,6 +266,8 @@ end
 
 """
 A simpler version, but less prone to mistakes by the programmer.
+
+WARNING: I DON'T THINK THIS WORKS FOR 4TH ORDER YET
 """
 function disc_adj_calc_grad_naive!(gradient::AbstractVector{Float64},
         prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
@@ -417,6 +419,7 @@ function disc_adj_calc_grad_naive!(gradient::AbstractVector{Float64},
 
                 # Fourth order contribution
                 if (order == 4)
+                    @warn "I DON'T THINK THIS WORKS FOR 4TH ORDER YET"
                     # (∂H/∂θₖ)Hψ
                     utvt!(
                         ut, vt, u_np1, v_np1, 
@@ -473,7 +476,6 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
         pcof::AbstractVector{Float64},
         history::AbstractMatrix{Float64}, lambda_history::AbstractMatrix{Float64},
         )
-
 
     dt = prob.tf / prob.nsteps
 
