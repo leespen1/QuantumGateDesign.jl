@@ -100,3 +100,41 @@ function VectorSchrodingerProb(
     @assert initial_condition_index == 1
     return copy(prob)
 end
+
+function Base.show(io::IO, ::MIME"text/plain", prob::SchrodingerProb{M, VM}) where {M, VM}
+    println(io, typeof(prob))
+    println(io, "Type of operators: ", M)
+    print(io, "Type of states: ", VM)
+    if (VM <: AbstractVector)
+        print(io, " (state transfer problem)")
+    elseif (VM <: AbstractMatrix)
+        print(io, " (gate design problem)")
+    end
+    print(io, "\n")
+
+    println(io, "System symmetric operator: ", prob.system_sym)
+    println(io, "System asymmetric operator: ", prob.system_asym)
+
+    println(io, "Control symmetric operators:")
+    for op in prob.sym_operators
+        println(io, "\t", op)
+    end
+
+    println(io, "Control asymmetric operators:")
+    for op in prob.asym_operators
+        println(io, "\t", op)
+    end
+
+    println(io, "Real part of initial state(s): ", prob.u0)
+    println(io, "Imaginary part of initial state(s): ", prob.v0)
+
+    println(io, "Final time: ", prob.tf)
+    println(io, "Number of timesteps: ", prob.nsteps)
+    println(io, "Number of essential levels: ", prob.N_ess_levels)
+    println(io, "Number of guard levels: ", prob.N_guard_levels)
+    println(io, "Total number of levels: ", prob.N_tot_levels)
+    println(io, "Number of control Hamiltonians: ", prob.N_operators)
+    print(io, "Size of real-valued system: ", prob.real_system_size)
+
+    return nothing
+end
