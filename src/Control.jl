@@ -79,6 +79,9 @@ function get_control_vector_slice(pcof::AbstractVector{Float64}, controls, contr
     return view(pcof, start_index:end_index)
 end
 
+function Base.show(io::IO, ::MIME"text/plain", control::AbstractControl)
+    print(io, typeof(control), " with ", control.N_coeff, " control coefficients")
+end
 
 """
 I'm not sure if creating the lambda/anonymous function has a significant
