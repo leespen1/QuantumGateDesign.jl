@@ -162,7 +162,7 @@ function differentiated_prob(prob::SchrodingerProb)
 end
 
 function time_diff_prob(prob::SchrodingerProb)
-    diff_prob = copy(pprob)
+    diff_prob = copy(prob)
     diff_prob.u0 .= 0
     diff_prob.v0 .= 0
     return diff_prob
