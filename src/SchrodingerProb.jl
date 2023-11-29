@@ -146,7 +146,7 @@ end
 Return a Schrodinger Problem which is a copy of the one provided, but with the
 difference that the system operators and initial conditions are all zero, as
 they are constant in the original problem and therefore go to zero when we take
-the derivative or gradient of a problem.
+the partial derivative with respect to a control parameter.
 
 Could do this in a non-copying way, but I am not worried about the performance
 of this right now. Especially since I only expect to use this method in
@@ -156,6 +156,13 @@ function differentiated_prob(prob::SchrodingerProb)
     diff_prob = copy(prob)
     diff_prob.system_sym .= 0
     diff_prob.system_asym .= 0
+    diff_prob.u0 .= 0
+    diff_prob.v0 .= 0
+    return diff_prob
+end
+
+function time_diff_prob(prob::SchrodingerProb)
+    diff_prob = copy(pprob)
     diff_prob.u0 .= 0
     diff_prob.v0 .= 0
     return diff_prob
