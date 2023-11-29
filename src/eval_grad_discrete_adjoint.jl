@@ -334,6 +334,9 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1+n)
             t = n*dt
 
+            p_val = eval_p(control, t, this_pcof)
+            q_val = eval_q(control, t, this_pcof)
+
             grad_p  = eval_grad_p(control,  t, this_pcof)
             grad_q  = eval_grad_q(control,  t, this_pcof)
             grad_pt = eval_grad_pt(control, t, this_pcof)
@@ -362,7 +365,11 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
 
             # Do contribution of ⟨∂H/∂θₖ Hw,λ⟩
             # Apply Hamiltonian
-            utvt!(ut, vt, u, v, prob, control, t, this_pcof)
+            utvt!(
+                ut, vt, u, v, 
+                prob.system_sym, prob.system_asym, sym_op, asym_op,
+                p_val, q_val
+            )
             # Do matrix part of ∂H/∂θₖ, so I can "factor out" the scalar function
             mul!(sym_op_ut, sym_op, ut)
             mul!(asym_op_ut, asym_op, ut)
@@ -380,7 +387,11 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             mul!(asym_op_v, asym_op, v)
 
             # ut and vt are not actuall holding ut and vt.
-            utvt!(ut, vt, asym_op_u, asym_op_v, prob, control, t, this_pcof) 
+            utvt!(
+                ut, vt, u, v, 
+                prob.system_sym, prob.system_asym, sym_op, asym_op,
+                p_val, q_val
+            )
             grad_contrib .+= grad_q .* weights_n[2]*dot(ut, lambda_u)
             grad_contrib .+= grad_q .* weights_n[2]*dot(vt, lambda_v)
 
@@ -393,7 +404,11 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             #
             # Possibly these should be minuses. I think this is correct, but I
             # may have misfactored
-            utvt!(ut, vt, sym_op_v, sym_op_u, prob, control, t, this_pcof) 
+            utvt!(
+                ut, vt, u, v, 
+                prob.system_sym, prob.system_asym, sym_op, asym_op,
+                p_val, q_val
+            )
             grad_contrib .+= grad_p .* weights_n[2]*dot(ut, lambda_u)
             grad_contrib .+= grad_p .* weights_n[2]*dot(vt, lambda_v)
             
@@ -406,6 +421,8 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1+n+1)
             t = (n+1)*dt
 
+            p_val = eval_p(control, t, this_pcof)
+            q_val = eval_q(control, t, this_pcof)
             grad_p  = eval_grad_p(control,  t, this_pcof)
             grad_q  = eval_grad_q(control,  t, this_pcof)
             grad_pt = eval_grad_pt(control, t, this_pcof)
@@ -434,7 +451,11 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
 
             # Do contribution of ⟨∂H/∂θₖ Hw,λ⟩
             # Apply Hamiltonian
-            utvt!(ut, vt, u, v, prob, control, t, this_pcof)
+            utvt!(
+                ut, vt, u, v, 
+                prob.system_sym, prob.system_asym, sym_op, asym_op,
+                p_val, q_val
+            )
             # Do matrix part of ∂H/∂θₖ, so I can "factor out" the scalar function
             mul!(sym_op_ut, sym_op, ut)
             mul!(asym_op_ut, asym_op, ut)
@@ -452,7 +473,11 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             mul!(asym_op_v, asym_op, v)
 
             # ut and vt are not actuall holding ut and vt.
-            utvt!(ut, vt, asym_op_u, asym_op_v, prob, control, t, this_pcof) 
+            utvt!(
+                ut, vt, u, v, 
+                prob.system_sym, prob.system_asym, sym_op, asym_op,
+                p_val, q_val
+            )
             grad_contrib .+= grad_q .* weights_np1[2]*dot(ut, lambda_u)
             grad_contrib .+= grad_q .* weights_np1[2]*dot(vt, lambda_v)
 
@@ -465,7 +490,11 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             #
             # Possibly these should be minuses. I think this is correct, but I
             # may have misfactored
-            utvt!(ut, vt, sym_op_v, sym_op_u, prob, control, t, this_pcof) 
+            utvt!(
+                ut, vt, u, v, 
+                prob.system_sym, prob.system_asym, sym_op, asym_op,
+                p_val, q_val
+            )
             grad_contrib .+= grad_p .* weights_np1[2]*dot(ut, lambda_u)
             grad_contrib .+= grad_p .* weights_np1[2]*dot(vt, lambda_v)
 
