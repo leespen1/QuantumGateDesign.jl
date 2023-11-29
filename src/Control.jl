@@ -114,6 +114,41 @@ function eval_grad_qt(control::AbstractControl, t::Float64, pcof::AbstractVector
     return ForwardDiff.gradient(pcof_dummy -> eval_qt(control, t, pcof_dummy), pcof)
 end
 
+
+#=================================================
+# 
+# Forced Gradient Helper 
+#
+=================================================#
+
+"""
+For use in forced gradient
+"""
+struct GradControl{T} <: AbstractControl
+    original_control::T
+    N_coeff::Int64
+    grad_index::Int64
+    function GradControl(original_control::T, grad_index::Int64) where T <: AbstractControl
+        new{T}(original_control, original_control.N_coeff, grad_index)
+    end
+end
+
+function eval_p(grad_control::GradControl, t::Float64, pcof::AbstractVector{Float64})
+    return eval_grad_p(grad_control.original_control, t, pcof)[grad_control.grad_index]
+end
+
+function eval_pt(grad_control::GradControl, t::Float64, pcof::AbstractVector{Float64})
+    return eval_grad_pt(grad_control.original_control, t, pcof)[grad_control.grad_index]
+end
+
+function eval_q(grad_control::GradControl, t::Float64, pcof::AbstractVector{Float64})
+    return eval_grad_q(grad_control.original_control, t, pcof)[grad_control.grad_index]
+end
+
+function eval_qt(grad_control::GradControl, t::Float64, pcof::AbstractVector{Float64})
+    return eval_grad_qt(grad_control.original_control, t, pcof)[grad_control.grad_index]
+end
+
 #=================================================
 # 
 # Bspline/Bcarrier 

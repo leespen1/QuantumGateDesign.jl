@@ -101,6 +101,9 @@ function VectorSchrodingerProb(
     return copy(prob)
 end
 
+"""
+Show/display problem parameters in a human readable format.
+"""
 function Base.show(io::IO, ::MIME"text/plain", prob::SchrodingerProb{M, VM}) where {M, VM}
     println(io, typeof(prob))
     println(io, "Type of operators: ", M)
@@ -137,4 +140,23 @@ function Base.show(io::IO, ::MIME"text/plain", prob::SchrodingerProb{M, VM}) whe
     print(io, "Size of real-valued system: ", prob.real_system_size)
 
     return nothing
+end
+
+"""
+Return a Schrodinger Problem which is a copy of the one provided, but with the
+difference that the system operators and initial conditions are all zero, as
+they are constant in the original problem and therefore go to zero when we take
+the derivative or gradient of a problem.
+
+Could do this in a non-copying way, but I am not worried about the performance
+of this right now. Especially since I only expect to use this method in
+eval_grad_forced.
+"""
+function differentiated_prob(prob::SchrodingerProb)
+    diff_prob = copy(prob)
+    diff_prob.system_sym .= 0
+    diff_prob.system_asym .= 0
+    diff_prob.u0 .= 0
+    diff_prob.v0 .= 0
+    return diff_prob
 end
