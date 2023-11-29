@@ -170,17 +170,17 @@ end
 struct TimeDerivativeControl{T} <: AbstractControl
     original_control::T
     N_coeff::Int64
-    function GradControl(original_control::T) where T <: AbstractControl
+    function TimeDerivativeControl(original_control::T) where T <: AbstractControl
         new{T}(original_control, original_control.N_coeff)
     end
 end
 
 function eval_p(time_derivative_control::TimeDerivativeControl, t::Float64, pcof::AbstractVector{Float64})
-    return eval_pt(TimeDerivativeControl.original_control, t, pcof)
+    return eval_pt(time_derivative_control.original_control, t, pcof)
 end
 
 function eval_q(time_derivative_control::TimeDerivativeControl, t::Float64, pcof::AbstractVector{Float64})
-    return eval_qt(TimeDerivativeControl.original_control, t, pcof)
+    return eval_qt(time_derivative_control.original_control, t, pcof)
 end
 
 #=================================================
