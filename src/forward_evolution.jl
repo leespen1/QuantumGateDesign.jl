@@ -292,6 +292,9 @@ Evolve schrodinger problem with forcing applied, and forcing given as an array
 of forces at each discretized point in time.
 
 Maybe I should also do a one with forcing functions as well.
+
+Might be more convenient to merge this into the regular eval_forward functions,
+with the forcing_ary defaulting to missing when we don't want to apply forcing.
 """
 function eval_forward_forced_order2(
         prob::SchrodingerProb{M, V}, controls, pcof::V,
@@ -324,11 +327,12 @@ function eval_forward_forced_order2(
         # Careful, make certain that I can do this overwrite without messing up anything else
         copyto!(u, 1, uv_in, 1,                   prob.N_tot_levels)
         copyto!(v, 1, uv_in, 1+prob.N_tot_levels, prob.N_tot_levels)
-        return LHS_func(
+        LHS_func!(
             uv_out, ut, vt, u, v,
-            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            controls, t, pcof, dt, prob.N_tot_levels
+            prob, controls, t, pcof, dt, prob.N_tot_levels
         )
+
+        return nothing
     end
 
     LHS_map = LinearMaps.LinearMap(
@@ -339,11 +343,7 @@ function eval_forward_forced_order2(
 
 
     for n in 0:prob.nsteps-1
-        utvt!(
-            ut, vt, u, v,
-            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            controls, t, pcof
-        )
+        utvt!(ut, vt, u, v, prob, controls, t, pcof)
 
         copy!(RHSu, u)
         axpy!(0.5*dt, ut, RHSu)
@@ -401,11 +401,9 @@ function eval_forward_forced_order4(
         # Careful, make certain that I can do this overwrite without messing up anything else
         copyto!(u, 1, uv_in, 1,                   prob.N_tot_levels)
         copyto!(v, 1, uv_in, 1+prob.N_tot_levels, prob.N_tot_levels)
-        return  LHS_func_order4(
+        return  LHS_func_order4!(
             uv_out, utt, vtt, ut, vt, u, v,
-            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator, 
-            controls,
-            t, pcof, dt, prob.N_tot_levels
+            prob, controls, t, pcof, dt, prob.N_tot_levels
         )
     end
 
@@ -420,20 +418,14 @@ function eval_forward_forced_order4(
     weights_LHS = (1, -1/3)
     for n in 0:prob.nsteps-1
         # First time derivative at current timestep
-        utvt!(
-            ut, vt, u, v,
-            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            controls, t, pcof
-        )
+        utvt!(ut, vt, u, v, prob, controls, t, pcof)
+
         axpy!(1.0, forcing_ary[1:prob.N_tot_levels,     1+n, 1], ut)
         axpy!(1.0, forcing_ary[1+prob.N_tot_levels:end, 1+n, 1], vt)
 
         # Second time derivative at current timestep
-        uttvtt!(
-            utt, vtt, ut, vt, u, v,
-            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            controls, t, pcof
-        )
+        uttvtt!(utt, vtt, ut, vt, u, v, prob, controls, t, pcof)
+
         axpy!(1.0, forcing_ary[1:prob.N_tot_levels,     1+n, 2], utt)
         axpy!(1.0, forcing_ary[1+prob.N_tot_levels:end, 1+n, 2], vtt)
 
@@ -462,8 +454,7 @@ function eval_forward_forced_order4(
             ut, vt, 
             forcing_ary[1:prob.N_tot_levels, 1+n+1, 1],
             forcing_ary[1+prob.N_tot_levels:end, 1+n+1, 1],
-            prob.Ks, prob.Ss, prob.p_operator, prob.q_operator,
-            controls, t, pcof
+            prob, controls, t, pcof
         )
 
         axpy!(0.25*dt^2*weights_LHS[2], ut, RHSu)

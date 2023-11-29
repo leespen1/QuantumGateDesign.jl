@@ -10,31 +10,29 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
         pcof::AbstractVector{Float64}, target::VM; order=2, 
         cost_type=:Infidelity
     ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
-    @assert length(pcof) == controls.N_coeff
 
     # Get state vector history
     history = eval_forward(prob, controls, pcof, order=order, return_time_derivatives=true)
 
-    ## Compute forcing array (-idH/dα ψ)
+    ## Compute forcing array (using -i∂H/dθₖ ψ)
     # Prepare dH/dα
-    
-    # System hamiltonian is constant, falls out when taking derivative
-    dKs_da::Matrix{Float64} = zeros(prob.N_tot_levels, prob.N_tot_levels)
-    dSs_da::Matrix{Float64} = zeros(prob.N_tot_levels, prob.N_tot_levels)
 
     gradient = zeros(controls.N_coeff)
 
     forcing_ary = zeros(prob.real_system_size, 1+prob.nsteps, div(order, 2), size(prob.u0, 2))
 
+    diff_prob = differentiated_prob(prob)
+
+
     for control_param_index in 1:controls.N_coeff
+        grad_controls = [GradControl(control, control_param_index) for control in controls]
+        grad_time_derivative_controls = [TimeDerivativeControl(control) for control in grad_controls]
+
+
         for initial_condition_index = 1:size(prob.u0, 2)
             # This could be more efficient by having functions which calculate
             # only the intended partial derivative, not the whole gradient, but
             # I am only focusing on optimizaiton for the discrete adjoint.
-            dpda(t, pcof) = eval_grad_p(control, t, pcof)[control_param_index]
-            dqda(t, pcof) = eval_grad_q(control, t, pcof)[control_param_index]
-            d2p_dta(t, pcof) = eval_grad_pt(control, t, pcof)[control_param_index]
-            d2q_dta(t, pcof) = eval_grad_qt(control, t, pcof)[control_param_index]
 
             # 2nd order version
             if order == 2
@@ -53,11 +51,8 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
                     copyto!(u, history[1:prob.N_tot_levels    , 1+n, 1, initial_condition_index])
                     copyto!(v, history[1+prob.N_tot_levels:end, 1+n, 1, initial_condition_index])
 
-                    utvt!(
-                        ut, vt, u, v,
-                        dKs_da, dSs_da, prob.p_operator, prob.q_operator,
-                        dpda(t, pcof), dqda(t, pcof)
-                    )
+                    utvt!(ut, vt, u, v, diff_prob, diff_controls, t, pcof)
+
                     copyto!(forcing_vec, 1,                   ut, 1, prob.N_tot_levels)
                     copyto!(forcing_vec, 1+prob.N_tot_levels, vt, 1, prob.N_tot_levels)
 
@@ -85,11 +80,8 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
                     u .= history[1:prob.N_tot_levels,     1+n, 1, initial_condition_index]
                     v .= history[1+prob.N_tot_levels:end, 1+n, 1, initial_condition_index]
 
-                    utvt!(
-                        ut, vt, u, v, 
-                        dKs_da, dSs_da, prob.p_operator, prob.q_operator,
-                        dpda(t, pcof), dqda(t, pcof)
-                    )
+                    utvt!(ut, vt, u, v, diff_prob, diff_controls, t, pcof)
+
                     forcing_vec2[1:prob.N_tot_levels]     .= ut
                     forcing_vec2[1+prob.N_tot_levels:end] .= vt
 
@@ -100,8 +92,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
 
                     utvt!(
                         ut, vt, u, v,
-                        dKs_da, dSs_da, prob.p_operator, prob.q_operator,
-                        d2p_dta(t, pcof), d2q_dta(t, pcof)
+                        diff_prob, grad_time_derivative_controls, t, pcof
                     )
                     forcing_vec4[1:prob.N_tot_levels]     .+= ut
                     forcing_vec4[1+prob.N_tot_levels:end] .+= vt
@@ -114,8 +105,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
 
                     utvt!(
                         A, B, ut, vt,
-                        dKs_da, dSs_da, prob.p_operator, prob.q_operator,
-                        dpda(t, pcof), dqda(t, pcof)
+                        diff_prob, grad_controls, t, pcof
                     )
 
                     forcing_vec4[1:prob.N_tot_levels]     .+= A
@@ -131,12 +121,8 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
         end
 
         # Evolve with forcing
-        differentiated_prob = copy(prob) 
+        timediff_prob = time_diff_prob(prob) 
         # Get history of dψ/dα
-        # Initial conditions for dψ/dα, all entries zero (control can't change
-        # initial condition of ψ)
-        differentiated_prob.u0 .= 0.0
-        differentiated_prob.v0 .= 0.0
 
         Q = history[:,end,1,:]
         dQda = zeros(size(Q)...)
