@@ -21,7 +21,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
 
     forcing_ary = zeros(prob.real_system_size, 1+prob.nsteps, div(order, 2), size(prob.u0, 2))
 
-    diff_prob = differentiated_prob(prob)
+    grad_prob = differentiated_prob(prob)
 
 
     for control_param_index in 1:controls.N_coeff
@@ -51,7 +51,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
                     copyto!(u, history[1:prob.N_tot_levels    , 1+n, 1, initial_condition_index])
                     copyto!(v, history[1+prob.N_tot_levels:end, 1+n, 1, initial_condition_index])
 
-                    utvt!(ut, vt, u, v, diff_prob, diff_controls, t, pcof)
+                    utvt!(ut, vt, u, v, grad_prob, grad_controls, t, pcof)
 
                     copyto!(forcing_vec, 1,                   ut, 1, prob.N_tot_levels)
                     copyto!(forcing_vec, 1+prob.N_tot_levels, vt, 1, prob.N_tot_levels)
@@ -80,7 +80,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
                     u .= history[1:prob.N_tot_levels,     1+n, 1, initial_condition_index]
                     v .= history[1+prob.N_tot_levels:end, 1+n, 1, initial_condition_index]
 
-                    utvt!(ut, vt, u, v, diff_prob, diff_controls, t, pcof)
+                    utvt!(ut, vt, u, v, grad_prob, grad_controls, t, pcof)
 
                     forcing_vec2[1:prob.N_tot_levels]     .= ut
                     forcing_vec2[1+prob.N_tot_levels:end] .= vt
@@ -92,7 +92,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
 
                     utvt!(
                         ut, vt, u, v,
-                        diff_prob, grad_time_derivative_controls, t, pcof
+                        grad_prob, grad_time_derivative_controls, t, pcof
                     )
                     forcing_vec4[1:prob.N_tot_levels]     .+= ut
                     forcing_vec4[1+prob.N_tot_levels:end] .+= vt
@@ -105,7 +105,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
 
                     utvt!(
                         A, B, ut, vt,
-                        diff_prob, grad_controls, t, pcof
+                        grad_prob, grad_controls, t, pcof
                     )
 
                     forcing_vec4[1:prob.N_tot_levels]     .+= A
@@ -121,19 +121,19 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
         end
 
         # Evolve with forcing
-        timediff_prob = time_diff_prob(prob) 
         # Get history of dψ/dα
 
-        Q = history[:,end,1,:]
+        # Get history of state vector
+        derivative_index = 1 # Don't take derivative
+        Q = history[:, end, derivative_index, :]
         dQda = zeros(size(Q)...)
 
         for initial_condition_index = 1:size(prob.u0,2)
             vec_prob = VectorSchrodingerProb(prob, initial_condition_index)
-            # Set initial condition to zero for evolution of dψ/dα
-            vec_prob.u0 .= 0.0
-            vec_prob.v0 .= 0.0
+            timediff_vec_prob = time_diff_prob(vec_prob) 
+
             history_dQi_da = eval_forward_forced(
-                vec_prob, control, pcof, forcing_ary[:, :, :, initial_condition_index],
+                timediff_vec_prob, controls, pcof, forcing_ary[:, :, :, initial_condition_index],
                 order=order
             )
             dQda[:,initial_condition_index] .= history_dQi_da[:, end]
