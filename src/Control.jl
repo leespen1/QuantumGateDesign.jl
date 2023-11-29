@@ -79,8 +79,25 @@ function get_control_vector_slice(pcof::AbstractVector{Float64}, controls, contr
     return view(pcof, start_index:end_index)
 end
 
+"""
+For human readable display of control objects.
+"""
 function Base.show(io::IO, ::MIME"text/plain", control::AbstractControl)
     print(io, typeof(control), " with ", control.N_coeff, " control coefficients")
+end
+
+"""
+For iterating over a control. A control is length 1, so only the first
+iteration returns something, and that something is the control itself.
+
+Makes it so that functions expecting a vector of control objects will also work
+for a single control.
+"""
+function Base.iterate(control::AbstractControl, state=missing)
+    if ismissing(state)
+        return (control, nothing)
+    end
+    return nothing
 end
 
 """
@@ -147,6 +164,23 @@ end
 
 function eval_qt(grad_control::GradControl, t::Float64, pcof::AbstractVector{Float64})
     return eval_grad_qt(grad_control.original_control, t, pcof)[grad_control.grad_index]
+end
+
+
+struct TimeDerivativeControl{T} <: AbstractControl
+    original_control::T
+    N_coeff::Int64
+    function GradControl(original_control::T) where T <: AbstractControl
+        new{T}(original_control, original_control.N_coeff)
+    end
+end
+
+function eval_p(time_derivative_control::TimeDerivativeControl, t::Float64, pcof::AbstractVector{Float64})
+    return eval_pt(TimeDerivativeControl.original_control, t, pcof)
+end
+
+function eval_q(time_derivative_control::TimeDerivativeControl, t::Float64, pcof::AbstractVector{Float64})
+    return eval_qt(TimeDerivativeControl.original_control, t, pcof)
 end
 
 #=================================================
