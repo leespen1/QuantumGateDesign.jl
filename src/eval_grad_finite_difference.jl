@@ -13,9 +13,10 @@ function eval_grad_finite_difference(
         dpcof=1e-5; order=2, cost_type=:Infidelity,
     )
 
-    grad = zeros(length(pcof))
-    pcof_l = zeros(controls.N_coeff)
-    pcof_r = zeros(controls.N_coeff)
+    N_coeff = length(pcof)
+    grad = zeros(N_coeff)
+    pcof_l = zeros(N_coeff)
+    pcof_r = zeros(N_coeff)
 
     for i in 1:length(pcof)
         # Centered Difference Approximation
@@ -53,9 +54,10 @@ function eval_grad_finite_difference(
         cost_type=:Infidelity
     ) where {M<: AbstractMatrix{Float64}, V <: AbstractVector{Float64}}
 
-    grad = zeros(controls.N_coeff)
-    pcof_l = zeros(controls.N_coeff)
-    pcof_r = zeros(controls.N_coeff)
+    N_coeff = length(pcof)
+    grad = zeros(N_coeff)
+    pcof_l = zeros(N_coeff)
+    pcof_r = zeros(N_coeff)
 
     for i in 1:length(pcof)
         # Centered Difference Approximation
