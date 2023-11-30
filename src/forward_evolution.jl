@@ -371,6 +371,14 @@ end
 
 
 
+"""
+Forward evolution with forcing.
+
+Right now the forcing array format is tightly coupled to the form of Schrodinger's
+equation in the context of computing the gradient via the "forced" method. I
+should make it less tightly coupled in the future, for clarity.
+(so there wouldn't be a call to utvt! on the forcing array in this function)
+"""
 function eval_forward_forced_order4(
         prob::SchrodingerProb{M, V}, controls,  pcof::V, 
         forcing_ary::AbstractArray{Float64,3},
