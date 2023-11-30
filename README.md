@@ -4,7 +4,7 @@ Julia package for quantum optimal control using Hermite methods.
 Documentation located at: https://leespen1.github.io/HermiteOptimalControl.jl/dev/
 
 ## To Do
-- [ ] Update forced gradient method to work with new control scheme.
+- [X] Update forced gradient method to work with new control scheme.
 - [ ] Update tests
 - [ ] Incorporate guard level population penalty
 - [ ] Compare timing with QuTip
@@ -27,3 +27,8 @@ Documentation located at: https://leespen1.github.io/HermiteOptimalControl.jl/de
 - [ ] The RWA and lab frames are kind of different. In the lab frame there is
       just one function, not p and q. Should there be different control objects
       for lab frame (would be fairly easy to dispatch across two control types)?
+- [ ] Potential Performance Increase: https://docs.julialang.org/en/v1/stdlib/LinearAlgebra/#man-linalg
+      Can tag a matrix as symmetric or antisymmetric. This can potentially lead
+      to reduced operations. (but it looks like Symmetric(A) does a small memory
+      allocation of 32 bytes, so I should be careful of doing this inside an
+      inner loop).
