@@ -452,7 +452,7 @@ function eval_forward_forced_order4(
         # Don't forget to differentiate the forcing from the first derivative
         utvt!(
             ut, vt, 
-            forcing_ary[1:prob.N_tot_levels, 1+n+1, 1],
+            forcing_ary[1:prob.N_tot_levels,     1+n+1, 1],
             forcing_ary[1+prob.N_tot_levels:end, 1+n+1, 1],
             prob, controls, t, pcof
         )
