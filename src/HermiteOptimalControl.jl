@@ -34,26 +34,30 @@ export infidelity
 
 
 include("SchrodingerProb.jl")
-include("bsplines.jl")
-include("Control.jl")
-include("convergence_test.jl")
+
+
+include("Controls/Control.jl")
+include("Controls/bspline_backend.jl")
+include("Controls/bspline_control.jl")
+include("Controls/grape_control.jl")
+
+include("hermite.jl")
+
+include("forward_evolution.jl")
+
 include("infidelity.jl")
+
 include("eval_grad_discrete_adjoint.jl")
 include("eval_grad_finite_difference.jl")
 include("eval_grad_forced.jl")
-include("forward_evolution.jl")
-include("gradient_test.jl")
-include("hamiltonian_construction.jl")
-include("hermite.jl")
+
+
 include("ipopt_optimal_control.jl")
 include("OptimizationParameters.jl")
 include("state_vector_helpers.jl")
 
-#include("ExampleProblems/rabi_prob.jl")
-#include("ExampleProblems/gargamel_prob.jl")
-include("ExampleProblems/bspline_control.jl")
-include("ExampleProblems/sincos_control.jl")
-include("ExampleProblems/standard_prob.jl")
+include("ProblemConstructors/lowering_operators.jl")
+include("ProblemConstructors/rotating_frame_qubit.jl")
 
 include("../test/test_gradient.jl")
 include("../test/test_convergence.jl")

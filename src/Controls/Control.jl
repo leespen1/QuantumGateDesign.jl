@@ -132,11 +132,19 @@ function eval_grad_qt(control::AbstractControl, t::Float64, pcof::AbstractVector
 end
 
 
-#=================================================
+#===============================================================================
 # 
-# Forced Gradient Helper 
+# Helper types for use in forced gradient method.
+# Allows for creation of Controls based on existing controls, but with the time
+# derivative taken or a partial derivative taken with respect to one of the
+# control parameters. 
 #
-=================================================#
+# The latter method is currently inefficient, as for each partial derivative
+# the entire gradient is computed, but it is onle used in the forced gradient
+# computation. We only use that method for checking correctness of the discrete
+# adjoint, so it is not that important this method efficient (at the moment).
+#
+===============================================================================#
 
 """
 For use in forced gradient
@@ -183,62 +191,3 @@ function eval_q(time_derivative_control::TimeDerivativeControl, t::Float64, pcof
     return eval_qt(time_derivative_control.original_control, t, pcof)
 end
 
-#=================================================
-# 
-# Bspline/Bcarrier 
-#
-=================================================#
-struct BSplineControl <: AbstractControl
-    N_coeff::Int64
-    bcpar::bcparams
-end
-
-function bspline_control(T::Float64, D1::Int, omega::AbstractVector{Float64})
-    pcof = zeros(2*D1*length(omega)) # For now, only doing one coupled pair of control
-    omega_bcpar = [omega] # Need to wrap in another vector, since bcparams generally expects multiple controls (multiple frequencies != multiple controls)
-    bcpar = bcparams(T, D1, omega_bcpar, pcof)
-    return BSplineControl(bcpar.Ncoeff, bcpar)
-end
-
-
-function eval_p(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
-    return bcarrier2(t, control.bcpar, 0, pcof)
-end
-
-function eval_q(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
-    return bcarrier2(t, control.bcpar, 1, pcof)
-end
-
-function eval_pt(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
-    return bcarrier2_dt(t, control.bcpar, 0, pcof)
-end
-
-function eval_qt(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
-    return bcarrier2_dt(t, control.bcpar, 1, pcof)
-end
-
-function eval_grad_p(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
-    return gradbcarrier2(t, control.bcpar, 0)
-end
-
-function eval_grad_q(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
-    return gradbcarrier2(t, control.bcpar, 1)
-end
-
-function eval_grad_pt(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
-    return gradbcarrier2_dt(t, control.bcpar, 0)
-end
-
-function eval_grad_qt(control::BSplineControl, t::Float64, pcof::AbstractVector{Float64})
-    return gradbcarrier2_dt(t, control.bcpar, 1)
-end
-
-#==============================================================================
-# 
-# GRAPE-style Control: piecewise constant control 
-# (unlike GRAPE, number of parameters is independent of number of timesteps,
-# and we use our methods of time stepping and gradient calculation)
-#
-# May be a little tricky to handle discontinuities.
-#
-==============================================================================#
