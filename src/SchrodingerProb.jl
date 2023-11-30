@@ -39,15 +39,23 @@ mutable struct SchrodingerProb{M, VM}
         @assert size(u0) == size(v0)
         @assert size(u0,1) == size(v0,1) == N_tot_levels
         @assert length(sym_operators) == length(asym_operators)
+        N_operators = length(sym_operators)
+
+        real_system_size = 2*N_tot_levels
+
+        # Check size of operators and that complex hamiltonian is hermitian (sym and asym parts are sym and asym)
         @assert size(system_sym,1) == size(system_sym,2) == N_tot_levels
         @assert size(system_asym,1) == size(system_asym,2) == N_tot_levels
-        N_operators = length(sym_operators)
-        real_system_size = 2*N_tot_levels
+        @assert transpose(system_sym) == system_sym
+        @assert transpose(system_asym) == -system_asym
+
         for i in eachindex(sym_operators)
             sym_op = sym_operators[i]
             asym_op = asym_operators[i]
             @assert size(sym_op,1) == size(sym_op,2) == N_tot_levels
             @assert size(asym_op,1) == size(asym_op,2) == N_tot_levels
+            @assert transpose(sym_op) == sym_op
+            @assert transpose(asym_op) == -asym_op
         end
 
         # Copy arrays when creating a Schrodinger problem
