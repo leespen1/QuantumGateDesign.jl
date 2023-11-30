@@ -388,7 +388,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
 
             # ut and vt are not actuall holding ut and vt.
             utvt!(
-                ut, vt, u, v, 
+                ut, vt, asym_op_u, asym_op_v, 
                 prob.system_sym, prob.system_asym, sym_op, asym_op,
                 p_val, q_val
             )
@@ -405,7 +405,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             # Possibly these should be minuses. I think this is correct, but I
             # may have misfactored
             utvt!(
-                ut, vt, u, v, 
+                ut, vt, sym_op_v, sym_op_u, 
                 prob.system_sym, prob.system_asym, sym_op, asym_op,
                 p_val, q_val
             )
@@ -474,7 +474,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
 
             # ut and vt are not actuall holding ut and vt.
             utvt!(
-                ut, vt, u, v, 
+                ut, vt, asym_op_u, asym_op_v, 
                 prob.system_sym, prob.system_asym, sym_op, asym_op,
                 p_val, q_val
             )
@@ -491,7 +491,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             # Possibly these should be minuses. I think this is correct, but I
             # may have misfactored
             utvt!(
-                ut, vt, u, v, 
+                ut, vt, sym_op_v, sym_op_u, 
                 prob.system_sym, prob.system_asym, sym_op, asym_op,
                 p_val, q_val
             )
