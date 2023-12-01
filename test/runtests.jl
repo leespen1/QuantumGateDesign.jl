@@ -84,5 +84,12 @@ end # @testset "Checking Gradient Agreement Between Methods"
 # Should check that convergence of forward evolution is of the correct order.
 end
 
+@testset "Eval Forward Hard-Coded" begin
+end
 
+@testset "Eval Adjoint Hard-Coded" begin
+end
+
+@testset "Gradients Hard-Coded" begin
+end
 
