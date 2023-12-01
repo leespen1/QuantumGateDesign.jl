@@ -53,7 +53,6 @@ include("eval_grad_forced.jl")
 
 
 include("ipopt_optimal_control.jl")
-include("OptimizationParameters.jl")
 include("state_vector_helpers.jl")
 
 include("ProblemConstructors/lowering_operators.jl")
