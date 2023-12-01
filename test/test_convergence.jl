@@ -10,7 +10,7 @@ solutions, with the number of points in time compared taken to be the number
 of points in time when using the fewest steps / largest step size.
 """
 function plot_history_convergence(prob, control, pcof, N_iterations;
-        orders=[2, 4], nsteps_change_factor=2,
+        orders=(2, 4), nsteps_change_factor=2,
         return_data=false, duration_error=true
     )
     base_nsteps = prob.nsteps
