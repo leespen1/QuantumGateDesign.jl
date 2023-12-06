@@ -5,14 +5,15 @@
 =================================================#
 struct BSplineControl <: AbstractControl
     N_coeff::Int64
+    tf::Float64
     bcpar::bcparams
 end
 
-function bspline_control(T::Float64, D1::Int, omega::AbstractVector{Float64})
+function bspline_control(tf::Float64, D1::Int, omega::AbstractVector{Float64})
     pcof = zeros(2*D1*length(omega)) # For now, only doing one coupled pair of control
     omega_bcpar = [omega] # Need to wrap in another vector, since bcparams generally expects multiple controls (multiple frequencies != multiple controls)
-    bcpar = bcparams(T, D1, omega_bcpar, pcof)
-    return BSplineControl(bcpar.Ncoeff, bcpar)
+    bcpar = bcparams(tf, D1, omega_bcpar, pcof)
+    return BSplineControl(bcpar.Ncoeff, tf, bcpar)
 end
 
 
@@ -51,21 +52,22 @@ end
 
 #=================================================
 # 
-# Bspline/Bcarrier Autodiff Version (uses automatic differentiation for
-# all derivatives)
+# Bspline/Bcarrier Autodiff Version 
+# (uses automatic differentiation for all derivatives)
 #
 =================================================#
 
 struct BSplineControlAutodiff <: AbstractControl
     N_coeff::Int64
+    tf::Float64
     bcpar::bcparams
 end
 
-function bspline_control_autodiff(T::Float64, D1::Int, omega::AbstractVector{Float64})
+function bspline_control_autodiff(tf::Float64, D1::Int, omega::AbstractVector{Float64})
     pcof = zeros(2*D1*length(omega)) # For now, only doing one coupled pair of control
     omega_bcpar = [omega] # Need to wrap in another vector, since bcparams generally expects multiple controls (multiple frequencies != multiple controls)
-    bcpar = bcparams(T, D1, omega_bcpar, pcof)
-    return BSplineControlAutodiff(bcpar.Ncoeff, bcpar)
+    bcpar = bcparams(tf, D1, omega_bcpar, pcof)
+    return BSplineControlAutodiff(bcpar.Ncoeff, tf, bcpar)
 end
 
 

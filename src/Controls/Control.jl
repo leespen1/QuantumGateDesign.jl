@@ -12,6 +12,7 @@ Every concrete subtype must have the following methods defined:
 
 Every concrete subtype must have the following parameters
     N_coeff::Int
+    tf::Float64
 
 The following methods can also be defined, but have defaults implemented using
 automatic differentiation:
@@ -198,11 +199,12 @@ end
 For use in forced gradient
 """
 struct GradControl{T} <: AbstractControl
-    original_control::T
     N_coeff::Int64
+    tf::Float64
     grad_index::Int64
+    original_control::T
     function GradControl(original_control::T, grad_index::Int64) where T <: AbstractControl
-        new{T}(original_control, original_control.N_coeff, grad_index)
+        new{T}(original_control.N_coeff, original_control.tf, grad_index, original_control)
     end
 end
 
@@ -224,18 +226,19 @@ end
 
 
 struct TimeDerivativeControl{T} <: AbstractControl
-    original_control::T
     N_coeff::Int64
+    tf::Float64
+    original_control::T
     function TimeDerivativeControl(original_control::T) where T <: AbstractControl
-        new{T}(original_control, original_control.N_coeff)
+        new{T}(original_control.N_coeff, original_control.tf, original_control)
     end
 end
 
 function eval_p(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{Float64})
-    return eval_pt(time_derivative_control.original_control, t, pcof)
+    return eval_p_derivative(time_derivative_control.original_control, t, pcof, 1)
 end
 
 function eval_q(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{Float64})
-    return eval_qt(time_derivative_control.original_control, t, pcof)
+    return eval_q_derivative(time_derivative_control.original_control, t, pcof, 1)
 end
 

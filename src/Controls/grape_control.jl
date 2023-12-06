@@ -17,11 +17,11 @@ close. But this is something I should address later on
 """
 struct GRAPEControl <: AbstractControl
     N_coeff::Int64
-    N_amplitudes::Int64
     tf::Float64
+    N_amplitudes::Int64
     function GRAPEControl(N_amplitudes::Int64, tf::Float64)
         N_coeff = N_amplitudes * 2
-        new(N_coeff, N_amplitudes, tf)
+        new(N_coeff, tf, N_amplitudes)
     end
 end
 
