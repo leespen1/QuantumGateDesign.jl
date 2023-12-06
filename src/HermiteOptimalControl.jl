@@ -17,7 +17,10 @@ export optimize_gate
 # Export helper for functions for dealing state vectors and histories
 export get_populations, target_helper, plot_populations, real_to_complex, complex_to_real
 
-export Control, AbstractControl, BSplineControl
+# Export control types and constructors
+export AbstractControl, BSplineControl
+export bspline_control
+export eval_p, eval_q, eval_p_derivative, eval_q_derivative
 
 
 # Export example problems and problem construction helpers
