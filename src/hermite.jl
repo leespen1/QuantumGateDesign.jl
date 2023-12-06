@@ -196,6 +196,73 @@ function uttvtt_adj!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
 
 end
 
+
+"""
+Working on arbitrary order version of utvt!, uttvtt!, etc.
+
+uv_matrix's first column is u and v stacked. Second column is ut and vt stacked, etc.
+
+u and v should be given, and the derivatives are to be computed in place by
+this method.
+
+"""
+function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
+        prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{Float64},
+        derivative_order::Int64, use_adjoint::Bool=false)
+
+    if (derivative_order < 1)
+        throw(ArgumentError("Non positive derivative_order supplied."))
+    end
+
+    adjoint_factor = use_adjoint ? -1 : 1
+
+    ##############################
+    # Compute the first derivative
+    ##############################
+
+    for j = 0:derivative_order-1
+        # In (15), only i=j has the system operators present, others are only control operators
+        u_derivative = view(uv_matrix(1:prob.N_tot_levels,                       1+j+1))
+        v_derivative = view(uv_matrix(prob.N_tot_levels+1:prob.real_system_size, 1+j+1))
+
+        u_derivative_prev = view(uv_matrix(1:prob.N_tot_levels,                       1+j))
+        v_derivative_prev = view(uv_matrix(prob.N_tot_levels+1:prob.real_system_size, 1+j))
+
+        mul!(u_derivative, prob.system_asym, u_derivative_prev)
+        mul!(u_derivative, u_derivative, adjoint_factor) # Make negative if doing adjoint
+        mul!(u_derivative, prob.system_sym,  v_derivative_prev, adjoint_factor, 1)
+
+        mul!(v_derivative, prob.system_asym, v_derivative_prev)
+        mul!(v_derivative, u_derivative, adjoint_factor) # Make negative if doing adjoint
+        mul!(v_derivative, prob.system_sym,  u_derivative_prev, -adjoint_factor, 1)
+
+
+        # Perform the summation (the above is part of the i=j term in summation, this loop completes that term and the rest)
+        for i = j:-1:0
+            u_derivative_prev = view(uv_matrix(1:prob.N_tot_levels,                       1+i))
+            v_derivative_prev = view(uv_matrix(prob.N_tot_levels+1:prob.real_system_size, 1+i))
+
+            for i in 1:prob.N_operators
+                control = controls[i]
+                sym_op = prob.sym_operators[i]
+                asym_op = prob.asym_operators[i]
+                this_pcof = get_control_vector_slice(pcof, controls, i)
+
+                mul!(u_derivative, asym_op, u, adjoint_factor*eval_q_derivative(control, t, this_pcof, j-i), 1)
+                mul!(u_derivative, sym_op, v,  adjoint_factor*eval_p_derivative(control, t, this_pcof, j-1), 1)
+
+                mul!(v_derivative, asym_op, v, adjoint_factor*eval_q_derivative(control, t, this_pcof, j-1), 1)
+                mul!(v_derivative, sym_op,  u, -adjoint_factor*eval_p_derivative(control, t, this_pcof, j-1), 1)
+            end
+        end
+
+        mul!(u_derivative, u_derivative, 1/(j+1))
+        mul!(v_derivative, v_derivative, 1/(j+1))
+    end
+    
+    return nothing
+end
+
 function LHS_func!(LHS_uv::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
