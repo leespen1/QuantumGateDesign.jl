@@ -256,7 +256,7 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
         forcing_matrix::Union{AbstractMatrix{Float64}, Missing}=missing
     )
 
-    if (N_derivatives< 1)
+    if (N_derivatives < 1)
         throw(ArgumentError("Non positive N_derivatives supplied."))
     end
 
