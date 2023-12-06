@@ -137,7 +137,7 @@ function binomial!(coeffs,m)
     end
 end
 
-function extrapolate!(p,z,q)
+function extrapolate!(p,z,q,ploc)
     #=
     !
     ! recenters a polynomial from 0 to z
@@ -149,7 +149,6 @@ function extrapolate!(p,z,q)
     INTEGER :: j,k
     !
     =#
-    ploc = zeros(q+1)
     ploc[1+0] = p[1+q]
     for j=q-1:-1:0
         for k=q-j:-1:1

@@ -27,7 +27,8 @@ using LinearMaps
 using IterativeSolvers
 using Plots
 using DifferentialEquations
-
+using TimerOutputs
+using LinearAlgebra
 
 include("hermite_map.jl")
 
@@ -44,26 +45,41 @@ end
 
 function w_to_F(w,H0,P,Q,p_tay,q_tay,m)
     W = zeros(length(w),m+1)
-    W[:,1+0] .= w
+    view(W,:,1+0,) .= w
+    wjp = zeros(size(w))
     for j = 0:m-1
-        wjp = zeros(size(w))
+        wjp .= 0.0
         for i = 0:j
-            wjp .+= p_tay[1+j-i].*P*W[:,1+i]
-            wjp .+= q_tay[1+j-i].*Q*W[:,1+i]
+            wjp .+= p_tay[1+j-i].*P*view(W,:,1+i)
+            wjp .+= q_tay[1+j-i].*Q*view(W,:,1+i)
         end
-        W[:,2+j] .= 1/(1+j).*(H0*W[:,1+j] .+ wjp)
+        view(W,:,2+j) .= 1/(1+j).*(H0*view(W,:,1+j) .+ wjp)
     end
     return W[:,2:m+1],W
 end
 
-function compute_b(w,F,c,dt,m)
-    b = c[1]*w
-    dft = dt;
+function w_to_F!(F,W,w,H0,P,Q,p_tay,q_tay,m,wjp)
+    view(W,:,1+0,) .= w
+    for j = 0:m-1
+        wjp .= 0.0
+        for i = 0:j
+            mul!(wjp,P,view(W,:,1+i),p_tay[1+j-i],1.0)
+            mul!(wjp,Q,view(W,:,1+i),q_tay[1+j-i],1.0)
+        end
+        mul!(wjp,H0,view(W,:,1+j),1.0/(1+j),1.0/(1+j))
+        view(W,:,2+j) .= wjp 
+    end
+    F .= view(W,:,2:m+1)
+end
+
+
+function compute_b!(b,w,F,c,dt,m)
+    b .= c[1].*w
+    dft = dt
     for j = 1:m
-        b .= b .+ dft*F[:,j]*c[1+j]
+        b .= b .+ (dft*c[1+j]).*view(F,:,j)
         dft = dft*dt
     end
-    return b
 end
 
 function Aw(w,H0,P,Q,p_tay,q_tay,m,c,dt)
@@ -72,20 +88,41 @@ function Aw(w,H0,P,Q,p_tay,q_tay,m,c,dt)
     df = -1.0
     dft = dt
     for j = 1:m
-        F1sum .= F1sum .+ dft*df*F[:,j]*c[1+j]
+        F1sum .= F1sum .+ (dft*df*c[1+j]).*view(F,:,j)
         df *= -1.0
         dft = dft*dt
     end
-    return w .+ F1sum
+    F1sum .+= w
+    return F1sum
 end
 
 
-function main(nt,nt_ctrl,m ; d=3, N_guard=1)
 
+function Aw(w,H0,P,Q,p_tay,q_tay,m,c,dt,F,W,F1sum)
+    w_to_F!(F,W,w,H0,P,Q,p_tay,q_tay,m,F1sum)
+    #F, = w_to_F(w,H0,P,Q,p_tay,q_tay,m)
+    #F1sum = zeros(length(w))
+    df = -1.0
+    dft = dt
+    F1sum .= 0.0
+    for j = 1:m
+        F1sum .= F1sum .+ (dft*df*c[1+j]).*view(F,:,j)
+        df *= -1.0
+        dft = dft*dt
+    end
+    F1sum .+= w
+    return F1sum
+end
+
+
+
+
+function HIT_solve(nt,nt_ctrl,m ; d=3, N_guard=1)
+    to = TimerOutput()
+    
     N_ess_levels = d+1
     tf = 2.0*pi
     nsteps = nt
-
     # Frequencies in GHz, *not angular*
     detuning_frequency = 0.0
     self_kerr_coefficient =  0.22
@@ -111,14 +148,6 @@ function main(nt,nt_ctrl,m ; d=3, N_guard=1)
     kk = 1
     w0 = zeros(n_w)
     w0[kk] = 1.0
-    
-
-    f(w, p, t) = H0*w .+ sin(t).*(P*w) .+ cos(t).*(Q*w)
-    tspan = (0.0, tend)
-    prob_DEQ = ODEProblem(f, w0, tspan)
-    sol = solve(prob_DEQ,Tsit5(), reltol = 1e-14, abstol = 1e-14)
-    pl0 = plot(sol)
-    
     c = zeros(m+1)
     for j = 0:m
         c[1+j] = (factorial(m)*factorial(2*m-j))/(factorial(2*m)*factorial(m-j))
@@ -130,9 +159,6 @@ function main(nt,nt_ctrl,m ; d=3, N_guard=1)
     # scaled with dt_ctrl^k/k! just as in Chides
     P_tay = zeros(m+1,nt_ctrl+1)
     Q_tay = zeros(m+1,nt_ctrl+1)
-
-    #P_tay = randn(Float64,(m+1,nt_ctrl+1))
-    #Q_tay = randn(Float64,(m+1,nt_ctrl+1))
 
     # we consider the taylor expansion of the functions
     # p(t) = sin(t)
@@ -210,31 +236,60 @@ function main(nt,nt_ctrl,m ; d=3, N_guard=1)
 
     F0,Wtay = w_to_F(w0,H0,P,Q,p_tay,q_tay,m)
     W[:,:,1] .= Wtay
-    b = compute_b(w0,F0,c,dt,m)
+    b = zeros(n_w)
+    compute_b!(b,w0,F0,c,dt,m)
 
-    Awcb(z) = Aw(z,H0,P,Q,p_tay,q_tay,m,c,dt)
+    uint = zeros(2*m+2)
+    ploc = zeros(q+1)
+    F0 = zeros(n_w,m)
+    Wtay = zeros(n_w,m+1)
+    w_work = zeros(n_w)
+    F_work = zeros(n_w,m)
+    W_tay_work = zeros(n_w,m+1)
+
+    #Awcb(z) = Aw(z,H0,P,Q,p_tay,q_tay,m,c,dt)
+    Awcb(z) = Aw(z,H0,P,Q,p_tay,q_tay,m,c,dt,F_work,W_tay_work,w_work)
     HM_MAT = LinearMap(Awcb,length(w0))
-    
+
     for it = 1:nt
         t = it*dt
-        ucof[1:m+1]     = Q_tay[:,idx_ctrl[1+it]]
-        ucof[m+2:2*m+2] = Q_tay[:,idx_ctrl[1+it]+1]
-        uint = Hmat*ucof
-        extrapolate!(uint,tloc_ctrl[1+it],q)
-        q_tay .= ctrl_scl.*uint[1:m+1]
-        ucof[1:m+1]     = P_tay[:,idx_ctrl[1+it]]
-        ucof[m+2:2*m+2] = P_tay[:,idx_ctrl[1+it]+1]
-        uint = Hmat*ucof
-        extrapolate!(uint,tloc_ctrl[1+it],q)
-
-        p_tay .= ctrl_scl.*uint[1:m+1]
-        w1,history = gmres(HM_MAT,b,reltol=1e-12,log=true)
+        @timeit to "assign ucof"    view(ucof,1:m+1) .= view(Q_tay,:,idx_ctrl[1+it])
+        @timeit to "assign ucof"    view(ucof,m+2:2*m+2) .= view(Q_tay,:,idx_ctrl[1+it]+1)
+        @timeit to "interpolate ctrl" mul!(uint,Hmat,ucof)
+        @timeit to "extrapolate"    extrapolate!(uint,tloc_ctrl[1+it],q,ploc)
+        @timeit to "scale ctrl" q_tay .= ctrl_scl.*view(uint,1:m+1)
+        @timeit to "assign ucof"    view(ucof,1:m+1) .= view(P_tay,:,idx_ctrl[1+it])
+        @timeit to "assign ucof"    view(ucof,m+2:2*m+2) .= view(P_tay,:,idx_ctrl[1+it]+1)
+        @timeit to "interpolate ctrl" mul!(uint,Hmat,ucof)
+        @timeit to "extrapolate"    extrapolate!(uint,tloc_ctrl[1+it],q,ploc)
+        @timeit to "scale ctrl"  p_tay .= ctrl_scl.*view(uint,1:m+1)
+        @timeit to "GMRES" w1,history = gmres(HM_MAT,b,reltol=1e-12,log=true)
         # Shuffle timesteps and compute stuff neded in the linear system
         w0 = w1
-        F0,Wtay = w_to_F(w0,H0,P,Q,p_tay,q_tay,m)
+        # @timeit to "F0"  F0,Wtay = w_to_F(w0,H0,P,Q,p_tay,q_tay,m)
+        @timeit to "F0"  w_to_F!(F0,Wtay,w0,H0,P,Q,p_tay,q_tay,m,w_work)
         W[:,:,1+it] .= Wtay
-        b = compute_b(w0,F0,c,dt,m)
+        @timeit to "b" compute_b!(b,w0,F0,c,dt,m)
     end
+    show(to)
+    println("\n")
+    return T,W,H0,Q,P,w0,tend
+end
+
+function get_err(nt,nt_ctrl,m)
+
+    T,W,H0,Q,P,w0,tend = HIT_solve(nt,nt_ctrl,m)
+
+    # Compare with DifferentialEquations.jl
+    f(w, p, t) = H0*w .+ sin(t).*(P*w) .+ cos(t).*(Q*w)
+    tspan = (0.0, tend)
+    w0 .= 0.0
+    w0[1] = 1.0
+    prob_DEQ = ODEProblem(f, w0, tspan)
+    sol = solve(prob_DEQ,Tsit5(), reltol = 1e-14, abstol = 1e-14)
+
+
+    dt = tend / nt
 
     scale = zeros(Float64,2*(m+1),2*(m+1))
     df = 1.0
@@ -244,50 +299,45 @@ function main(nt,nt_ctrl,m ; d=3, N_guard=1)
     end
 
     neval = 101
-    pl = plot(T,0.0 .* sqrt.(W[1,1,:].^2+W[6,1,:].^2),lw=2,marker=:star,label=:none)
-    
-
     z = collect(LinRange(-0.5,0.5,neval))
-    for j = 1:prob.N_tot_levels
+    if true
+        pl = plot(sol,lw=2,color=:yellow,label = :none)        
+        Hmat = zeros(2*m+2,2*m+2)
+        Hermite_map!(Hmat,m,0.0,1.0,0.5,0)
+        ucof = zeros(2*m+2)
+        for j = 1:5
+            for i = 1:nt
+                ifield = j
+                ucof[1:m+1] = scale[1:m+1,1:m+1]*W[ifield,:,i]
+                ucof[m+2:2*m+2] = scale[1:m+1,1:m+1]*W[ifield,:,i+1]
+                uint = Hmat*ucof
+                uplot = evalhinterp(z,uint)
+                ifield = j+5
+                ucof[1:m+1] = scale[1:m+1,1:m+1]*W[ifield,:,i]
+                ucof[m+2:2*m+2] = scale[1:m+1,1:m+1]*W[ifield,:,i+1]
+                uint = Hmat*ucof
+                vplot = evalhinterp(z,uint)
+                plot!(pl,T[i] .+ dt*(0.5 .+ z),uplot,color=:black,lw=1,label = :none)
+                plot!(pl,T[i] .+ dt*(0.5 .+ z),vplot,color=:black,lw=1,label = :none)
+            end
+        end
+    end
+
+    if false
+        pl1 = plot(sol.t,sol[1,:],color=:red,lw=2,label = :none)
+        j = 1
         for i = 1:nt
             ifield = j
             ucof[1:m+1] = scale[1:m+1,1:m+1]*W[ifield,:,i]
             ucof[m+2:2*m+2] = scale[1:m+1,1:m+1]*W[ifield,:,i+1]
             uint = Hmat*ucof
             uplot = evalhinterp(z,uint)
-            ifield = j+prob.N_tot_levels
-            ucof[1:m+1] = scale[1:m+1,1:m+1]*W[ifield,:,i]
-            ucof[m+2:2*m+2] = scale[1:m+1,1:m+1]*W[ifield,:,i+1]
-            uint = Hmat*ucof
-            vplot = evalhinterp(z,uint)
-            #plot!(pl,T[i] .+ dt*(0.5 .+ z),sqrt.(uplot.^2 .+ vplot.^2),color=:black,lw=1,label = :none)
-            plot!(pl,T[i] .+ dt*(0.5 .+ z),uplot,color=:black,lw=1,label = :none)
-            plot!(pl,T[i] .+ dt*(0.5 .+ z),vplot,color=:red,lw=1,label = :none)
+            plot!(pl1,T[i] .+ dt*(0.5 .+ z),uplot,color=:black,lw=1,label = :none)
         end
     end
-
-
-    pl1 = plot(sol.t,sol[1,:],color=:red,lw=2,label = :none)
-    j = 1
-    for i = 1:nt
-        ifield = j
-        ucof[1:m+1] = scale[1:m+1,1:m+1]*W[ifield,:,i]
-        ucof[m+2:2*m+2] = scale[1:m+1,1:m+1]*W[ifield,:,i+1]
-        uint = Hmat*ucof
-        uplot = evalhinterp(z,uint)
-        plot!(pl1,T[i] .+ dt*(0.5 .+ z),uplot,color=:black,lw=1,label = :none)
-    end
     maxerr = maximum(abs.(sol[:,end] .- W[:,1,end]))
-    return T,W,sol,pl,pl0,pl1,maxerr
-end
-
-function get_err(nt,nt_ctrl,m)
-    #nt = 50
-    #nt_ctrl = 2
-    #m = 1
-    T,W,sol,pl,pl0,pl1,maxerr = main(nt,nt_ctrl,m)
-    #pl = main()
-    display(pl1)
-    println("Maximum error is: ",maxerr)
+    display(maxerr)
+    display(pl)
     return nothing
 end
+
