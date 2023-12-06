@@ -256,8 +256,8 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
                 asym_op = prob.asym_operators[k]
                 this_pcof = get_control_vector_slice(pcof, controls, k)
 
-                p_val = eval_p_derivative(control, t, this_pcof, j-i)
-                q_val = eval_q_derivative(control, t, this_pcof, j-i)
+                p_val = eval_p_derivative(control, t, this_pcof, j-i) / factorial(j-i)
+                q_val = eval_q_derivative(control, t, this_pcof, j-i) / factorial(j-i)
 
                 mul!(u_derivative, asym_op, u_derivative_prev, adjoint_factor*q_val, 1)
                 mul!(u_derivative, sym_op,  v_derivative_prev, adjoint_factor*p_val, 1)
