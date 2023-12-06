@@ -208,7 +208,9 @@ this method.
 """
 function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
         prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{Float64},
-        N_derivatives::Int64, use_adjoint::Bool=false)
+        N_derivatives::Int64, use_adjoint::Bool=false,
+        forcing_matrix::Union{AbstractMatrix{Float64}, Missing}=missing
+    )
 
     if (N_derivatives< 1)
         throw(ArgumentError("Non positive N_derivatives supplied."))
@@ -216,27 +218,30 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
 
     adjoint_factor = use_adjoint ? -1 : 1
 
-    ##############################
-    # Compute the first derivative
-    ##############################
-
     for j = 0:(N_derivatives-1)
-        # In (15), only i=j has the system operators present, others are only control operators
         # Get views of the current derivative we are trying to compute (the j+1th derivative)
         u_derivative = view(uv_matrix, 1:prob.N_tot_levels,                       1+j+1)
         v_derivative = view(uv_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+j+1)
 
+        u_derivative .= 0
+        v_derivative .= 0
+
+        # Get views of one of the previous derivatives (at first, the derivative just before the current one)
         u_derivative_prev = view(uv_matrix, 1:prob.N_tot_levels,                       1+j)
         v_derivative_prev = view(uv_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+j)
 
-
-        mul!(u_derivative, prob.system_asym, u_derivative_prev)
-        mul!(u_derivative, u_derivative, adjoint_factor) # Make negative if doing adjoint
+        # In (15), only i=j has the system operators present, others are only
+        # control operators. So system operators are handled outside the loop.
+        mul!(u_derivative, prob.system_asym, u_derivative_prev, adjoint_factor, 1)
         mul!(u_derivative, prob.system_sym,  v_derivative_prev, adjoint_factor, 1)
 
-        mul!(v_derivative, prob.system_asym, v_derivative_prev)
-        mul!(v_derivative, v_derivative, adjoint_factor) # Make negative if doing adjoint
+        mul!(v_derivative, prob.system_asym, v_derivative_prev, adjoint_factor, 1)
         mul!(v_derivative, prob.system_sym,  u_derivative_prev, -adjoint_factor, 1)
+
+        # I believe checking like this means that if-block will be compiled out when no forcing matrix is given
+        if !ismissing(forcing_matrix)
+            uv_matrix[:, 1+j+1] .+= view(forcing_matrix, 1:prob.real_system_size, 1+j)
+        end
 
 
         # Perform the summation (the above is part of the i=j term in summation, this loop completes that term and the rest)

@@ -490,24 +490,31 @@ history (without derivatives) gets the same results as the generated history.
 """
 function eval_forward_arbitrary_order(
         prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{Float64}; order=2
+        pcof::AbstractVector{Float64}; order::Int=2,
+        forcing::Union{AbstractArray{Float64, 3}, Missing}=missing
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     
     t::Float64 = 0.0
     dt = prob.tf/prob.nsteps
 
-    N_derivatives = div(order, 2)
-    uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
 
+    N_derivatives = div(order, 2)
+
+    uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
     uv_mat[1:prob.N_tot_levels,                       1] .= prob.u0
     uv_mat[prob.N_tot_levels+1:prob.real_system_size, 1] .= prob.v0
-
 
     uv_history = Array{Float64, 3}(undef, prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
     uv_history[:, :, 1] .= uv_mat
 
     uv_vec = zeros(prob.real_system_size)
     RHS::Vector{Float64} = zeros(prob.real_system_size)
+
+    if ismissing(forcing)
+        forcing_mat = missing
+    else
+        forcing_mat = zeros(prob.real_system_size, N_derivatives)
+    end
 
     # This probably creates type-instability, as functions have singleton types, 
     # and this function is (I'm pretty sure) not created until runtime
@@ -525,22 +532,32 @@ function eval_forward_arbitrary_order(
         ismutating=true
     )
 
-
     # Order 2
     for n in 0:prob.nsteps-1
+
         t = n*dt
+        if !ismissing(forcing_mat)
+            forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n)
+        end
 
         arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives)
         uv_history[:, :, 1+n] .= uv_mat
         arbitrary_RHS!(RHS, uv_mat, dt, N_derivatives)
 
         t = (n+1)*dt
+        if !ismissing(forcing_mat)
+            forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n+1)
+        end
 
         uv_vec .= view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
         IterativeSolvers.gmres!(uv_vec, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
         uv_mat[:,1] .= uv_vec
     end
 
+    t = prob.nsteps*dt
+    if !ismissing(forcing_mat)
+        forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+prob.nsteps)
+    end
     arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives)
     uv_history[:, :, 1+prob.nsteps] .= uv_mat
 
