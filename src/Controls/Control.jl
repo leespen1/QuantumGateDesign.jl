@@ -7,8 +7,8 @@
 Abstract supertype for all controls.
 
 Every concrete subtype must have the following methods defined:
-    eval_p(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
-    eval_q(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+    eval_p(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
+    eval_q(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
 
 Every concrete subtype must have the following parameters
     N_coeff::Int
@@ -107,30 +107,75 @@ pcof in the Control object. Then I could have a method eval_p(control, t) which
 uses the pcof in the object, and eval_p(control, t, pcof) would mutate the pcof
 in the control object.
 """
-function eval_pt(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
-    return ForwardDiff.derivative(t_dummy -> eval_p(t_dummy, pcof), t)
+function eval_pt(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
+    return ForwardDiff.derivative(t_dummy -> eval_p(control, t_dummy, pcof), t)
 end
 
-function eval_qt(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
-    return ForwardDiff.derivative(t_dummy -> eval_q(t_dummy, pcof), t)
+function eval_qt(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
+    return ForwardDiff.derivative(t_dummy -> eval_q(control, t_dummy, pcof), t)
 end
 
-function eval_grad_p(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+function eval_grad_p(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
     return ForwardDiff.gradient(pcof_dummy -> eval_p(control, t, pcof_dummy), pcof)
 end
 
-function eval_grad_q(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+function eval_grad_q(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
     return ForwardDiff.gradient(pcof_dummy -> eval_q(control, t, pcof_dummy), pcof)
 end
 
-function eval_grad_pt(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+function eval_grad_pt(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
     return ForwardDiff.gradient(pcof_dummy -> eval_pt(control, t, pcof_dummy), pcof)
 end
 
-function eval_grad_qt(control::AbstractControl, t::Float64, pcof::AbstractVector{Float64})
+function eval_grad_qt(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
     return ForwardDiff.gradient(pcof_dummy -> eval_qt(control, t, pcof_dummy), pcof)
 end
 
+"""
+Arbitrary order version, only ever uses automatic differentiation to get high
+order derivatives.
+
+For hermite-interpolant-envolpe, would override this with a lookup-table, which
+throws an error when trying to do a higher order than that of the interpolant 
+(or just return 0, I suppose would be more accurate).
+"""
+function eval_p_derivative(control::AbstractControl, t::Real,
+        pcof::AbstractVector{Float64},  order::Int64)
+
+    p_val::Float64 = 0.0
+    if (order == 0) 
+        p_val = eval_p(control, t, pcof)
+    elseif (order > 0)
+        # This will work recursively until we get to order 0 (no derivative, where the function is implemented explicitly )
+        # Not sure if the lambda functions will hurt performance significantly
+        p_val = ForwardDiff.derivative(t_dummy -> eval_p_derivative(control, t_dummy, pcof, order-1), t)
+    else
+        throw(ArgumentError("Negative derivative order supplied."))
+    end
+
+    return p_val
+end
+
+"""
+Arbitrary order version, only ever uses automatic differentiation to get high
+order derivatives.
+"""
+function eval_q_derivative(control::AbstractControl, t::Real,
+        pcof::AbstractVector{Float64},  order::Int64)
+
+    p_val::Float64 = 0.0
+    if (order == 0) 
+        q_val = eval_q(control, t, pcof)
+    elseif (order > 0)
+        # This will work recursively until we get to order 0 (no derivative, where the function is implemented explicitly )
+        # Not sure if the lambda functions will hurt performance significantly
+        q_val = ForwardDiff.derivative(t_dummy -> eval_q_derivative(control, t_dummy, pcof, order-1), t)
+    else
+        throw(ArgumentError("Negative derivative order supplied."))
+    end
+
+    return q_val
+end
 
 #===============================================================================
 # 
@@ -158,19 +203,19 @@ struct GradControl{T} <: AbstractControl
     end
 end
 
-function eval_p(grad_control::GradControl, t::Float64, pcof::AbstractVector{Float64})
+function eval_p(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64})
     return eval_grad_p(grad_control.original_control, t, pcof)[grad_control.grad_index]
 end
 
-function eval_pt(grad_control::GradControl, t::Float64, pcof::AbstractVector{Float64})
+function eval_pt(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64})
     return eval_grad_pt(grad_control.original_control, t, pcof)[grad_control.grad_index]
 end
 
-function eval_q(grad_control::GradControl, t::Float64, pcof::AbstractVector{Float64})
+function eval_q(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64})
     return eval_grad_q(grad_control.original_control, t, pcof)[grad_control.grad_index]
 end
 
-function eval_qt(grad_control::GradControl, t::Float64, pcof::AbstractVector{Float64})
+function eval_qt(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64})
     return eval_grad_qt(grad_control.original_control, t, pcof)[grad_control.grad_index]
 end
 
@@ -183,11 +228,11 @@ struct TimeDerivativeControl{T} <: AbstractControl
     end
 end
 
-function eval_p(time_derivative_control::TimeDerivativeControl, t::Float64, pcof::AbstractVector{Float64})
+function eval_p(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{Float64})
     return eval_pt(time_derivative_control.original_control, t, pcof)
 end
 
-function eval_q(time_derivative_control::TimeDerivativeControl, t::Float64, pcof::AbstractVector{Float64})
+function eval_q(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{Float64})
     return eval_qt(time_derivative_control.original_control, t, pcof)
 end
 

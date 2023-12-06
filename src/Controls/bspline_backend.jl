@@ -38,11 +38,11 @@ end
 Evaluate a B-spline function. See also the `splineparams` constructor.
 
 # Arguments
-- `t::Float64`: Evaluate spline at parameter t ∈ [0, param.T]
+- `t::Real`: Evaluate spline at parameter t ∈ [0, param.T]
 - `param::splineparams`: Parameters for the spline
 - `splinefunc::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function bspline2(t::Float64, param::splineparams, splinefunc::Int64)
+@inline function bspline2(t::Real, param::splineparams, splinefunc::Int64)
   f = 0.0
 
   dtknot = param.dtknot
@@ -79,11 +79,11 @@ coupled controls, mod(`splinefunc`,2)=0 corresponds to ∇ p_j(t) and mod(`splin
 corresponds to ∇ q_j(t), where j = div(splinefunc,2).
 
 # Arguments
-- `t::Float64`: Evaluate spline at parameter t ∈ [0, param.T]
+- `t::Real`: Evaluate spline at parameter t ∈ [0, param.T]
 - `param::splineparams`: Spline parameter object
 - `splinefunc::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function gradbspline2(t::Float64,param::splineparams, splinefunc::Int64)
+@inline function gradbspline2(t::Real,param::splineparams, splinefunc::Int64)
 
 # NOTE: param.Nseg used to be '2'
   g = zeros(param.Nseg*param.D1) # real and imag parts for both f and g 
@@ -250,11 +250,11 @@ function bcparams(T::Float64, D1::Int64, omega::Vector{Vector{Float64}}, pcof::V
 Evaluate a B-spline function with carrier waves. See also the `bcparams` constructor.
 
 # Arguments
-- `t::Float64`: Evaluate spline at parameter t ∈ [0, param.T]
+- `t::Real`: Evaluate spline at parameter t ∈ [0, param.T]
 - `param::params`: Parameters for the spline
 - `func::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function bcarrier2(t::Float64, bcpar::bcparams, func::Int64)
+@inline function bcarrier2(t::Real, bcpar::bcparams, func::Int64)
     # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
     # in general, 0 <= func < 2*(Ncoupled + Nunc)
 
@@ -358,7 +358,7 @@ end
 """
 Wrapper for non-mutating version.
 """
-function gradbcarrier2(t::Float64, bcpar::bcparams, func::Int64)
+function gradbcarrier2(t::Real, bcpar::bcparams, func::Int64)
     gradient = Vector{Float64}(undef, bcpar.Ncoeff)
     gradbcarrier2!(t, bcpar, func, gradient)
     return gradient
@@ -373,12 +373,12 @@ coupled controls, mod(`func`,2)=0 corresponds to ∇ p_j(t) and mod(`func`,2) = 
 corresponds to ∇ q_j(t), where j = div(func,2).
 
 # Arguments
-- `t::Float64`: Evaluate spline at parameter t ∈ [0, param.T]
+- `t::Real`: Evaluate spline at parameter t ∈ [0, param.T]
 - `bcpar::bcparams`: Parameters for the spline
 - `func::Int64`: Control function index ∈ [0, param.Nseg-1]
 - `g::Array{Float64,1}`: Preallocated array to store calculated gradient
 """
-function gradbcarrier2!(t::Float64, bcpar::bcparams, func::Int64, g::Array{Float64,1})
+function gradbcarrier2!(t::Real, bcpar::bcparams, func::Int64, g::Array{Float64,1})
 
     # compute basic offset: func 0 and 1 use the same spline coefficients, but combined in a different way
     osc = div(func, 2)
@@ -485,7 +485,7 @@ function gradbcarrier2!(t::Float64, bcpar::bcparams, func::Int64, g::Array{Float
 Evaluate a B-spline function with carrier waves. See also the `bcparams` constructor.
 
 # Arguments
-- `t::Float64`: Evaluate spline at parameter t ∈ [0, param.T]
+- `t::Real`: Evaluate spline at parameter t ∈ [0, param.T]
 - `param::params`: Parameters for the spline
 - `func::Int64`: Spline function index ∈ [0, param.Nseg-1]
 
@@ -493,7 +493,7 @@ Evaluate a B-spline function with carrier waves. See also the `bcparams` constru
 SPENCER: To get cross derivative (d2/dtda, just remove the pcofs in the below,
 since the controls are linear in them)
 """
-@inline function bcarrier2_dt(t::Float64, bcpar::bcparams, func::Int64)
+@inline function bcarrier2_dt(t::Real, bcpar::bcparams, func::Int64)
     # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
     # in general, 0 <= func < 2*(Ncoupled + Nunc)
 
@@ -628,13 +628,13 @@ end
 """
 Wrapper for non-mutating version.
 """
-function gradbcarrier2_dt(t::Float64, bcpar::bcparams, func::Int64)
+function gradbcarrier2_dt(t::Real, bcpar::bcparams, func::Int64)
     gradient = Vector{Float64}(undef, bcpar.Ncoeff)
     gradbcarrier2_dt!(t, bcpar, func, gradient)
     return gradient
 end
 
-function gradbcarrier2_dt!(t::Float64, bcpar::bcparams, func::Int64, g::Array{Float64,1})
+function gradbcarrier2_dt!(t::Real, bcpar::bcparams, func::Int64, g::Array{Float64,1})
 
     # compute basic offset: func 0 and 1 use the same spline coefficients, but combined in a different way
     osc = div(func, 2)
@@ -776,11 +776,11 @@ function gradbcarrier2_dt!(t::Float64, bcpar::bcparams, func::Int64, g::Array{Fl
 Evaluate a B-spline function with carrier waves. See also the `bcparams` constructor.
 
 # Arguments
-- `t::Float64`: Evaluate spline at parameter t ∈ [0, param.T]
+- `t::Real`: Evaluate spline at parameter t ∈ [0, param.T]
 - `param::params`: Parameters for the spline
 - `func::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function bcarrier2(t::Float64, bcpar::bcparams, func::Int64, pcof::AbstractVector{Float64})
+@inline function bcarrier2(t::Real, bcpar::bcparams, func::Int64, pcof::AbstractVector{Float64})
     # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
     # in general, 0 <= func < 2*(Ncoupled + Nunc)
 
@@ -851,7 +851,7 @@ end
 Evaluate a B-spline function with carrier waves. See also the `bcparams` constructor.
 
 # Arguments
-- `t::Float64`: Evaluate spline at parameter t ∈ [0, param.T]
+- `t::Real`: Evaluate spline at parameter t ∈ [0, param.T]
 - `param::params`: Parameters for the spline
 - `func::Int64`: Spline function index ∈ [0, param.Nseg-1]
 
@@ -859,7 +859,7 @@ Evaluate a B-spline function with carrier waves. See also the `bcparams` constru
 SPENCER: To get cross derivative (d2/dtda, just remove the pcofs in the below,
 since the controls are linear in them)
 """
-@inline function bcarrier2_dt(t::Float64, bcpar::bcparams, func::Int64, pcof::AbstractVector{Float64})
+@inline function bcarrier2_dt(t::Real, bcpar::bcparams, func::Int64, pcof::AbstractVector{Float64})
     # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
     # in general, 0 <= func < 2*(Ncoupled + Nunc)
 
