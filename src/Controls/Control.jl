@@ -166,7 +166,7 @@ order derivatives.
 function eval_q_derivative(control::AbstractControl, t::Real,
         pcof::AbstractVector{Float64},  order::Int64)
 
-    p_val = 0.0
+    q_val = 0.0
     if (order == 0) 
         q_val = eval_q(control, t, pcof)
     elseif (order > 0)
