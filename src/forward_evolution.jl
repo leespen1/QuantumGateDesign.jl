@@ -536,8 +536,9 @@ function eval_forward_arbitrary_order(
 
         t = (n+1)*dt
 
-        uv_vec .= uv_mat[:,1] # Use current timestep as initial guess for gmres
+        uv_vec .= view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
         IterativeSolvers.gmres!(uv_vec, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+        uv_mat[:,1] .= uv_vec
     end
 
     arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives)
