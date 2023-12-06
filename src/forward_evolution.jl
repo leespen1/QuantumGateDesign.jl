@@ -481,7 +481,49 @@ function eval_forward_forced_order4(
     return uv_history
 end
 
+function eval_forward_arbitrary_order(
+        prob::SchrodingerProb{M1, M2}, controls,
+        pcof::AbstractVector{Float64}; order::Int=2,
+        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing
+    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
+    N_derivatives = div(order, 2)
+    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_ess_levels)
+
+    eval_forward_arbitrary_order!(uv_history, prob, controls, pcof, order=order, forcing=forcing)
+
+    return uv_history
+end
+
+
+function eval_forward_arbitrary_order!(uv_history::AbstractArray{Float64, 4},
+        prob::SchrodingerProb{M1, M2}, controls,
+        pcof::AbstractVector{Float64}; order::Int=2,
+        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing
+    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
+
+    N_derivatives = div(order, 2)
+
+    # Check size of uv_history storage
+    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_ess_levels)
+
+
+    # Handle i-th initial condition (THREADS HERE)
+    for initial_condition_index=1:prob.N_ess_levels
+        vector_prob = VectorSchrodingerProb(prob, initial_condition_index)
+        this_uv_history = @view uv_history[:, :, :, initial_condition_index]
+
+        if ismissing(forcing)
+            this_forcing = missing
+        else
+            this_forcing = @view forcing[:, :, :, initial_condition_index]
+        end
+
+        eval_forward_arbitrary_order!(
+            this_uv_history, vector_prob, controls, pcof, order=order, forcing=this_forcing
+        )
+    end
+end
 
 """
 Evolve a vector SchrodingerProblem forward in time. Store the history of the
@@ -609,3 +651,5 @@ function eval_forward_arbitrary_order(
 
     return uv_history
 end
+
+
