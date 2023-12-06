@@ -480,3 +480,18 @@ function eval_forward_forced_order4(
     
     return uv_history
 end
+
+
+
+"""
+WIP, but first I should check that using arbitrary_order_uv_derivative! on a generated
+history (without derivatives) gets the same results as the generated history.
+(will have to multiply by j+1)
+"""
+function eval_forward_arbitrary(
+        prob::SchrodingerProb, controls,
+        pcof::AbstractVector{Float64}; order=2, return_time_derivatives=false
+    )
+end
+
+
