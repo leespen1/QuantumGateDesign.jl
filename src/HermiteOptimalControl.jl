@@ -5,30 +5,30 @@ import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 
 # Export schrodinger problem definition and forward evolution methods
-export SchrodingerProb, VectorSchrodingerProb, eval_forward, eval_forward_forced
+export SchrodingerProb, VectorSchrodingerProb
+export eval_forward, eval_forward_forced, eval_forward_arbitrary_order
 
 # Export gradient evaulation methods
 export eval_grad_finite_difference, eval_grad_forced, discrete_adjoint
 
-# Export bspline functions
-export bcparams, bcarrier2, bcarrier2_dt, gradbcarrier2, gradbcarrier2_dt, gradbcarrier2!, gradbcarrier2_dt!
-
-# Export tests
-export gradient_test, plot_gradients, plot_gradient_deviation
-export convergence_test!, plot_convergence_test
-
-# Export specific problem definitions
-export single_qubit_prob_with_bspline_control, bspline_control
-
-export infidelity
-
+# Export optimization callback
 export optimize_gate
 
+# Export helper for functions for dealing state vectors and histories
 export get_populations, target_helper, plot_populations, real_to_complex, complex_to_real
 
 export Control, AbstractControl, BSplineControl
 
-export rotating_frame_qubit
+
+# Export example problems and problem construction helpers
+export lowering_operator, raising_operator, subsytem_lowering_operator
+export composite_system_lowering_operators
+export rotating_frame_qubit, dahlquist_problem
+
+# Export testing functions
+export plot_history_convergence, plot_history_convergence_new
+
+
 export initial_basis
 export infidelity
 
@@ -57,8 +57,9 @@ include("state_vector_helpers.jl")
 
 include("ProblemConstructors/lowering_operators.jl")
 include("ProblemConstructors/rotating_frame_qubit.jl")
+include("ProblemConstructors/dahlquist_problem.jl")
 
-include("../test/test_gradient.jl")
-include("../test/test_convergence.jl")
+include("Tests/test_gradient.jl")
+include("Tests/test_convergence.jl")
 
 end # module HermiteOptimalControl
