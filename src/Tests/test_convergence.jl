@@ -151,7 +151,7 @@ function plot_history_convergence_new(prob, control, pcof, N_iterations;
     end
 
     # Order lines may extend too far down. Save the old limits so I can fix the window size back.
-    old_ylims = ylims(pl)
+    old_ylims = Plots.ylims(pl)
 
     order_line2 = step_sizes .^ 2
     order_line2 .*= 2 * errors_all[1,1]/order_line2[1] # Adjust vertical position to match data, with small offset for visibility
@@ -169,7 +169,7 @@ function plot_history_convergence_new(prob, control, pcof, N_iterations;
     order_line8 .*= 2 * errors_all[1,4]/order_line8[1] # Adjust vertical position to match data, with small offset for visibility
     Plots.plot!(pl, step_sizes, order_line8, label="Δt⁸", linecolor=:black, linestyle=:solid)
 
-    ylims!(pl, old_ylims...)
+    Plots.ylims!(pl, old_ylims...)
 
     if return_data
         return step_sizes, errors_all
