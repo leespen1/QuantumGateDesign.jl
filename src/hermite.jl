@@ -208,10 +208,10 @@ this method.
 """
 function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
         prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{Float64},
-        derivative_order::Int64, use_adjoint::Bool=false)
+        N_derivatives::Int64, use_adjoint::Bool=false)
 
-    if (derivative_order < 1)
-        throw(ArgumentError("Non positive derivative_order supplied."))
+    if (N_derivatives< 1)
+        throw(ArgumentError("Non positive N_derivatives supplied."))
     end
 
     adjoint_factor = use_adjoint ? -1 : 1
@@ -220,7 +220,7 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
     # Compute the first derivative
     ##############################
 
-    for j = 0:(derivative_order-1)
+    for j = 0:(N_derivatives-1)
         # In (15), only i=j has the system operators present, others are only control operators
         # Get views of the current derivative we are trying to compute (the j+1th derivative)
         u_derivative = view(uv_matrix, 1:prob.N_tot_levels,                       1+j+1)
@@ -250,7 +250,6 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
                 sym_op = prob.sym_operators[k]
                 asym_op = prob.asym_operators[k]
                 this_pcof = get_control_vector_slice(pcof, controls, k)
-                println("j-i=$(j-i)")
 
                 p_val = eval_p_derivative(control, t, this_pcof, j-i)
                 q_val = eval_q_derivative(control, t, this_pcof, j-i)
@@ -269,6 +268,37 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
     end
     
     return nothing
+end
+
+function coefficient(j,p,q)
+    return factorial(p)*factorial(p+q-j)/(factorial(p+q)*factorial(p-j))
+end
+
+"""
+Compute the RHS/LHS, assuming p=q=N_derivatives
+"""
+function arbitrary_RHS!(RHS::AbstractVector{Float64}, uv_matrix::AbstractMatrix{Float64},
+        dt::Real, N_derivatives::Int64)
+
+    system_size = length(RHS)
+    @assert system_size == size(uv_matrix, 1)
+
+    RHS .= 0.0
+    for j in 0:N_derivatives
+        RHS .+= coefficient(j,N_derivatives,N_derivatives) .* (dt^j) .* view(uv_matrix, 1:system_size, 1+j)
+    end
+end
+
+function arbitrary_LHS!(LHS::AbstractVector{Float64}, uv_matrix::AbstractMatrix{Float64},
+        dt::Real, N_derivatives::Int64)
+
+    system_size = length(LHS)
+    @assert system_size == size(uv_matrix, 1)
+
+    LHS .= 0.0
+    for j in 0:N_derivatives
+        LHS .+= (-1)^j .* coefficient(j,N_derivatives,N_derivatives) .* (dt^j) .* view(uv_matrix, 1:system_size, 1+j)
+    end
 end
 
 function LHS_func!(LHS_uv::AbstractVector{Float64},
