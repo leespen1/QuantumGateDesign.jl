@@ -488,10 +488,61 @@ WIP, but first I should check that using arbitrary_order_uv_derivative! on a gen
 history (without derivatives) gets the same results as the generated history.
 (will have to multiply by j+1)
 """
-function eval_forward_arbitrary(
-        prob::SchrodingerProb, controls,
-        pcof::AbstractVector{Float64}; order=2, return_time_derivatives=false
-    )
-end
+function eval_forward_arbitrary_order(
+        prob::SchrodingerProb{M, V}, controls,
+        pcof::AbstractVector{Float64}; order=2
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
+    
+    t::Float64 = 0.0
+    dt = prob.tf/prob.nsteps
 
+    N_derivatives = div(order, 2)
+    uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
+
+    uv_mat[1:prob.N_tot_levels,                       1] .= prob.u0
+    uv_mat[prob.N_tot_levels+1:prob.real_system_size, 1] .= prob.v0
+
+
+    uv_history = Array{Float64, 3}(undef, prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
+    uv_history[:, :, 1] .= uv_mat
+
+    uv_vec = zeros(prob.real_system_size)
+    RHS::Vector{Float64} = zeros(prob.real_system_size)
+
+    # This probably creates type-instability, as functions have singleton types, 
+    # and this function is (I'm pretty sure) not created until runtime
+    function LHS_func_wrapper(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
+        uv_mat[:,1] .= uv_in
+        arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives)
+        arbitrary_LHS!(uv_out, uv_mat, dt, N_derivatives)
+
+        return nothing
+    end
+
+    LHS_map = LinearMaps.LinearMap(
+        LHS_func_wrapper,
+        prob.real_system_size, prob.real_system_size,
+        ismutating=true
+    )
+
+
+    # Order 2
+    for n in 0:prob.nsteps-1
+        t = n*dt
+
+        arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives)
+        uv_history[:, :, 1+n] .= uv_mat
+        arbitrary_RHS!(RHS, uv_mat, dt, N_derivatives)
+
+        t = (n+1)*dt
+
+        uv_vec .= uv_mat[:,1] # Use current timestep as initial guess for gmres
+        IterativeSolvers.gmres!(uv_vec, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+    end
+
+    arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives)
+    uv_history[:, :, 1+prob.nsteps] .= uv_mat
+
+    return uv_history
+end
 
