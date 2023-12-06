@@ -169,6 +169,50 @@ function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
 
 end
 
+function utttvttt!(
+        uttt::AbstractVector{Float64}, vttt::AbstractVector{Float64},
+        utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
+        ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
+        u::AbstractVector{Float64}, v::AbstractVector{Float64},
+        prob::SchrodingerProb, controls,
+        t::Float64, pcof::AbstractVector{Float64})
+
+    utvt!(uttt, vttt, utt, vtt, prob, controls, t, pcof)
+
+    # 2Aₜyₜ
+    for i in 1:prob.N_operators
+        control = controls[i]
+        sym_op = prob.sym_operators[i]
+        asym_op = prob.asym_operators[i]
+
+        # Get part of control vector corresponding to this control
+        this_pcof = get_control_vector_slice(pcof, controls, i)
+
+        mul!(uttt, asym_op, ut, 2*eval_qt(control, t, this_pcof), 1)
+        mul!(uttt, sym_op,  vt, 2*eval_pt(control, t, this_pcof), 1)
+
+        mul!(vttt, sym_op,  ut, -2*eval_pt(control, t, this_pcof), 1)
+        mul!(vttt, asym_op, vt, 2*eval_qt(control, t, this_pcof),  1)
+    end
+
+    # Aₜₜy
+    for i in 1:prob.N_operators
+        control = controls[i]
+        sym_op = prob.sym_operators[i]
+        asym_op = prob.asym_operators[i]
+
+        # Get part of control vector corresponding to this control
+        this_pcof = get_control_vector_slice(pcof, controls, i)
+
+        mul!(uttt, asym_op, u, eval_q_derivative(control, t, this_pcof, 2), 1)
+        mul!(uttt, sym_op,  v, eval_p_derivative(control, t, this_pcof, 2), 1)
+
+        mul!(vttt, sym_op,  u, -eval_p_derivative(control, t, this_pcof, 2), 1)
+        mul!(vttt, asym_op, v, eval_q_derivative(control, t, this_pcof, 2),  1)
+    end
+
+end
+
 function uttvtt_adj!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
@@ -246,11 +290,11 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
 
         # Perform the summation (the above is part of the i=j term in summation, this loop completes that term and the rest)
         for i = j:-1:0
+            #println("j=$j, i=$i, j-i=$(j-i)")
             u_derivative_prev = view(uv_matrix, 1:prob.N_tot_levels,                       1+i)
             v_derivative_prev = view(uv_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+i)
 
             for k in 1:prob.N_operators
-                #println("j=$j, i=$i, k=$k\n")
                 control = controls[k]
                 sym_op = prob.sym_operators[k]
                 asym_op = prob.asym_operators[k]
@@ -266,11 +310,13 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
                 mul!(v_derivative, sym_op,  u_derivative_prev, -adjoint_factor*p_val, 1)
             end
         end
+        #println("\n")
 
         # Not using right now, for easy comparison
         mul!(u_derivative, u_derivative, 1/(j+1))
         mul!(v_derivative, v_derivative, 1/(j+1))
     end
+    #println("\n")
     
     return nothing
 end
