@@ -25,6 +25,7 @@
 using HermiteOptimalControl
 using LinearMaps
 using IterativeSolvers
+using Plots
 
 include("hermite_map.jl")
 
@@ -94,7 +95,7 @@ function main(;d=3, N_guard=1, D1=missing, tf=missing, nsteps=missing)
 
     # Frequencies in GHz, *not angular*
     detuning_frequency = 0.0
-    self_kerr_coefficient =  0.22
+    self_kerr_coefficient =  0.1
     
     prob = rotating_frame_qubit(
         N_ess_levels,
@@ -120,33 +121,68 @@ function main(;d=3, N_guard=1, D1=missing, tf=missing, nsteps=missing)
 
     n_w = 2*prob.N_tot_levels
     tend = tf
-    nt = 11
+    nt = 15
     dt = tend/nt
     w0 = zeros(n_w)
     w0[1] = 1.0
     W = zeros(length(w0),m+1,nt+1)
     T = LinRange(0,tend,nt+1)
+
+    nt_ctrl = 3
+    dt_ctrl = tend/nt_ctrl
+    # These arrays hold the controls 
+    P_tay = zeros(m+1,nt_ctrl+1)
+    Q_tay = zeros(m+1,nt_ctrl+1)
+    P_tay[1,:] .= 0.22
+
+    tloc_ctrl = zeros(nt+1)
+    idx_ctrl = zeros(Int64,nt+1)
+    # We find the map between the timestep index and the control array index
+    j = 1
+    for it = 0:nt
+        t = it*dt
+        t_ctrl = j*dt_ctrl
+        if t > t_ctrl
+            j = j+1
+        end
+        idx_ctrl[1+it] = j
+    end
+    # protect for roundoff
+    idx_ctrl[nt+1] = nt_ctrl
+    # find the normalized local coordinate (between -1/2 and 1/2)
+    for it = 0:nt
+        t = it*dt
+        t_ctrl = (idx_ctrl[1+it]-0.5)*dt_ctrl
+        tloc_ctrl[1+it] = (t-t_ctrl)/dt_ctrl
+    end
     
     q_tay = zeros(m+1)
     p_tay = zeros(m+1)
-    p_tay[1] = 1.0/2.0/pi
-    #=    
+        
     ctrl_scl = zeros(m+1)
     df = 1.0
     for i = 0:m
         ctrl_scl[1+i] = df
-        df = df/tend
+        df = df/dt_ctrl
     end
-    
-    t = 0.0
-    t_int = -0.5 + t/tend
-    
+
+    Hmat = zeros(2*m+2,2*m+2)
+    Hermite_map!(Hmat,m,0.0,1.0,0.5,0)
+
     q = 2*m+1
-    ucof = copy(a_ctrl_I)
-    extrapolate!(ucof,t_int,q)
-    
-    a_tay[1:m+1] .= (ctrl_scl.*ucof[1:m+1])   
-=#
+    ucof = zeros(2*m+2)
+    it = 0
+    ucof[1:m+1]     = Q_tay[:,idx_ctrl[1+it]]
+    ucof[m+2:2*m+2] = Q_tay[:,idx_ctrl[1+it]+1]
+    uint = Hmat*ucof
+    extrapolate!(uint,tloc_ctrl[1+it],q)
+    q_tay .= ctrl_scl.*uint[1:m+1]
+    ucof[1:m+1]     = P_tay[:,idx_ctrl[1+it]]
+    ucof[m+2:2*m+2] = P_tay[:,idx_ctrl[1+it]+1]
+    uint = Hmat*ucof
+    extrapolate!(uint,tloc_ctrl[1+it],q)
+    p_tay .= ctrl_scl.*uint[1:m+1]
+
     F0,Wtay = w_to_F(w0,H0,P,Q,p_tay,q_tay,m)
     W[:,:,1] .= Wtay
     b = compute_b(w0,F0,c,dt,m)
@@ -156,11 +192,17 @@ function main(;d=3, N_guard=1, D1=missing, tf=missing, nsteps=missing)
     
     for it = 1:nt
         t = it*dt
-        #t_int = -0.5 + t/tend
-        #q = 2*m+1
-        #ucof = copy(a_ctrl_I)
-        #extrapolate!(ucof,t_int,q)
-        #a_tay[1:m+1] .= (ctrl_scl.*ucof[1:m+1])   
+        ucof[1:m+1]     = Q_tay[:,idx_ctrl[1+it]]
+        ucof[m+2:2*m+2] = Q_tay[:,idx_ctrl[1+it]+1]
+        uint = Hmat*ucof
+        extrapolate!(uint,tloc_ctrl[1+it],q)
+        q_tay .= ctrl_scl.*uint[1:m+1]
+        ucof[1:m+1]     = P_tay[:,idx_ctrl[1+it]]
+        ucof[m+2:2*m+2] = P_tay[:,idx_ctrl[1+it]+1]
+        uint = Hmat*ucof
+        extrapolate!(uint,tloc_ctrl[1+it],q)
+
+        p_tay .= ctrl_scl.*uint[1:m+1]
         w1,history = gmres(HM_MAT,b,reltol=1e-12,log=true)
         # Shuffle timesteps and compute stuff neded in the linear system
         w0 = w1
@@ -169,9 +211,6 @@ function main(;d=3, N_guard=1, D1=missing, tf=missing, nsteps=missing)
         b = compute_b(w0,F0,c,dt,m)
     end
 
-    Hmat = zeros(2*m+2,2*m+2)
-    Hermite_map!(Hmat,m,0.0,1.0,0.5,0)
-    #
     scale = zeros(Float64,2*(m+1),2*(m+1))
     df = 1.0
     for i = 0:2*m+1
@@ -182,7 +221,7 @@ function main(;d=3, N_guard=1, D1=missing, tf=missing, nsteps=missing)
     neval = 101
     pl = plot(T,sqrt.(W[1,1,:].^2+W[6,1,:].^2),lw=2,marker=:star)
     
-    ucof = zeros(2*m+2)
+
     z = collect(LinRange(-0.5,0.5,neval))
     for i = 1:nt
         ifield = 1
