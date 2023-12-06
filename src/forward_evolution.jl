@@ -484,32 +484,48 @@ end
 
 
 """
-WIP, but first I should check that using arbitrary_order_uv_derivative! on a generated
-history (without derivatives) gets the same results as the generated history.
-(will have to multiply by j+1)
+Evolve a vector SchrodingerProblem forward in time. Store the history of the
+state vector (u/v) in the array uv_history. The first index of uv_history
+corresponds to the vector component, the second index corresponds to the
+derivative to be taken, and the third index corresponds to the timestep number.
+
+E.g. uv_history[:,1,1] is the initial condition, uv_history[:,2,1] is the value
+of du/dt and dv/dt at t=0, uv_history[:,1,end] is the value of uv at t=tf, etc.
+
+Currently tested against old implementations, and for a small example gave the
+same results to near machine precision. The maximum difference between entries
+in the histories created by the old and new implementations was 1e-13. It seemed
+like most entries differed by less than 1e-14.
+
+I plan to make an adjoint version of this.
 """
-function eval_forward_arbitrary_order(
+function eval_forward_arbitrary_order!(uv_history::AbstractArray{Float64, 3},
         prob::SchrodingerProb{M, V}, controls,
         pcof::AbstractVector{Float64}; order::Int=2,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
+
     
-    t::Float64 = 0.0
+    t = 0.0
     dt = prob.tf/prob.nsteps
-
-
     N_derivatives = div(order, 2)
 
+    # Check size of uv_history storage
+    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
+
+    # Allocate memory for storing u,v, and their derivatives at a single point in time
     uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
     uv_mat[1:prob.N_tot_levels,                       1] .= prob.u0
     uv_mat[prob.N_tot_levels+1:prob.real_system_size, 1] .= prob.v0
 
-    uv_history = Array{Float64, 3}(undef, prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
     uv_history[:, :, 1] .= uv_mat
 
+    # Allocate memory for storing just u,v at a single point in time (to pass into/out of GMRES)
     uv_vec = zeros(prob.real_system_size)
+    # Allocate memory for storing the right hand side (explicit part) of each timestep (to use as RHS of GMRES)
     RHS::Vector{Float64} = zeros(prob.real_system_size)
 
+    # Allocate a matrix for storing the forcing at a single point in time (if we have forcing)
     if ismissing(forcing)
         forcing_mat = missing
     else
@@ -518,6 +534,8 @@ function eval_forward_arbitrary_order(
 
     # This probably creates type-instability, as functions have singleton types, 
     # and this function is (I'm pretty sure) not created until runtime
+    #
+    # Create wrapper for computing action of LHS on uvₙ₊₁ at each timestep (to be compatible with LinearMaps)
     function LHS_func_wrapper(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
         uv_mat[:,1] .= uv_in
         arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives)
@@ -526,15 +544,17 @@ function eval_forward_arbitrary_order(
         return nothing
     end
 
+    # Create linear map out of LHS_func_wrapper, to use in GMRES
     LHS_map = LinearMaps.LinearMap(
         LHS_func_wrapper,
         prob.real_system_size, prob.real_system_size,
         ismutating=true
     )
 
-    # Order 2
+    # Perform the timesteps
     for n in 0:prob.nsteps-1
 
+        # Compute the RHS (explicit part)
         t = n*dt
         if !ismissing(forcing_mat)
             forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n)
@@ -544,6 +564,8 @@ function eval_forward_arbitrary_order(
         uv_history[:, :, 1+n] .= uv_mat
         arbitrary_RHS!(RHS, uv_mat, dt, N_derivatives)
 
+
+        # Use GMRES to perform the timestep (implicit part)
         t = (n+1)*dt
         if !ismissing(forcing_mat)
             forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n+1)
@@ -554,6 +576,7 @@ function eval_forward_arbitrary_order(
         uv_mat[:,1] .= uv_vec
     end
 
+    # Compute the derivatives of uv at the final time and store them
     t = prob.nsteps*dt
     if !ismissing(forcing_mat)
         forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+prob.nsteps)
@@ -561,6 +584,28 @@ function eval_forward_arbitrary_order(
     arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives)
     uv_history[:, :, 1+prob.nsteps] .= uv_mat
 
-    return uv_history
+    return nothing
 end
 
+
+"""
+Evolve a vector SchrodingerProblem forward in time. Return the history of the
+state vector (u/v) in a 3-index array, where the first index of
+corresponds to the vector component, the second index corresponds to the
+derivative to be taken, and the third index corresponds to the timestep number.
+"""
+function eval_forward_arbitrary_order(
+        prob::SchrodingerProb{M, V}, controls,
+        pcof::AbstractVector{Float64}; order::Int=2,
+        forcing::Union{AbstractArray{Float64, 3}, Missing}=missing
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
+
+    N_derivatives = div(order, 2)
+
+    # Allocate memory for storing u,v, and their derivatives over all points in time
+    uv_history = Array{Float64, 3}(undef, prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
+
+    eval_forward_arbitrary_order!(uv_history, prob, controls, pcof, order=order, forcing=forcing)
+
+    return uv_history
+end
