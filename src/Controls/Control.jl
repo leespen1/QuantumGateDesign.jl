@@ -138,11 +138,14 @@ order derivatives.
 For hermite-interpolant-envolpe, would override this with a lookup-table, which
 throws an error when trying to do a higher order than that of the interpolant 
 (or just return 0, I suppose would be more accurate).
+
+Possibly type instability here, since ForwardDiff.derivative causes p_val to be a 
+ForwardDiff.Dual{...} type.
 """
 function eval_p_derivative(control::AbstractControl, t::Real,
         pcof::AbstractVector{Float64},  order::Int64)
 
-    p_val::Float64 = 0.0
+    p_val = 0.0
     if (order == 0) 
         p_val = eval_p(control, t, pcof)
     elseif (order > 0)
@@ -163,7 +166,7 @@ order derivatives.
 function eval_q_derivative(control::AbstractControl, t::Real,
         pcof::AbstractVector{Float64},  order::Int64)
 
-    p_val::Float64 = 0.0
+    p_val = 0.0
     if (order == 0) 
         q_val = eval_q(control, t, pcof)
     elseif (order > 0)
