@@ -322,11 +322,11 @@ end
 
 function main(nt_ctrl)
     pl = plot(xaxis=:log, yaxis=:log)
-    c = [5.0, 2.0, 1.0, 0.5, 0.1, 0.01, 0.001, 0.0001]
+    c = [7.0, 2.5, 1.8, 1.5, 1.0, 1.0, 1.0, 1.0]
     for m = 1:8
         e = [];
         dt = [];
-        for nt = 5:75
+        for nt = 10:5:200
             err, = get_err(nt,nt_ctrl,m)
             e = [e ; err]
             dt = [dt ; 2*pi/nt]
@@ -335,7 +335,7 @@ function main(nt_ctrl)
               xaxis=:log, yaxis=:log,lw=2,label = :none)
         plot!(pl,dt,c[m]*dt.^(2*m),
               linestyle=:dash,lw=1,color = :black,label = :none,
-              xaxis=:log, yaxis=:log , ylims=(1e-16,10))
+              xaxis=:log, yaxis=:log , ylims=(1e-14,10))
     end
     return pl
 end
