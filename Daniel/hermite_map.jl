@@ -149,6 +149,7 @@ function extrapolate!(p,z,q,ploc)
     INTEGER :: j,k
     !
     =#
+    ploc .= 0.0
     ploc[1+0] = p[1+q]
     for j=q-1:-1:0
         for k=q-j:-1:1
