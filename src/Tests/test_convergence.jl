@@ -89,7 +89,8 @@ end
 
 function plot_history_convergence_new(prob, control, pcof, N_iterations;
         orders=(2, 4), nsteps_change_factor=2,
-        return_data=false, duration_error=true
+        return_data=false, duration_error=true,
+        include_orderlines=true
     )
     base_nsteps = prob.nsteps
 
@@ -150,26 +151,30 @@ function plot_history_convergence_new(prob, control, pcof, N_iterations;
         end
     end
 
-    # Order lines may extend too far down. Save the old limits so I can fix the window size back.
-    old_ylims = Plots.ylims(pl)
 
-    order_line2 = step_sizes .^ 2
-    order_line2 .*= 2 * errors_all[1,1]/order_line2[1] # Adjust vertical position to match data, with small offset for visibility
-    Plots.plot!(pl, step_sizes, order_line2, label="Δt²", linecolor=:black, linestyle=:dash)
+    # Add order lines
+    if include_orderlines
+        # Order lines may extend too far down. Save the old limits so I can fix the window size back.
+        old_ylims = Plots.ylims(pl)
 
-    order_line4 = step_sizes .^ 4
-    order_line4 .*= 2 * errors_all[1,2]/order_line4[1] # Adjust vertical position to match data, with small offset for visibility
-    Plots.plot!(pl, step_sizes, order_line4, label="Δt⁴", linecolor=:black, linestyle=:dashdot)
+        linestyle_list = (:solid, :dash, :dot, :dashdot)
+        for (j, order) in enumerate(orders)
+            order_line = step_sizes .^ order
+            order_line .*= 2 * errors_all[1,j]/order_line[1] # Adjust vertical position to match data, with small offset for visibility
 
-    order_line6 = step_sizes .^ 6
-    order_line6 .*= 2 * errors_all[1,3]/order_line6[1] # Adjust vertical position to match data, with small offset for visibility
-    Plots.plot!(pl, step_sizes, order_line6, label="Δt⁶", linecolor=:black, linestyle=:dot)
+            linestyle_index = j % length(linestyle_list)
+            if linestyle_index > 0
+                linestyle = linestyle_list[linestyle_index]
+            else 
+                linestyle = linestyle_list[end]
+            end
 
-    order_line8 = step_sizes .^ 8
-    order_line8 .*= 2 * errors_all[1,4]/order_line8[1] # Adjust vertical position to match data, with small offset for visibility
-    Plots.plot!(pl, step_sizes, order_line8, label="Δt⁸", linecolor=:black, linestyle=:solid)
+            Plots.plot!(pl, step_sizes, order_line, label="Δt^$order", linecolor=:black, linestyle=linestyle)
+        end
 
-    Plots.ylims!(pl, old_ylims...)
+        Plots.ylims!(pl, old_ylims...)
+        Plots.plot!(legend=:outerright)
+    end
 
     if return_data
         return step_sizes, errors_all
