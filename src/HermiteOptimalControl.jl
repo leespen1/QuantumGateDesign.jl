@@ -18,7 +18,7 @@ export optimize_gate
 export get_populations, target_helper, plot_populations, real_to_complex, complex_to_real
 
 # Export control types and constructors
-export AbstractControl, BSplineControl
+export AbstractControl, BSplineControl, GRAPEControl
 export bspline_control
 export eval_p, eval_q, eval_p_derivative, eval_q_derivative
 
@@ -31,10 +31,14 @@ export rotating_frame_qubit, dahlquist_problem
 # Export testing functions
 export plot_history_convergence, plot_history_convergence_new
 
+# Export plotting functions
+export plot_control
+
 
 export initial_basis
 export infidelity
 
+export hermite_interp_poly
 
 include("SchrodingerProb.jl")
 
@@ -43,6 +47,8 @@ include("Controls/Control.jl")
 include("Controls/bspline_backend.jl")
 include("Controls/bspline_control.jl")
 include("Controls/grape_control.jl")
+include("Controls/hermite_control.jl")
+include("Controls/sincos_control.jl")
 
 include("hermite.jl")
 
@@ -64,5 +70,7 @@ include("ProblemConstructors/dahlquist_problem.jl")
 
 include("Tests/test_gradient.jl")
 include("Tests/test_convergence.jl")
+
+include("Plotting/plot_control.jl")
 
 end # module HermiteOptimalControl
