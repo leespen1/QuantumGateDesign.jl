@@ -41,6 +41,7 @@ export infidelity
 export hermite_interp_poly
 
 include("SchrodingerProb.jl")
+include("../Daniel/hermite_map.jl")
 
 
 include("Controls/Control.jl")
