@@ -715,3 +715,106 @@ function disc_adj_calc_grad_naive!(gradient::AbstractVector{Float64},
 
     return nothing
 end
+
+
+function compute_terminal_condition(
+        prob, controls, pcof, target, final_state;
+        order=2, cost_type=:Infidelity
+    )
+
+    terminal_condition = zeros(size(target))
+
+    t = prob.tf
+    dt = prob.tf/prob.nsteps
+
+    N_derivatives = div(order, 2)
+
+    uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
+    uv_vec = zeros(prob.real_system_size)
+
+    R = target[:,:] # Copy target, converting to matrix if vector (will this code work for vectors?)
+    T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
+
+    # Set up terminal condition RHS
+    if cost_type == :Infidelity
+        terminal_RHS = (dot(final_state, R)*R + dot(final_state, T)*T)
+        terminal_RHS *= (2.0/(prob.N_ess_levels^2))
+    elseif cost_type == :Tracking
+        terminal_RHS = -(final_state - target)
+    elseif cost_type == :Norm
+        terminal_RHS = -final_state
+    else
+        throw("Invalid cost type: $cost_type")
+    end
+
+    function LHS_func_wrapper(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
+        uv_mat[:,1] .= uv_in
+        arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives, use_adjoint=true)
+        # Do I need to make and adjoint version of this? I don't think so, considering before LHS only used adjoint for utvt!, not the quadrature
+        # But maybe there is a negative t I need to worry about. Maybe just provide dt as -dt
+        arbitrary_LHS!(uv_out, uv_mat, dt, N_derivatives)
+
+        return nothing
+    end
+
+    # Create linear map out of LHS_func_wrapper, to use in GMRES
+    LHS_map = LinearMaps.LinearMap(
+        LHS_func_wrapper,
+        prob.real_system_size, prob.real_system_size,
+        ismutating=true
+    )
+
+    for i in 1:size(target, 2)
+        IterativeSolvers.gmres!(uv_vec, LHS_map, terminal_RHS[:,i], abstol=1e-15, reltol=1e-15)
+        terminal_condition[:,i] .= uv_vec
+    end
+
+    return terminal_condition
+end
+
+"""
+Arbitrary order version, should make one with target being abstract vector as
+well, so I can do state transfer problems.
+"""
+function discrete_adjoint_arbitrary_order(
+        prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}},
+        controls, pcof::AbstractVector{Float64},
+        target::AbstractMatrix{Float64}; 
+        order=2, cost_type=:Infidelity, return_lambda_history=false
+    )
+
+    history = eval_forward_arbitrary_order(prob, controls, pcof; order=order)
+
+    R = target[:,:] # Copy target, converting to matrix if vector
+    T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
+
+    terminal_condition = compute_terminal_condition(
+        prob, controls, pcof, target, final_state, order=order, cost_type=cost_type
+    )
+
+    lambda_history = eval_adjoint_arbitrary_order(prob, controls, pcof, terminal_condition, order=order)
+
+    grad = zeros(length(pcof))
+
+
+    for initial_condition_index = 1:size(prob.u0,2)
+        if (order == 2)
+            # Need to get history and lambda history as they were expected in the previous format
+            disc_adj_calc_grad!(grad, prob, controls, pcof,
+                view(history, :, :, initial_condition_index), lambda_history
+            )
+        
+        elseif order == 4
+            disc_adj_calc_grad_order_4!(grad, prob, controls, pcof,
+                view(history, :, :, initial_condition_index), lambda_history
+            )
+
+        else
+            throw("Invalid order: $order (must be ≤ 4 for now)")
+        end
+
+        full_lambda_history[:,:,initial_condition_index] .= lambda_history
+    end
+
+    return grad
+end

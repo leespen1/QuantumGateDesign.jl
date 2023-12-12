@@ -252,7 +252,7 @@ this method.
 """
 function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
         prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{Float64},
-        N_derivatives::Int64, use_adjoint::Bool=false,
+        N_derivatives::Int64; use_adjoint::Bool=false,
         forcing_matrix::Union{AbstractMatrix{Float64}, Missing}=missing
     )
 
