@@ -810,7 +810,7 @@ function eval_adjoint_arbitrary_order!(uv_history::AbstractArray{Float64, 4},
         end
 
         eval_adjoint_arbitrary_order!(
-            this_uv_history, vector_prob, controls, pcof, order=order, forcing=this_forcing
+            this_uv_history, vector_prob, controls, pcof, terminal_condition_vec, order=order, forcing=this_forcing
         )
     end
 end

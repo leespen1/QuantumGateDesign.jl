@@ -788,6 +788,8 @@ function discrete_adjoint_arbitrary_order(
     R = target[:,:] # Copy target, converting to matrix if vector
     T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
 
+    final_state = history[:,1,end,:]
+
     terminal_condition = compute_terminal_condition(
         prob, controls, pcof, target, final_state, order=order, cost_type=cost_type
     )
@@ -796,24 +798,34 @@ function discrete_adjoint_arbitrary_order(
 
     grad = zeros(length(pcof))
 
+    this_history = zeros(prob.real_system_size, 1+prob.nsteps)
+    this_lambda_history = zeros(prob.real_system_size, 1+prob.nsteps)
 
     for initial_condition_index = 1:size(prob.u0,2)
+
+        # Get state vector and lambda history in format expected by the functions (the old format)
+        for component_i in 1:prob.real_system_size
+            for step_i in 1:(1+prob.nsteps)
+                this_history[component_i, step_i] = history[component_i, 1, step_i, initial_condition_index]
+                this_lambda_history[component_i, step_i] = lambda_history[component_i, 1, step_i, initial_condition_index]
+            end
+        end
+
+
         if (order == 2)
-            # Need to get history and lambda history as they were expected in the previous format
             disc_adj_calc_grad!(grad, prob, controls, pcof,
-                view(history, :, :, initial_condition_index), lambda_history
+                this_history, this_lambda_history
             )
         
-        elseif order == 4
+        elseif (order == 4)
             disc_adj_calc_grad_order_4!(grad, prob, controls, pcof,
-                view(history, :, :, initial_condition_index), lambda_history
+                this_history, this_lambda_history
             )
 
         else
             throw("Invalid order: $order (must be ≤ 4 for now)")
         end
 
-        full_lambda_history[:,:,initial_condition_index] .= lambda_history
     end
 
     return grad
