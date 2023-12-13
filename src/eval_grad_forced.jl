@@ -166,24 +166,26 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
         cost_type=:Infidelity, return_forcing=false
     ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
 
+    # Allocate space for gradient
+    gradient = zeros(controls.N_coeff)
+
     dt = prob.tf / prob.nsteps
+    N_derivatives = div(order, 2)
+
+
+
+    ## Compute forcing array (using -i∂H/∂θₖ ψ)
 
     # Get state vector history
     history = eval_forward_arbitrary_order(prob, controls, pcof, order=order)
 
-    ## Compute forcing array (using -i∂H/dθₖ ψ)
-    # Prepare dH/dα
 
-    gradient = zeros(controls.N_coeff)
-
-    N_derivatives = div(order, 2)
-
+    # For storing the global forcing array
     forcing_ary = zeros(prob.real_system_size, N_derivatives, 1+prob.nsteps, size(prob.u0, 2))
-
-    grad_prob = differentiated_prob(prob)
-
-    uv_matrix = zeros(prob.real_system_size, 1+N_derivatives)
+    # For storing the per-timestep forcing matrix
     forcing_matrix = zeros(prob.real_system_size, N_derivatives)
+    # For storing the per-timestep state vector and derivatives
+    uv_matrix = zeros(prob.real_system_size, 1+N_derivatives)
 
     for control_param_index in 1:controls.N_coeff # Will only work with single control for now
         # This is bad, want a "global" index, not local. That makes our job
@@ -231,38 +233,27 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
                     mul!(v_derivative, v_derivative, 1/(j+1))
                 end
 
-
                 forcing_ary[:,:,1+n, initial_condition_index] .= forcing_matrix
             end
 
         end
 
-        # Based on old method, I think I can do supply forcing to
-        # evale_derivative_uv, but I will need to do a second call to
-        # eval_derivative_uv with the next time forcing, and feed that to an
-        # arbitrary_LHS and then subtract from the RHS.
-        #
-        # I'm trying to think if this case is special, because Fortino's work
-        # doesn't use forcing at next timestep. But he may be wrong (or, it's
-        # just different because of how the adjoint equation works)
-
         final_state = history[:, 1, end, :]
-        final_state_partial_derivative = zeros(size(final_state)...)
 
-        timediff_prob = time_diff_prob(prob) # Set initial condition to zeros
-        #timediff_prob = copy(prob) # Set initial condition to zeros
+        # Compute the state history of ∂ψ/∂θₖ
 
+        diff_prob = copy(prob)
+        diff_prob.u0 .= 0
+        diff_prob.v0 .= 0
 
         history_partial_derivative = eval_forward_arbitrary_order(
-            timediff_prob, controls, pcof, forcing=forcing_ary,
+            diff_prob, controls, pcof, forcing=forcing_ary,
             order=order
         )
 
         final_state_partial_derivative = history_partial_derivative[:, 1, end, :]
         
-        display(history_partial_derivative)
-
-
+        # Compute the partial derivative of the objective function with respect to θₖ
         R = copy(target)
         T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
 
