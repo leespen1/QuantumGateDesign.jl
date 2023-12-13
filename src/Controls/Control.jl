@@ -84,7 +84,7 @@ end
 For human readable display of control objects.
 """
 function Base.show(io::IO, ::MIME"text/plain", control::AbstractControl)
-    print(io, typeof(control), " with ", control.N_coeff, " control coefficients")
+    print(io, typeof(control), " with ", control.N_coeff, " control coefficients and final time tf=", control.tf)
 end
 
 """
