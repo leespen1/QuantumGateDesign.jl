@@ -6,10 +6,12 @@ using LinearAlgebra: mul!, axpy!, dot, tr, norm
 
 # Export schrodinger problem definition and forward evolution methods
 export SchrodingerProb, VectorSchrodingerProb
-export eval_forward, eval_forward_forced, eval_forward_arbitrary_order
+export eval_forward, eval_forward_forced, eval_forward_arbitrary_order, eval_adjoint_arbitrary_order
+export convert_old_ordering_to_new
 
 # Export gradient evaulation methods
 export eval_grad_finite_difference, eval_grad_forced, discrete_adjoint
+export discrete_adjoint_arbitrary_order, compute_terminal_condition
 
 # Export optimization callback
 export optimize_gate
