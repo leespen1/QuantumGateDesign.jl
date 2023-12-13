@@ -282,15 +282,9 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
         mul!(v_derivative, prob.system_asym, v_derivative_prev, adjoint_factor, 1)
         mul!(v_derivative, prob.system_sym,  u_derivative_prev, -adjoint_factor, 1)
 
-        # I believe checking like this means that if-block will be compiled out when no forcing matrix is given
-        if !ismissing(forcing_matrix)
-            uv_matrix[:, 1+j+1] .+= view(forcing_matrix, 1:prob.real_system_size, 1+j)
-        end
-
 
         # Perform the summation (the above is part of the i=j term in summation, this loop completes that term and the rest)
         for i = j:-1:0
-            #println("j=$j, i=$i, j-i=$(j-i)")
             u_derivative_prev = view(uv_matrix, 1:prob.N_tot_levels,                       1+i)
             v_derivative_prev = view(uv_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+i)
 
@@ -310,9 +304,13 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
                 mul!(v_derivative, sym_op,  u_derivative_prev, -adjoint_factor*p_val, 1)
             end
         end
-        #println("\n")
 
-        # Not using right now, for easy comparison
+        # I believe checking like this means that if-block will be compiled out when no forcing matrix is given
+        if !ismissing(forcing_matrix)
+            # TODO: Replace addition with axpy!
+            uv_matrix[:, 1+j+1] .+= view(forcing_matrix, 1:prob.real_system_size, 1+j)
+        end
+
         mul!(u_derivative, u_derivative, 1/(j+1))
         mul!(v_derivative, v_derivative, 1/(j+1))
     end
@@ -320,6 +318,22 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
     
     return nothing
 end
+
+"""
+Apply control to uv_in, ADD result to uv_out
+"""
+function apply_control_additive!(u_out, v_out, u_in, v_in, control, sym_op, asym_op, pcof, mult_factor, derivative_i)
+
+    p_val = eval_p_derivative(control, t, this_pcof, derivative_i) * mult_factor
+    q_val = eval_q_derivative(control, t, this_pcof, derivative_i) * mult_factor
+
+    mul!(u_out, asym_op, u_in, q_val, 1)
+    mul!(u_out, sym_op,  v_in, p_val, 1)
+
+    mul!(v_out, asym_op, v_in, q_val,  1)
+    mul!(v_out, sym_op,  u_in, -p_val, 1)
+end
+
 
 function coefficient(j,p,q)
     return factorial(p)*factorial(p+q-j)/(factorial(p+q)*factorial(p-j))
