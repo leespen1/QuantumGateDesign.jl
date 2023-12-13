@@ -7,8 +7,7 @@ function eval_forward(
 
     #=
     if div(order, 2) > Nderivatives
-        @warn "Calling method of order $order for control with $Nderivatives given. Obtaining higher order derivatives using automatic differentiation.\n"
-    end
+        @warn "Calling method of order $order for control with $Nderivatives given. Obtaining higher order derivatives using automatic differentiation.\n" end
     =#
 
     if order == 2
@@ -572,12 +571,12 @@ function eval_forward_arbitrary_order!(uv_history::AbstractArray{Float64, 3},
         forcing_mat = missing
         forcing_next_time_mat = missing
         forcing_helper_mat = missing
-        forcing_helper_vec = missing
+        forcing_helper_vec = missing 
     else
         forcing_mat = zeros(prob.real_system_size, N_derivatives)
         forcing_next_time_mat = zeros(prob.real_system_size, N_derivatives)
-        forcing_helper_mat = zeros(prob.real_system_size, 1+N_derivatives)
-        forcing_helper_vec = zeros(prob.real_system_size)
+        forcing_helper_mat = zeros(prob.real_system_size, 1+N_derivatives) # For computing derivatives of forcing at next timestep
+        forcing_helper_vec = zeros(prob.real_system_size) # For subtracting LHS forcing terms from the RHS (since they are explicit)
     end
 
     # This probably creates type-instability, as functions have singleton types, 
@@ -611,7 +610,6 @@ function eval_forward_arbitrary_order!(uv_history::AbstractArray{Float64, 3},
         arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives, forcing_matrix=forcing_mat)
         uv_history[:, :, 1+n] .= uv_mat
         arbitrary_RHS!(RHS, uv_mat, dt, N_derivatives)
-
 
 
         # Use GMRES to perform the timestep (implicit part)
