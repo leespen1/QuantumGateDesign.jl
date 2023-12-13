@@ -229,7 +229,7 @@ function bcparams(T::Float64, D1::Int64, omega::Vector{Vector{Float64}}, pcof::V
     Nunc = 0
 
     NfreqTot = 0
-    Nfreq = Vector{Int64}(undef,Nctrl)
+    Nfreq = Vector{Int64}(undef, Nctrl)
     for c = 1:Nctrl
         Nfreq[c] = length(omega[c])
     end
@@ -780,7 +780,7 @@ Evaluate a B-spline function with carrier waves. See also the `bcparams` constru
 - `param::params`: Parameters for the spline
 - `func::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function bcarrier2(t::Real, bcpar::bcparams, func::Int64, pcof::AbstractVector{Float64})
+@inline function bcarrier2(t::Real, bcpar::bcparams, func::Int64, pcof::AbstractVector{<: Real})
     # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
     # in general, 0 <= func < 2*(Ncoupled + Nunc)
 
@@ -859,7 +859,7 @@ Evaluate a B-spline function with carrier waves. See also the `bcparams` constru
 SPENCER: To get cross derivative (d2/dtda, just remove the pcofs in the below,
 since the controls are linear in them)
 """
-@inline function bcarrier2_dt(t::Real, bcpar::bcparams, func::Int64, pcof::AbstractVector{Float64})
+@inline function bcarrier2_dt(t::Real, bcpar::bcparams, func::Int64, pcof::AbstractVector{<: Real})
     # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
     # in general, 0 <= func < 2*(Ncoupled + Nunc)
 

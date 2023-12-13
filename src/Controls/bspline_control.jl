@@ -17,39 +17,39 @@ function bspline_control(tf::Float64, D1::Int, omega::AbstractVector{Float64})
 end
 
 
-function eval_p(control::BSplineControl, t::Real, pcof::AbstractVector{Float64})
+function eval_p(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
     return bcarrier2(t, control.bcpar, 0, pcof)
 end
 
-function eval_q(control::BSplineControl, t::Real, pcof::AbstractVector{Float64})
+function eval_q(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
     return bcarrier2(t, control.bcpar, 1, pcof)
 end
 
-function eval_pt(control::BSplineControl, t::Real, pcof::AbstractVector{Float64})
+function eval_pt(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
     return bcarrier2_dt(t, control.bcpar, 0, pcof)
 end
 
-function eval_qt(control::BSplineControl, t::Real, pcof::AbstractVector{Float64})
+function eval_qt(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
     return bcarrier2_dt(t, control.bcpar, 1, pcof)
 end
 
-function eval_grad_p(control::BSplineControl, t::Real, pcof::AbstractVector{Float64})
+function eval_grad_p(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
     return gradbcarrier2(t, control.bcpar, 0)
 end
 
-function eval_grad_q(control::BSplineControl, t::Real, pcof::AbstractVector{Float64})
+function eval_grad_q(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
     return gradbcarrier2(t, control.bcpar, 1)
 end
 
-function eval_grad_pt(control::BSplineControl, t::Real, pcof::AbstractVector{Float64})
+function eval_grad_pt(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
     return gradbcarrier2_dt(t, control.bcpar, 0)
 end
 
-function eval_grad_qt(control::BSplineControl, t::Real, pcof::AbstractVector{Float64})
+function eval_grad_qt(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
     return gradbcarrier2_dt(t, control.bcpar, 1)
 end
 
-function eval_p_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+function eval_p_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     if (order == 0)
         return eval_p(control, t, pcof)
     elseif (order == 1)
@@ -61,7 +61,7 @@ function eval_p_derivative(control::BSplineControl, t::Real, pcof::AbstractVecto
     return NaN
 end
 
-function eval_q_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+function eval_q_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     if (order == 0)
         return eval_q(control, t, pcof)
     elseif (order == 1)
@@ -73,7 +73,7 @@ function eval_q_derivative(control::BSplineControl, t::Real, pcof::AbstractVecto
     return NaN
 end
 
-function eval_grad_p_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+function eval_grad_p_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     if (order == 0)
         return eval_grad_p(control, t, pcof)
     elseif (order == 1)
@@ -85,7 +85,7 @@ function eval_grad_p_derivative(control::BSplineControl, t::Real, pcof::Abstract
     return NaN
 end
 
-function eval_grad_q_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+function eval_grad_q_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     if (order == 0)
         return eval_grad_q(control, t, pcof)
     elseif (order == 1)
@@ -118,10 +118,10 @@ function bspline_control_autodiff(tf::Float64, D1::Int, omega::AbstractVector{Fl
 end
 
 
-function eval_p(control::BSplineControlAutodiff, t::Real, pcof::AbstractVector{Float64})
+function eval_p(control::BSplineControlAutodiff, t::Real, pcof::AbstractVector{<: Real})
     return bcarrier2(t, control.bcpar, 0, pcof)
 end
 
-function eval_q(control::BSplineControlAutodiff, t::Real, pcof::AbstractVector{Float64})
+function eval_q(control::BSplineControlAutodiff, t::Real, pcof::AbstractVector{<: Real})
     return bcarrier2(t, control.bcpar, 1, pcof)
 end

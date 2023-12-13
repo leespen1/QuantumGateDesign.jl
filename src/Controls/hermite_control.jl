@@ -21,28 +21,28 @@ struct HermiteControl <: AbstractControl
     end
 end
 
-function eval_p(control::HermiteControl, t::Real, pcof::AbstractVector{Float64})
+function eval_p(control::HermiteControl, t::Real, pcof::AbstractVector{<: Real})
     derivative_order = 0
     return eval_p_derivative(control, t, pcof, derivative_order)
 end
 
-function eval_q(control::HermiteControl, t::Real, pcof::AbstractVector{Float64})
+function eval_q(control::HermiteControl, t::Real, pcof::AbstractVector{<: Real})
     derivative_order = 0
     return eval_q_derivative(control, t, pcof, derivative_order)
 end
 
-function eval_p_derivative(control::HermiteControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+function eval_p_derivative(control::HermiteControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     return eval_derivative(control, t, pcof, order, :p)
 end
 
-function eval_q_derivative(control::HermiteControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+function eval_q_derivative(control::HermiteControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     return eval_derivative(control, t, pcof, order, :q)
 end
 
 
 
 function eval_derivative(control::AbstractControl, t::Real,
-        pcof::AbstractVector{Float64},  order::Int64, p_or_q)
+        pcof::AbstractVector{<: Real},  order::Int64, p_or_q)
     if (order > control.N_derivatives)
         #return ForwardDiff.derivative(t_dummy -> eval_derivative(control, t_dummy, pcof, order-1, p_or_q), t)
         throw(DomainError(order))

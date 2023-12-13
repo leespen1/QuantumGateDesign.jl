@@ -7,8 +7,8 @@
 Abstract supertype for all controls.
 
 Every concrete subtype must have the following methods defined:
-    eval_p(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
-    eval_q(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
+    eval_p(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
+    eval_q(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
 
 Every concrete subtype must have the following parameters
     N_coeff::Int
@@ -70,7 +70,7 @@ Get the slice (view) of the control vector which corresponds to the given contro
 
 Does additions, but doesn't allocate memory.
 """
-function get_control_vector_slice(pcof::AbstractVector{Float64}, controls, control_index::Int64)
+function get_control_vector_slice(pcof::AbstractVector{<: Real}, controls, control_index::Int64)
     start_index = 1
     for k in 1:(control_index-1)
         start_index += controls[k].N_coeff
@@ -108,27 +108,27 @@ pcof in the Control object. Then I could have a method eval_p(control, t) which
 uses the pcof in the object, and eval_p(control, t, pcof) would mutate the pcof
 in the control object.
 """
-function eval_pt(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
+function eval_pt(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
     return ForwardDiff.derivative(t_dummy -> eval_p(control, t_dummy, pcof), t)
 end
 
-function eval_qt(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
+function eval_qt(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
     return ForwardDiff.derivative(t_dummy -> eval_q(control, t_dummy, pcof), t)
 end
 
-function eval_grad_p(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
+function eval_grad_p(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
     return ForwardDiff.gradient(pcof_dummy -> eval_p(control, t, pcof_dummy), pcof)
 end
 
-function eval_grad_q(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
+function eval_grad_q(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
     return ForwardDiff.gradient(pcof_dummy -> eval_q(control, t, pcof_dummy), pcof)
 end
 
-function eval_grad_pt(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
+function eval_grad_pt(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
     return ForwardDiff.gradient(pcof_dummy -> eval_pt(control, t, pcof_dummy), pcof)
 end
 
-function eval_grad_qt(control::AbstractControl, t::Real, pcof::AbstractVector{Float64})
+function eval_grad_qt(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
     return ForwardDiff.gradient(pcof_dummy -> eval_qt(control, t, pcof_dummy), pcof)
 end
 
@@ -144,7 +144,7 @@ Possibly type instability here, since ForwardDiff.derivative causes p_val to be 
 ForwardDiff.Dual{...} type.
 """
 function eval_p_derivative(control::AbstractControl, t::Real,
-        pcof::AbstractVector{Float64},  order::Int64)
+        pcof::AbstractVector{<: Real},  order::Int64)
 
     p_val = 0.0
     if (order == 0) 
@@ -165,7 +165,7 @@ Arbitrary order version, only ever uses automatic differentiation to get high
 order derivatives.
 """
 function eval_q_derivative(control::AbstractControl, t::Real,
-        pcof::AbstractVector{Float64},  order::Int64)
+        pcof::AbstractVector{<: Real},  order::Int64)
 
     q_val = 0.0
     if (order == 0) 
@@ -208,27 +208,27 @@ struct GradControl{T} <: AbstractControl
     end
 end
 
-function eval_p(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64})
+function eval_p(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real})
     return eval_grad_p(grad_control.original_control, t, pcof)[grad_control.grad_index]
 end
 
-function eval_pt(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64})
+function eval_pt(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real})
     return eval_grad_pt(grad_control.original_control, t, pcof)[grad_control.grad_index]
 end
 
-function eval_q(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64})
+function eval_q(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real})
     return eval_grad_q(grad_control.original_control, t, pcof)[grad_control.grad_index]
 end
 
-function eval_qt(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64})
+function eval_qt(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real})
     return eval_grad_qt(grad_control.original_control, t, pcof)[grad_control.grad_index]
 end
 
-function eval_p_derivative(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+function eval_p_derivative(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     return eval_grad_p_derivative(grad_control.original_control, t, pcof, order)[grad_control.grad_index]
 end
 
-function eval_q_derivative(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+function eval_q_derivative(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     return eval_grad_q_derivative(grad_control.original_control, t, pcof, order)[grad_control.grad_index]
 end
 
@@ -241,19 +241,19 @@ struct TimeDerivativeControl{T} <: AbstractControl
     end
 end
 
-function eval_p(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{Float64})
+function eval_p(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{<: Real})
     return eval_p_derivative(time_derivative_control.original_control, t, pcof, 1)
 end
 
-function eval_q(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{Float64})
+function eval_q(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{<: Real})
     return eval_q_derivative(time_derivative_control.original_control, t, pcof, 1)
 end
 
 
-function eval_p_derivative(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+function eval_p_derivative(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     return eval_p_derivative(time_derivative_control.original_control, t, pcof, order+1)
 end
 
-function eval_q_derivative(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+function eval_q_derivative(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     return eval_q_derivative(time_derivative_control.original_control, t, pcof, order+1)
 end
