@@ -224,6 +224,13 @@ function eval_qt(grad_control::GradControl, t::Real, pcof::AbstractVector{Float6
     return eval_grad_qt(grad_control.original_control, t, pcof)[grad_control.grad_index]
 end
 
+function eval_p_derivative(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+    return eval_grad_p_derivative(grad_control.original_control, t, pcof, order)[grad_control.grad_index]
+end
+
+function eval_q_derivative(grad_control::GradControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+    return eval_grad_q_derivative(grad_control.original_control, t, pcof, order)[grad_control.grad_index]
+end
 
 struct TimeDerivativeControl{T} <: AbstractControl
     N_coeff::Int64
@@ -242,3 +249,11 @@ function eval_q(time_derivative_control::TimeDerivativeControl, t::Real, pcof::A
     return eval_q_derivative(time_derivative_control.original_control, t, pcof, 1)
 end
 
+
+function eval_p_derivative(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+    return eval_p_derivative(time_derivative_control.original_control, t, pcof, order+1)
+end
+
+function eval_q_derivative(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+    return eval_q_derivative(time_derivative_control.original_control, t, pcof, order+1)
+end

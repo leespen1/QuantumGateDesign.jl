@@ -49,6 +49,53 @@ function eval_grad_qt(control::BSplineControl, t::Real, pcof::AbstractVector{Flo
     return gradbcarrier2_dt(t, control.bcpar, 1)
 end
 
+function eval_p_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+    if (order == 0)
+        return eval_p(control, t, pcof)
+    elseif (order == 1)
+        return eval_pt(control, t, pcof)
+    else
+        throw("Order $order too high")
+    end
+
+    return NaN
+end
+
+function eval_q_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+    if (order == 0)
+        return eval_q(control, t, pcof)
+    elseif (order == 1)
+        return eval_qt(control, t, pcof)
+    else
+        throw("Order $order too high")
+    end
+
+    return NaN
+end
+
+function eval_grad_p_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+    if (order == 0)
+        return eval_grad_p(control, t, pcof)
+    elseif (order == 1)
+        return eval_grad_pt(control, t, pcof)
+    else
+        throw("Order $order too high")
+    end
+
+    return NaN
+end
+
+function eval_grad_q_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{Float64}, order::Int64)
+    if (order == 0)
+        return eval_grad_q(control, t, pcof)
+    elseif (order == 1)
+        return eval_grad_qt(control, t, pcof)
+    else
+        throw("Order $order too high")
+    end
+
+    return NaN
+end
 
 #=================================================
 # 
