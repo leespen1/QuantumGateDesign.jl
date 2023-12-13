@@ -8,7 +8,7 @@ Returns: gradient
 """
 function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
         pcof::AbstractVector{Float64}, target::VM; order=2, 
-        cost_type=:Infidelity
+        cost_type=:Infidelity, return_forcing=false
     ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
 
     # Get state vector history
@@ -153,5 +153,135 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
             throw("Invalid cost type: $cost_type")
         end
     end
+
+    if return_forcing
+        return gradient, forcing_ary
+    end
+
+    return gradient
+end
+
+function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls,
+        pcof::AbstractVector{Float64}, target::VM; order=2, 
+        cost_type=:Infidelity, return_forcing=false
+    ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
+
+    dt = prob.tf / prob.nsteps
+
+    # Get state vector history
+    history = eval_forward_arbitrary_order(prob, controls, pcof, order=order)
+
+    ## Compute forcing array (using -i∂H/dθₖ ψ)
+    # Prepare dH/dα
+
+    gradient = zeros(controls.N_coeff)
+
+    N_derivatives = div(order, 2)
+
+    forcing_ary = zeros(prob.real_system_size, N_derivatives, 1+prob.nsteps, size(prob.u0, 2))
+
+    grad_prob = differentiated_prob(prob)
+
+    uv_matrix = zeros(prob.real_system_size, 1+N_derivatives)
+    forcing_matrix = zeros(prob.real_system_size, N_derivatives)
+
+    for control_param_index in 1:controls.N_coeff # Will only work with single control for now
+        # This is bad, want a "global" index, not local. That makes our job
+        # easier, since all controls but one become zero (although we need to
+        # be careful, since we need to pick the correct control hamiltonian
+        # from prob. Having an "apply control" function would be useful here)
+
+        # THIS ONLY WORKS FOR A SINGLE CONTROL PROVIDED
+        grad_control = GradControl(controls, control_param_index)
+        this_pcof = pcof
+        asym_op = prob.asym_operators[1]
+        sym_op = prob.sym_operators[1]
+
+        for initial_condition_index = 1:size(prob.u0, 2)
+            for n in 0:prob.nsteps
+                t = n*dt
+
+                uv_matrix .= history[:, :, 1+n, initial_condition_index]
+
+                for j = 0:(N_derivatives-1)
+                    # Get views of the current derivative we are trying to compute (the j+1th derivative)
+                    u_derivative = view(forcing_matrix, 1:prob.N_tot_levels,                       1+j)
+                    v_derivative = view(forcing_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+j)
+
+                    u_derivative .= 0
+                    v_derivative .= 0
+
+                    # Perform the summation (the above is part of the i=j term in summation, this loop completes that term and the rest)
+                    for i = j:-1:0
+                        #println("j=$j, i=$i, j-i=$(j-i)")
+                        u_derivative_prev = view(uv_matrix, 1:prob.N_tot_levels,                       1+i)
+                        v_derivative_prev = view(uv_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+i)
+
+                        p_val = eval_p_derivative(grad_control, t, this_pcof, j-i) / factorial(j-i)
+                        q_val = eval_q_derivative(grad_control, t, this_pcof, j-i) / factorial(j-i)
+
+                        mul!(u_derivative, asym_op, u_derivative_prev, q_val, 1)
+                        mul!(u_derivative, sym_op,  v_derivative_prev, p_val, 1)
+
+                        mul!(v_derivative, asym_op, v_derivative_prev, q_val,  1)
+                        mul!(v_derivative, sym_op,  u_derivative_prev, -p_val, 1)
+                    end
+
+                    mul!(u_derivative, u_derivative, 1/(j+1))
+                    mul!(v_derivative, v_derivative, 1/(j+1))
+                end
+
+
+                forcing_ary[:,:,1+n, initial_condition_index] .= forcing_matrix
+            end
+
+        end
+
+        # Based on old method, I think I can do supply forcing to
+        # evale_derivative_uv, but I will need to do a second call to
+        # eval_derivative_uv with the next time forcing, and feed that to an
+        # arbitrary_LHS and then subtract from the RHS.
+        #
+        # I'm trying to think if this case is special, because Fortino's work
+        # doesn't use forcing at next timestep. But he may be wrong (or, it's
+        # just different because of how the adjoint equation works)
+
+        final_state = history[:, 1, end, :]
+        final_state_partial_derivative = zeros(size(final_state)...)
+
+        timediff_prob = time_diff_prob(prob) # Set initial condition to zeros
+        #timediff_prob = copy(prob) # Set initial condition to zeros
+
+
+        history_partial_derivative = eval_forward_arbitrary_order(
+            timediff_prob, controls, pcof, forcing=forcing_ary,
+            order=order
+        )
+
+        final_state_partial_derivative = history_partial_derivative[:, 1, end, :]
+        
+        display(history_partial_derivative)
+
+
+        R = copy(target)
+        T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
+
+        if cost_type == :Infidelity
+            gradient[control_param_index]  = dot(final_state, R)*dot(final_state_partial_derivative, R)
+            gradient[control_param_index] += dot(final_state, T)*dot(final_state_partial_derivative, T)
+            gradient[control_param_index] *= -(2/(prob.N_ess_levels^2))
+        elseif cost_type == :Tracking
+            gradient[control_param_index] = dot(final_state_partial_derivative, final_state - target)
+        elseif cost_type == :Norm
+            gradient[control_param_index] = dot(final_state_partial_derivative, final_state)
+        else
+            throw("Invalid cost type: $cost_type")
+        end
+    end
+
+    if return_forcing
+        return gradient, forcing_ary
+    end
+
     return gradient
 end
