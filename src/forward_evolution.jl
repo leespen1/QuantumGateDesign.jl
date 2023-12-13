@@ -570,8 +570,14 @@ function eval_forward_arbitrary_order!(uv_history::AbstractArray{Float64, 3},
     # Allocate a matrix for storing the forcing at a single point in time (if we have forcing)
     if ismissing(forcing)
         forcing_mat = missing
+        forcing_next_time_mat = missing
+        forcing_helper_mat = missing
+        forcing_helper_vec = missing
     else
         forcing_mat = zeros(prob.real_system_size, N_derivatives)
+        forcing_next_time_mat = zeros(prob.real_system_size, N_derivatives)
+        forcing_helper_mat = zeros(prob.real_system_size, 1+N_derivatives)
+        forcing_helper_vec = zeros(prob.real_system_size)
     end
 
     # This probably creates type-instability, as functions have singleton types, 
@@ -602,15 +608,22 @@ function eval_forward_arbitrary_order!(uv_history::AbstractArray{Float64, 3},
             forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n)
         end
 
-        arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives)
+        arbitrary_order_uv_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives, forcing_matrix=forcing_mat)
         uv_history[:, :, 1+n] .= uv_mat
         arbitrary_RHS!(RHS, uv_mat, dt, N_derivatives)
 
 
+
         # Use GMRES to perform the timestep (implicit part)
         t = (n+1)*dt
-        if !ismissing(forcing_mat)
-            forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n+1)
+
+        # Account for forcing from next timestep
+        if !ismissing(forcing_next_time_mat)
+            forcing_next_time_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n+1)
+            forcing_helper_mat .= 0
+            arbitrary_order_uv_derivative!(forcing_helper_mat, prob, controls, t, pcof, N_derivatives, forcing_matrix=forcing_next_time_mat)
+            arbitrary_LHS!(forcing_helper_vec, forcing_helper_mat, dt, N_derivatives)
+            axpy!(-1.0, forcing_helper_vec, RHS)
         end
 
         uv_vec .= view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
@@ -813,5 +826,17 @@ function eval_adjoint_arbitrary_order!(uv_history::AbstractArray{Float64, 4},
             this_uv_history, vector_prob, controls, pcof, terminal_condition_vec, order=order, forcing=this_forcing
         )
     end
+end
+
+function convert_old_ordering_to_new(old_array::AbstractArray{Float64, 4})
+    N_components, N_times, N_derivatives, N_init_cond = size(old_array)
+    new_array = Array{Float64, 4}(undef, N_components, N_derivatives, N_times, N_init_cond)
+    for time_i in 1:N_times
+        for derivative_i = 1:N_derivatives
+            new_array[:, derivative_i, time_i, :] .= old_array[:, time_i, derivative_i, :]
+        end
+    end
+
+    return new_array
 end
 
