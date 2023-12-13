@@ -229,8 +229,7 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
                         mul!(v_derivative, sym_op,  u_derivative_prev, -p_val, 1)
                     end
 
-                    mul!(u_derivative, u_derivative, 1/(j+1))
-                    mul!(v_derivative, v_derivative, 1/(j+1))
+                    # We do not need to divide by (j+1), the factorials are already in uv_matrix
                 end
 
                 forcing_ary[:,:,1+n, initial_condition_index] .= forcing_matrix
@@ -271,7 +270,7 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
     end
 
     if return_forcing
-        return gradient, forcing_ary
+        return gradient, permutedims(forcing_ary, (1,3,2,4))
     end
 
     return gradient
