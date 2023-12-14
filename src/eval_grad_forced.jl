@@ -178,9 +178,13 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
     diff_prob.u0 .= 0
     diff_prob.v0 .= 0
 
+    R = copy(target)
+    T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
 
     # Get state vector history
     history = eval_forward_arbitrary_order(prob, controls, pcof, order=order)
+    final_state = history[:, 1, end, :]
+
 
 
     # For storing the global forcing array
@@ -213,7 +217,8 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
                 q_vals[1+derivative_i, 1+n, :] .= eval_grad_q_derivative(local_control, t, local_pcof, derivative_i)
             end
         end
-
+        println("local_pcof[1] = $(local_pcof[1])")
+        display(p_vals[:,:,1])
 
 
         for local_control_param_index in 1:local_N_coeff
@@ -224,13 +229,12 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
 
                     uv_matrix .= history[:, :, 1+n, initial_condition_index]
 
+                    forcing_matrix .= 0
+
                     for j = 0:(N_derivatives-1)
                         # Get views of the current derivative we are trying to compute (the j+1th derivative)
                         u_derivative = view(forcing_matrix, 1:prob.N_tot_levels,                       1+j)
                         v_derivative = view(forcing_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+j)
-
-                        u_derivative .= 0
-                        v_derivative .= 0
 
                         # Perform the summation (the above is part of the i=j term in summation, this loop completes that term and the rest)
                         for i = j:-1:0
@@ -238,8 +242,8 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
                             u_derivative_prev = view(uv_matrix, 1:prob.N_tot_levels,                       1+i)
                             v_derivative_prev = view(uv_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+i)
 
-                            p_val = p_vals[1+j-i,1+n, local_control_param_index] / factorial(j-i)
-                            q_val = q_vals[1+j-i,1+n, local_control_param_index] / factorial(j-i)
+                            p_val = p_vals[1+j-i, 1+n, local_control_param_index] / factorial(j-i)
+                            q_val = q_vals[1+j-i, 1+n, local_control_param_index] / factorial(j-i)
 
                             mul!(u_derivative, asym_op, u_derivative_prev, q_val, 1)
                             mul!(u_derivative, sym_op,  v_derivative_prev, p_val, 1)
@@ -256,7 +260,6 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
                 end
             end
 
-            final_state = history[:, 1, end, :]
 
             # Compute the state history of ∂ψ/∂θₖ
             history_partial_derivative = eval_forward_arbitrary_order(
@@ -267,9 +270,6 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
             final_state_partial_derivative = history_partial_derivative[:, 1, end, :]
             
             # Compute the partial derivative of the objective function with respect to θₖ
-            R = copy(target)
-            T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
-
             if cost_type == :Infidelity
                 gradient[global_control_param_index]  = dot(final_state, R)*dot(final_state_partial_derivative, R)
                 gradient[global_control_param_index] += dot(final_state, T)*dot(final_state_partial_derivative, T)
