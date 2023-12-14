@@ -187,6 +187,16 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
     # For storing the per-timestep state vector and derivatives
     uv_matrix = zeros(prob.real_system_size, 1+N_derivatives)
 
+    p_vals = zeros(1+N_derivatives, 1+prob.nsteps, controls.N_coeff)
+    q_vals = zeros(1+N_derivatives, 1+prob.nsteps, controls.N_coeff)
+    for n in 0:prob.nsteps+1
+        t = n*dt
+        for derivative_i in 0:N_derivatives
+            p_vals[1+derivative_i, 1+n, :] .= eval_grad_p_derivative(control, t, pcof, derivative_i)
+            q_vals[1+derivative_i, 1+n, :] .= eval_grad_q_derivative(control, t, pcof, derivative_i)
+        end
+    end
+
     for control_param_index in 1:controls.N_coeff # Will only work with single control for now
         # This is bad, want a "global" index, not local. That makes our job
         # easier, since all controls but one become zero (although we need to
@@ -219,8 +229,10 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
                         u_derivative_prev = view(uv_matrix, 1:prob.N_tot_levels,                       1+i)
                         v_derivative_prev = view(uv_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+i)
 
-                        p_val = eval_p_derivative(grad_control, t, this_pcof, j-i) / factorial(j-i)
-                        q_val = eval_q_derivative(grad_control, t, this_pcof, j-i) / factorial(j-i)
+                        #p_val = eval_p_derivative(grad_control, t, this_pcof, j-i) / factorial(j-i)
+                        #q_val = eval_q_derivative(grad_control, t, this_pcof, j-i) / factorial(j-i)
+                        p_val = p_vals[1+j-i,1+n, control_param_index] / factorial(j-i)
+                        q_val = q_vals[1+j-i,1+n, control_param_index] / factorial(j-i)
 
                         mul!(u_derivative, asym_op, u_derivative_prev, q_val, 1)
                         mul!(u_derivative, sym_op,  v_derivative_prev, p_val, 1)
@@ -230,6 +242,7 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
                     end
 
                     # We do not need to divide by (j+1), the factorials are already in uv_matrix
+                    # TODO : Is that the reason? Or is it something else?
                 end
 
                 forcing_ary[:,:,1+n, initial_condition_index] .= forcing_matrix
