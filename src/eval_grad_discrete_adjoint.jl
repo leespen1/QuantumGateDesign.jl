@@ -334,8 +334,9 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1+n)
             t = n*dt
 
-            p_val = eval_p(control, t, this_pcof)
-            q_val = eval_q(control, t, this_pcof)
+            #FIXME THIS IS THE PROBLEM!!! I was write to use product rule, but
+            #the hamiltonians which do not have partial derivatives taken
+            #should use ALL controls.
 
             grad_p  = eval_grad_p(control,  t, this_pcof)
             grad_q  = eval_grad_q(control,  t, this_pcof)
@@ -367,8 +368,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             # Apply Hamiltonian
             utvt!(
                 ut, vt, u, v, 
-                prob.system_sym, prob.system_asym, sym_op, asym_op,
-                p_val, q_val
+                prob, controls, t, pcof
             )
             # Do matrix part of ∂H/∂θₖ, so I can "factor out" the scalar function
             mul!(sym_op_ut, sym_op, ut)
@@ -386,11 +386,10 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             mul!(asym_op_u, asym_op, u)
             mul!(asym_op_v, asym_op, v)
 
-            # ut and vt are not actuall holding ut and vt.
+            # ut and vt are not actually holding ut and vt.
             utvt!(
                 ut, vt, asym_op_u, asym_op_v, 
-                prob.system_sym, prob.system_asym, sym_op, asym_op,
-                p_val, q_val
+                prob, controls, t, pcof
             )
             grad_contrib .+= grad_q .* weights_n[2]*dot(ut, lambda_u)
             grad_contrib .+= grad_q .* weights_n[2]*dot(vt, lambda_v)
@@ -406,8 +405,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             # may have misfactored
             utvt!(
                 ut, vt, sym_op_v, sym_op_u, 
-                prob.system_sym, prob.system_asym, sym_op, asym_op,
-                p_val, q_val
+                prob, controls, t, pcof
             )
             grad_contrib .+= grad_p .* weights_n[2]*dot(ut, lambda_u)
             grad_contrib .+= grad_p .* weights_n[2]*dot(vt, lambda_v)
@@ -421,8 +419,6 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1+n+1)
             t = (n+1)*dt
 
-            p_val = eval_p(control, t, this_pcof)
-            q_val = eval_q(control, t, this_pcof)
             grad_p  = eval_grad_p(control,  t, this_pcof)
             grad_q  = eval_grad_q(control,  t, this_pcof)
             grad_pt = eval_grad_pt(control, t, this_pcof)
@@ -453,8 +449,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             # Apply Hamiltonian
             utvt!(
                 ut, vt, u, v, 
-                prob.system_sym, prob.system_asym, sym_op, asym_op,
-                p_val, q_val
+                prob, controls, t, pcof
             )
             # Do matrix part of ∂H/∂θₖ, so I can "factor out" the scalar function
             mul!(sym_op_ut, sym_op, ut)
@@ -475,8 +470,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             # ut and vt are not actuall holding ut and vt.
             utvt!(
                 ut, vt, asym_op_u, asym_op_v, 
-                prob.system_sym, prob.system_asym, sym_op, asym_op,
-                p_val, q_val
+                prob, controls, t, pcof
             )
             grad_contrib .+= grad_q .* weights_np1[2]*dot(ut, lambda_u)
             grad_contrib .+= grad_q .* weights_np1[2]*dot(vt, lambda_v)
@@ -492,8 +486,7 @@ function disc_adj_calc_grad_order_4!(gradient::AbstractVector{Float64}, prob::Sc
             # may have misfactored
             utvt!(
                 ut, vt, sym_op_v, sym_op_u, 
-                prob.system_sym, prob.system_asym, sym_op, asym_op,
-                p_val, q_val
+                prob, controls, t, pcof
             )
             grad_contrib .+= grad_p .* weights_np1[2]*dot(ut, lambda_u)
             grad_contrib .+= grad_p .* weights_np1[2]*dot(vt, lambda_v)
