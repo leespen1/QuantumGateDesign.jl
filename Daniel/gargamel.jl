@@ -168,8 +168,8 @@ function HIT_solve(nt,nt_ctrl,m ; d=6, N_guard=1)
     # find the normalized local coordinate (between -1/2 and 1/2)
     for it = 0:nt
         t = it*dt
-        t_ctrl = (idx_ctrl[1+it]-0.5)*dt_ctrl
-        tloc_ctrl[1+it] = (t-t_ctrl)/dt_ctrl
+        t_ctrl = (idx_ctrl[1+it]-0.5)*dt_ctrl # The time at the center of the interval
+        tloc_ctrl[1+it] = (t-t_ctrl)/dt_ctrl  # The time in normalized local coordinates (t_ctrl = 0)
     end
     # memory for local expansions
     q_tay = zeros(m+1)
