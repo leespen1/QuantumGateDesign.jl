@@ -146,7 +146,8 @@ ForwardDiff.Dual{...} type.
 function eval_p_derivative(control::AbstractControl, t::Real,
         pcof::AbstractVector{<: Real},  order::Int64)
 
-    p_val = 0.0
+    p_val = NaN
+
     if (order == 0) 
         p_val = eval_p(control, t, pcof)
     elseif (order > 0)
@@ -167,7 +168,8 @@ order derivatives.
 function eval_q_derivative(control::AbstractControl, t::Real,
         pcof::AbstractVector{<: Real},  order::Int64)
 
-    q_val = 0.0
+    q_val = NaN
+
     if (order == 0) 
         q_val = eval_q(control, t, pcof)
     elseif (order > 0)
@@ -181,6 +183,18 @@ function eval_q_derivative(control::AbstractControl, t::Real,
     return q_val
 end
 
+function eval_grad_p_derivative(control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real},  order::Int64)
+
+    return ForwardDiff.gradient(pcof_dummy -> eval_p_derivative(control, t, pcof_dummy, order), pcof)
+end
+
+
+function eval_grad_q_derivative(control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real},  order::Int64)
+
+    return ForwardDiff.gradient(pcof_dummy -> eval_q_derivative(control, t, pcof_dummy, order), pcof)
+end
 #===============================================================================
 # 
 # Helper types for use in forced gradient method.
