@@ -4,6 +4,8 @@ Julia package for quantum optimal control using Hermite methods.
 Documentation located at: https://leespen1.github.io/HermiteOptimalControl.jl/dev/
 
 ## To Do
+- [ ] Fix automatic differentiation for gradients (pcof needs to be
+      AbstractVector{<: Real}, which probably means bad type stability)
 - [X] Update forced gradient method to work with new control scheme.
 - [.] Update tests
 - [ ] Implement guard level population penalty
