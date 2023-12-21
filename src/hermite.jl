@@ -39,7 +39,7 @@ Multiple control version
 function utvt!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         prob::SchrodingerProb, controls,
-        t::Float64, pcof::AbstractVector{Float64})
+        t::Float64, pcof::AbstractVector{<: Real})
 
     # Non-Memory-Allocating Version (test performance)
     # ut = (Ss + q(t)(a-a†))u + (Ks + p(t)(a+a†))v
@@ -78,7 +78,7 @@ do
 function utvt_adj!(ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         prob::SchrodingerProb, controls,
-        t::Float64, pcof::AbstractVector{Float64})
+        t::Float64, pcof::AbstractVector{<: Real})
 
     # System / Drift Part of Hamiltonian
     mul!(ut, prob.system_asym, u)
@@ -146,7 +146,7 @@ function uttvtt!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         prob::SchrodingerProb, controls,
-        t::Float64, pcof::AbstractVector{Float64})
+        t::Float64, pcof::AbstractVector{<: Real})
 
     # Calculate H²ψ
     utvt!(utt, vtt, ut, vt, prob, controls, t, pcof)
@@ -175,7 +175,7 @@ function utttvttt!(
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         prob::SchrodingerProb, controls,
-        t::Float64, pcof::AbstractVector{Float64})
+        t::Float64, pcof::AbstractVector{<: Real})
 
     utvt!(uttt, vttt, utt, vtt, prob, controls, t, pcof)
 
@@ -217,7 +217,7 @@ function uttvtt_adj!(utt::AbstractVector{Float64}, vtt::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         prob::SchrodingerProb, controls,
-        t::Float64, pcof::AbstractVector{Float64})
+        t::Float64, pcof::AbstractVector{<: Real})
 
     # Calculate H²ψ
     utvt_adj!(utt, vtt, ut, vt, prob, controls, t, pcof)
@@ -251,7 +251,7 @@ this method.
 
 """
 function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
-        prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{Float64},
+        prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{<: Real},
         N_derivatives::Int64; use_adjoint::Bool=false,
         forcing_matrix::Union{AbstractMatrix{Float64}, Missing}=missing
     )
@@ -307,8 +307,8 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
 
         # I believe checking like this means that if-block will be compiled out when no forcing matrix is given
         if !ismissing(forcing_matrix)
-            # TODO: Replace addition with axpy!
-            uv_matrix[:, 1+j+1] .+= view(forcing_matrix, 1:prob.real_system_size, 1+j)
+            axpy!(1.0, view(forcing_matrix, 1:prob.N_tot_levels,                       1+j), u_derivative)
+            axpy!(1.0, view(forcing_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+j), v_derivative)
         end
 
         mul!(u_derivative, u_derivative, 1/(j+1))
@@ -319,6 +319,85 @@ function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
     return nothing
 end
 
+"""
+Non-BLAS Version (so that automatic differentiation works on it)
+
+Turns out it's even tougher, I can't have functions that mutate the inputs
+(maybe mutating arrays allocated in the function itself is OK)
+"""
+function arbitrary_order_uv_derivative_noBLAS(uv_in::AbstractVector{Float64},
+        prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{<: Real},
+        N_derivatives::Int64; use_adjoint::Bool=false,
+        forcing_matrix::Union{AbstractMatrix{Float64}, Missing}=missing
+    )
+
+    uv_matrix = zeros(prob.real_system_size, 1+N_derivatives)
+    uv_matrix[:,1] .= uv_in
+
+    if (N_derivatives < 1)
+        throw(ArgumentError("Non positive N_derivatives supplied."))
+    end
+
+    adjoint_factor = use_adjoint ? -1 : 1
+
+
+    for j = 0:(N_derivatives-1)
+        # Get views of the current derivative we are trying to compute (the j+1th derivative)
+
+        u_derivative = zeros(prob.N_tot_levels)
+        v_derivative = zeros(prob.N_tot_levels)
+
+        # Get views of one of the previous derivatives (at first, the derivative just before the current one)
+        u_derivative_prev = uv_matrix[1:prob.N_tot_levels,                       1+j]
+        v_derivative_prev = uv_matrix[prob.N_tot_levels+1:prob.real_system_size, 1+j]
+
+        # In (15), only i=j has the system operators present, others are only
+        # control operators. So system operators are handled outside the loop.
+        u_derivative += (prob.system_asym*u_derivative_prev)*adjoint_factor
+        u_derivative += (prob.system_sym*v_derivative_prev)*adjoint_factor
+
+        v_derivative += (prob.system_asym*v_derivative_prev)*adjoint_factor
+        v_derivative -= (prob.system_sym*u_derivative_prev)*adjoint_factor
+
+
+        # Perform the summation (the above is part of the i=j term in summation, this loop completes that term and the rest)
+        for i = j:-1:0
+            u_derivative_prev = view(uv_matrix, 1:prob.N_tot_levels,                       1+i)
+            v_derivative_prev = view(uv_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+i)
+
+            for k in 1:prob.N_operators
+                control = controls[k]
+                sym_op = prob.sym_operators[k]
+                asym_op = prob.asym_operators[k]
+                this_pcof = get_control_vector_slice(pcof, controls, k)
+
+                p_val = eval_p_derivative(control, t, this_pcof, j-i) / factorial(j-i)
+                q_val = eval_q_derivative(control, t, this_pcof, j-i) / factorial(j-i)
+
+                u_derivative += (asym_op*u_derivative_prev)*adjoint_factor*q_val
+                u_derivative += (sym_op*v_derivative_prev)*adjoint_factor*p_val
+
+                v_derivative += (asym_op*v_derivative_prev)*adjoint_factor*q_val
+                v_derivative -= (sym_op*u_derivative_prev)*adjoint_factor*p_val
+            end
+        end
+
+
+        u_derivative ./= (j+1)
+        v_derivative ./= (j+1)
+
+        uv_matrix[1:prob.N_tot_levels,                       1+j+1] = u_derivative
+        uv_matrix[prob.N_tot_levels+1:prob.real_system_size, 1+j+1] = v_derivative
+
+        # I believe checking like this means that if-block will be compiled out when no forcing matrix is given
+        if !ismissing(forcing_matrix)
+            uv_matrix[:, 1+j+1] += forcing_matrix[1:prob.real_system_size, 1+j]
+        end
+    end
+    #println("\n")
+    
+    return nothing
+end
 """
 Apply control to uv_in, ADD result to uv_out
 """
@@ -354,6 +433,20 @@ function arbitrary_RHS!(RHS::AbstractVector{Float64}, uv_matrix::AbstractMatrix{
     end
 end
 
+"""
+Non-mutating version
+"""
+function arbitrary_RHS(uv_matrix::AbstractMatrix{Float64},
+        dt::Real, N_derivatives::Int64)
+
+    system_size = size(uv_matrix, 1)
+    RHS = zeros(system_size)
+
+    for j in 0:N_derivatives
+        RHS += coefficient(j,N_derivatives, N_derivatives) * (dt^j) * view(uv_matrix, 1:system_size, 1+j)
+    end
+end
+
 function arbitrary_LHS!(LHS::AbstractVector{Float64}, uv_matrix::AbstractMatrix{Float64},
         dt::Real, N_derivatives::Int64)
 
@@ -362,7 +455,21 @@ function arbitrary_LHS!(LHS::AbstractVector{Float64}, uv_matrix::AbstractMatrix{
 
     LHS .= 0.0
     for j in 0:N_derivatives
-        LHS .+= (-1)^j .* coefficient(j,N_derivatives,N_derivatives) .* (dt^j) .* view(uv_matrix, 1:system_size, 1+j)
+        LHS .+= (-1)^j .* coefficient(j,N_derivatives, N_derivatives) .* (dt^j) .* view(uv_matrix, 1:system_size, 1+j)
+    end
+end
+
+"""
+Non-mutating version
+"""
+function arbitrary_LHS(uv_matrix::AbstractMatrix{Float64},
+        dt::Real, N_derivatives::Int64)
+
+    system_size = size(uv_matrix, 1)
+    LHS = zeros(system_size)
+
+    for j in 0:N_derivatives
+        LHS += (-1)^j * coefficient(j,N_derivatives, N_derivatives) * (dt^j) * view(uv_matrix, 1:system_size, 1+j)
     end
 end
 
@@ -398,7 +505,7 @@ function LHS_func!(LHS_uv::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         prob::SchrodingerProb, controls,
-        t::Float64, pcof::AbstractVector{Float64},
+        t::Float64, pcof::AbstractVector{<: Real},
         dt::Float64, N_tot::Int64)
 
     utvt!(ut, vt, u, v, prob, controls, t, pcof)
@@ -418,7 +525,7 @@ function LHS_func_adj!(LHS_uv::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         prob::SchrodingerProb, controls,
-        t::Float64, pcof::AbstractVector{Float64},
+        t::Float64, pcof::AbstractVector{<: Real},
         dt::Float64, N_tot::Int64)
 
     utvt_adj!(ut, vt, u, v, prob, controls, t, pcof)
@@ -440,7 +547,7 @@ function LHS_func_order4!(LHS_uv::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         prob::SchrodingerProb, controls,
-        t::Float64, pcof::AbstractVector{Float64},
+        t::Float64, pcof::AbstractVector{<: Real},
         dt::Float64, N_tot::Int64)
 
     utvt!(ut, vt, u, v, prob, controls, t, pcof)
@@ -467,7 +574,7 @@ function LHS_func_order4_adj!(LHS_uv::AbstractVector{Float64},
         ut::AbstractVector{Float64}, vt::AbstractVector{Float64},
         u::AbstractVector{Float64}, v::AbstractVector{Float64},
         prob::SchrodingerProb, controls,
-        t::Float64, pcof::AbstractVector{Float64},
+        t::Float64, pcof::AbstractVector{<: Real},
         dt::Float64, N_tot::Int64)
 
     utvt_adj!(ut, vt, u, v, prob, controls, t, pcof)

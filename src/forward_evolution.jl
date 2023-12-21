@@ -2,7 +2,7 @@
 """
 function eval_forward(
         prob::SchrodingerProb, controls,
-        pcof::AbstractVector{Float64}; order=2, return_time_derivatives=false
+        pcof::AbstractVector{<: Real}; order=2, return_time_derivatives=false
     )
 
     #=
@@ -25,7 +25,7 @@ Evolve a single initial condition (vector).
 """
 function eval_forward_order2(
         prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{Float64}; return_time_derivatives=false
+        pcof::AbstractVector{<: Real}; return_time_derivatives=false
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     
     t::Float64 = 0.0
@@ -114,7 +114,7 @@ Evolve a matrix where each column is an iniital condition.
 """
 function eval_forward_order2(
         prob::SchrodingerProb{M1, M2}, controls,
-        pcof::AbstractVector{Float64}; return_time_derivatives=false
+        pcof::AbstractVector{<: Real}; return_time_derivatives=false
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     uv_history = Array{Float64}(undef, prob.real_system_size, 1+prob.nsteps, prob.N_ess_levels)
@@ -151,7 +151,7 @@ Evolve a single initial condition (vector).
 """
 function eval_forward_order4(
         prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{Float64}; return_time_derivatives=false
+        pcof::AbstractVector{<: Real}; return_time_derivatives=false
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     t = 0.0
@@ -242,7 +242,7 @@ end
 
 function eval_forward_order4(
         prob::SchrodingerProb{M1, M2}, controls,
-        pcof::AbstractVector{Float64}; return_time_derivatives=false
+        pcof::AbstractVector{<: Real}; return_time_derivatives=false
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_init_cond = size(prob.u0,2)
@@ -275,7 +275,7 @@ end
 
 function eval_forward_forced(
         prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{Float64}, forcing_ary; order=2
+        pcof::AbstractVector{<: Real}, forcing_ary; order=2
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
     if order == 2
         return eval_forward_forced_order2(prob, controls, pcof, forcing_ary)
@@ -482,14 +482,15 @@ end
 
 function eval_forward_arbitrary_order(
         prob::SchrodingerProb{M1, M2}, controls,
-        pcof::AbstractVector{Float64}; order::Int=2,
-        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing
+        pcof::AbstractVector{<: Real}; order::Int=2,
+        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
+        noBLAS=false
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_derivatives = div(order, 2)
     uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_ess_levels)
 
-    eval_forward_arbitrary_order!(uv_history, prob, controls, pcof, order=order, forcing=forcing)
+    eval_forward_arbitrary_order!(uv_history, prob, controls, pcof, order=order, forcing=forcing, noBLAS=noBLAS)
 
     return uv_history
 end
@@ -497,8 +498,9 @@ end
 
 function eval_forward_arbitrary_order!(uv_history::AbstractArray{Float64, 4},
         prob::SchrodingerProb{M1, M2}, controls,
-        pcof::AbstractVector{Float64}; order::Int=2,
-        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing
+        pcof::AbstractVector{<: Real}; order::Int=2,
+        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
+        noBLAS=false
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_derivatives = div(order, 2)
@@ -518,9 +520,15 @@ function eval_forward_arbitrary_order!(uv_history::AbstractArray{Float64, 4},
             this_forcing = @view forcing[:, :, :, initial_condition_index]
         end
 
-        eval_forward_arbitrary_order!(
-            this_uv_history, vector_prob, controls, pcof, order=order, forcing=this_forcing
-        )
+        if noBLAS
+            eval_forward_arbitrary_order_noBLAS!(
+                this_uv_history, vector_prob, controls, pcof, order=order, forcing=this_forcing
+            )
+        else 
+            eval_forward_arbitrary_order!(
+                this_uv_history, vector_prob, controls, pcof, order=order, forcing=this_forcing
+            )
+        end
     end
 end
 
@@ -542,7 +550,7 @@ I plan to make an adjoint version of this.
 """
 function eval_forward_arbitrary_order!(uv_history::AbstractArray{Float64, 3},
         prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{Float64}; order::Int=2,
+        pcof::AbstractVector{<: Real}; order::Int=2,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
@@ -649,8 +657,9 @@ derivative to be taken, and the third index corresponds to the timestep number.
 """
 function eval_forward_arbitrary_order(
         prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{Float64}; order::Int=2,
-        forcing::Union{AbstractArray{Float64, 3}, Missing}=missing
+        pcof::AbstractVector{<: Real}; order::Int=2,
+        forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
+        noBLAS=false
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     N_derivatives = div(order, 2)
@@ -658,7 +667,11 @@ function eval_forward_arbitrary_order(
     # Allocate memory for storing u,v, and their derivatives over all points in time
     uv_history = Array{Float64, 3}(undef, prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
 
-    eval_forward_arbitrary_order!(uv_history, prob, controls, pcof, order=order, forcing=forcing)
+    if noBLAS
+        eval_forward_arbitrary_order_noBLAS!(uv_history, prob, controls, pcof, order=order, forcing=forcing)
+    else
+        eval_forward_arbitrary_order!(uv_history, prob, controls, pcof, order=order, forcing=forcing)
+    end
 
     return uv_history
 end
@@ -672,7 +685,7 @@ derivative to be taken, and the third index corresponds to the timestep number.
 """
 function eval_adjoint_arbitrary_order(
         prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{Float64}, terminal_condition::AbstractVector{Float64}
+        pcof::AbstractVector{<: Real}, terminal_condition::AbstractVector{Float64}
         ; order::Int=2,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
@@ -690,7 +703,7 @@ end
 
 function eval_adjoint_arbitrary_order!(uv_history::AbstractArray{Float64, 3},
         prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{Float64}, terminal_condition::AbstractVector{Float64}
+        pcof::AbstractVector{<: Real}, terminal_condition::AbstractVector{Float64}
         ; order::Int=2,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
@@ -781,7 +794,7 @@ end
 
 function eval_adjoint_arbitrary_order(
         prob::SchrodingerProb{M1, M2}, controls,
-        pcof::AbstractVector{Float64}, terminal_condition::AbstractMatrix{Float64}
+        pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64}
         ; order::Int=2,
         forcing::Union{AbstractArray{Float64, 4}, Missing}=missing
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
@@ -797,7 +810,7 @@ end
 
 function eval_adjoint_arbitrary_order!(uv_history::AbstractArray{Float64, 4},
         prob::SchrodingerProb{M1, M2}, controls,
-        pcof::AbstractVector{Float64}, terminal_condition::AbstractMatrix{Float64}
+        pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64}
         ; order::Int=2,
         forcing::Union{AbstractArray{Float64, 4}, Missing}=missing
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
@@ -836,5 +849,103 @@ function convert_old_ordering_to_new(old_array::AbstractArray{Float64, 4})
     end
 
     return new_array
+end
+
+"""
+Version of forward evalutation which does not use BLAS and never uses functions
+which mutate the arguments. This is to make it compatible with automatic
+differentiation, which requires that all functions be "pure."
+"""
+function eval_forward_arbitrary_order_noBLAS(uv_history::AbstractArray{Float64, 3},
+        prob::SchrodingerProb{M, V}, controls,
+        pcof::AbstractVector{<: Real}; order::Int=2,
+        forcing::Union{AbstractArray{Float64, 3}, Missing}=missing
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
+
+    
+    t = 0.0
+    dt = prob.tf/prob.nsteps
+    N_derivatives = div(order, 2)
+
+    # Check size of uv_history storage
+    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
+
+    # Allocate memory for storing u,v, and their derivatives at a single point in time
+    uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
+    uv_mat[1:prob.N_tot_levels, 1] = prob.u0
+    uv_mat[prob.N_tot_levels+1:prob.real_system_size, 1] = prob.v0
+
+    uv_history[:, :, 1] = uv_mat
+
+    zero_vec = zeros(prob.real_system_size)
+
+    # Allocate a matrix for storing the forcing at a single point in time (if we have forcing)
+    if ismissing(forcing)
+        forcing_mat = missing
+        forcing_next_time_mat = missing
+        forcing_helper_mat = missing
+        forcing_helper_vec = missing 
+    else
+        forcing_mat = zeros(prob.real_system_size, N_derivatives)
+        forcing_next_time_mat = zeros(prob.real_system_size, N_derivatives)
+        forcing_helper_mat = zeros(prob.real_system_size, 1+N_derivatives) # For computing derivatives of forcing at next timestep
+        forcing_helper_vec = zeros(prob.real_system_size) # For subtracting LHS forcing terms from the RHS (since they are explicit)
+    end
+
+    # This probably creates type-instability, as functions have singleton types, 
+    # and this function is (I'm pretty sure) not created until runtime
+    #
+    # Create wrapper for computing action of LHS on uvₙ₊₁ at each timestep (to be compatible with LinearMaps)
+    function LHS_func_wrapper(uv_in::AbstractVector{Float64})
+        uv_mat = arbitrary_order_uv_derivative_noBLAS(uv_in, prob, controls, t, pcof, N_derivatives)
+        return arbitrary_LHS(uv_mat, dt, N_derivatives)
+    end
+
+    # Create linear map out of LHS_func_wrapper, to use in GMRES
+    LHS_map = LinearMaps.LinearMap(
+        LHS_func_wrapper,
+        prob.real_system_size, prob.real_system_size,
+        ismutating=false
+    )
+
+    # Perform the timesteps
+    for n in 0:prob.nsteps-1
+
+        # Compute the RHS (explicit part)
+        t = n*dt
+        if !ismissing(forcing_mat)
+            forcing_mat = view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n)
+        end
+
+        arbitrary_order_uv_derivative_noBLAS(uv_mat, prob, controls, t, pcof, N_derivatives, forcing_matrix=forcing_mat)
+        uv_history[:, :, 1+n] = uv_mat
+        RHS = arbitrary_RHS(uv_mat, dt, N_derivatives)
+
+
+        # Use GMRES to perform the timestep (implicit part)
+        t = (n+1)*dt
+
+        # Account for forcing from next timestep
+        if !ismissing(forcing_next_time_mat)
+            forcing_next_time_mat = view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n+1)
+            forcing_helper_mat = arbitrary_order_uv_derivative_noBLAS(zero_vec, prob, controls, t, pcof, N_derivatives, forcing_matrix=forcing_next_time_mat)
+            LHS = arbitrary_LHS(forcing_helper_mat, dt, N_derivatives)
+            RHS -= LHS
+        end
+
+        uv_vec = view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
+        uv_vec = IterativeSolvers.gmres(LHS_map, RHS, abstol=1e-15, reltol=1e-15) # This may not work, since gmres allocates a vector which is updated in place
+        uv_mat[:,1] = uv_vec
+    end
+
+    # Compute the derivatives of uv at the final time and store them
+    t = prob.nsteps*dt
+    if !ismissing(forcing_mat)
+        forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+prob.nsteps)
+    end
+    arbitrary_order_uv_derivative_noBLAS!(uv_mat, prob, controls, t, pcof, N_derivatives)
+    uv_history[:, :, 1+prob.nsteps] .= uv_mat
+
+    return nothing
 end
 
