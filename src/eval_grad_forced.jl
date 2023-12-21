@@ -217,8 +217,6 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
                 q_vals[1+derivative_i, 1+n, :] .= eval_grad_q_derivative(local_control, t, local_pcof, derivative_i)
             end
         end
-        println("local_pcof[1] = $(local_pcof[1])")
-        display(p_vals[:,:,1])
 
 
         for local_control_param_index in 1:local_N_coeff
