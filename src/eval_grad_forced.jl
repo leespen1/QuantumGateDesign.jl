@@ -236,7 +236,6 @@ function eval_grad_forced_arbitrary_order(prob::SchrodingerProb{M, VM}, controls
 
                         # Perform the summation (the above is part of the i=j term in summation, this loop completes that term and the rest)
                         for i = j:-1:0
-                            #println("j=$j, i=$i, j-i=$(j-i)")
                             u_derivative_prev = view(uv_matrix, 1:prob.N_tot_levels,                       1+i)
                             v_derivative_prev = view(uv_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+i)
 
