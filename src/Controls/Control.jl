@@ -80,6 +80,21 @@ function get_control_vector_slice(pcof::AbstractVector{<: Real}, controls, contr
     return view(pcof, start_index:end_index)
 end
 
+function get_local_control_indices(controls, global_index)
+    control_index = 1
+    local_index = 1
+
+    #TODO: Add exception here if global index is too large or < 1.
+    while (global_index > controls[control_index].N_coeff)
+        global_index -= controls[control_index].N_coeff
+        control_index += 1
+    end
+
+    local_index = global_index
+
+    return control_index, local_index
+end
+
 """
 For human readable display of control objects.
 """
