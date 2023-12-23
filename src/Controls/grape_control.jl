@@ -29,6 +29,8 @@ end
 """
 Given a time interval [0,tf], divided into `N_regions` regions, and a time `t`.
 Return the index of the region to which `t` belongs.
+
+(should move this to a different file, if I am going to use it in multiple places)
 """
 @inline function find_region_index(t, tf, N_regions)
     # Check that t is in the interval
@@ -44,44 +46,48 @@ Return the index of the region to which `t` belongs.
     return region_index
 end
 
-function eval_p(control::GRAPEControl, t::Float64, pcof::AbstractVector{<: Real})
+function eval_p(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
     i = find_region_index(t, control.tf, control.N_amplitudes)
     return pcof[i]
 end
 
-function eval_q(control::GRAPEControl, t::Float64, pcof::AbstractVector{<: Real})
+function eval_q(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
     i = control.N_amplitudes + find_region_index(t, control.tf, control.N_amplitudes)
     return pcof[i]
 end
 
-function eval_pt(control::GRAPEControl, t::Float64, pcof::AbstractVector{<: Real})
+#
+# Old, hard-coded mehtods for evaluating derivatives and gradients (more efficient, )
+#
+
+function eval_pt(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
     return 0.0
 end
 
-function eval_qt(control::GRAPEControl, t::Float64, pcof::AbstractVector{<: Real})
+function eval_qt(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
     return 0.0
 end
 
-function eval_grad_p(control::GRAPEControl, t::Float64, pcof::AbstractVector{<: Real})
+function eval_grad_p(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
     grad = zeros(control.N_coeff)
     i = find_region_index(t, control.tf, control.N_amplitudes)
     grad[i] = 1
     return grad
 end
 
-function eval_grad_q(control::GRAPEControl, t::Float64, pcof::AbstractVector{<: Real})
+function eval_grad_q(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
     grad = zeros(control.N_coeff)
     i = find_region_index(t, control.tf, control.N_amplitudes)
     grad[control.N_amplitudes + i] = 1
     return grad
 end
 
-function eval_grad_pt(control::GRAPEControl, t::Float64, pcof::AbstractVector{<: Real})
+function eval_grad_pt(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
     grad = zeros(control.N_coeff)
     return grad
 end
 
-function eval_grad_qt(control::GRAPEControl, t::Float64, pcof::AbstractVector{<: Real})
+function eval_grad_qt(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
     grad = zeros(control.N_coeff)
     return grad
 end

@@ -20,9 +20,9 @@ export optimize_gate
 export get_populations, target_helper, plot_populations, real_to_complex, complex_to_real
 
 # Export control types and constructors
-export AbstractControl, BSplineControl, GRAPEControl
-export bspline_control
-export eval_p, eval_q, eval_p_derivative, eval_q_derivative
+export AbstractControl, BSplineControl, GRAPEControl, GeneralGRAPEControl
+export bspline_control, ZeroControl
+export eval_p, eval_q, eval_p_derivative, eval_q_derivative, eval_grad_p_derivative, eval_grad_q_derivative
 
 
 # Export example problems and problem construction helpers
@@ -52,6 +52,9 @@ include("Controls/bspline_control.jl")
 include("Controls/grape_control.jl")
 include("Controls/hermite_control.jl")
 include("Controls/sincos_control.jl")
+include("Controls/zero_control.jl")
+include("Controls/generalized_grape_control.jl")
+
 
 include("hermite.jl")
 
