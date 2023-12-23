@@ -227,9 +227,9 @@ function disc_adj_calc_grad!(gradient::AbstractVector{Float64},
             lambda_u .= @view lambda_history[1:prob.N_tot_levels,     1+n+1]
             lambda_v .= @view lambda_history[1+prob.N_tot_levels:end, 1+n+1]
 
+            t = n*dt
             u .= @view history[1:prob.N_tot_levels,     1+n]
             v .= @view history[1+prob.N_tot_levels:end, 1+n]
-            t = n*dt
 
             grad_p .= eval_grad_p(control, t, this_pcof)
             grad_q .= eval_grad_q(control, t, this_pcof)
@@ -243,9 +243,9 @@ function disc_adj_calc_grad!(gradient::AbstractVector{Float64},
             grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
             grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
 
+            t = (n+1)*dt
             u .= @view history[1:prob.N_tot_levels,     1+n+1]
             v .= @view history[1+prob.N_tot_levels:end, 1+n+1]
-            t = (n+1)*dt
 
             grad_p .= eval_grad_p(control, t, this_pcof)
             grad_q .= eval_grad_q(control, t, this_pcof)
@@ -791,35 +791,69 @@ function discrete_adjoint_arbitrary_order(
 
     grad = zeros(length(pcof))
 
-    this_history = zeros(prob.real_system_size, 1+prob.nsteps)
-    this_lambda_history = zeros(prob.real_system_size, 1+prob.nsteps)
-
     for initial_condition_index = 1:size(prob.u0,2)
+        this_history = view(history, :, :, :, initial_condition_index)
+        this_lambda_history = view(lambda_history, :, :, :, initial_condition_index)
 
-        # Get state vector and lambda history in format expected by the functions (the old format)
-        for component_i in 1:prob.real_system_size
-            for step_i in 1:(1+prob.nsteps)
-                this_history[component_i, step_i] = history[component_i, 1, step_i, initial_condition_index]
-                this_lambda_history[component_i, step_i] = lambda_history[component_i, 1, step_i, initial_condition_index]
-            end
-        end
-
-
-        if (order == 2)
-            disc_adj_calc_grad!(grad, prob, controls, pcof,
-                this_history, this_lambda_history
-            )
-        
-        elseif (order == 4)
-            disc_adj_calc_grad_order_4!(grad, prob, controls, pcof,
-                this_history, this_lambda_history
-            )
-
-        else
-            throw("Invalid order: $order (must be ≤ 4 for now)")
-        end
+        disc_adj_calc_grad_arbitrary_order!(
+            grad, prob, controls, pcof, this_history, this_lambda_history, order=order
+        )
 
     end
 
+    if return_lambda_history
+        return grad, history, lambda_history
+    end
+
     return grad
+end
+
+function disc_adj_calc_grad_arbitrary_order!(gradient::AbstractVector{Float64},
+        prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
+        history::AbstractArray{Float64, 3}, lambda_history::AbstractArray{Float64, 3};
+        order=2
+    )
+
+    dt = prob.tf / prob.nsteps
+    N_derivatives = div(order, 2)
+
+    uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
+    uv_partial_mat = zeros(prob.real_system_size, 1+N_derivatives)
+
+    RHS = zeros(prob.real_system_size)
+    LHS = zeros(prob.real_system_size)
+
+
+    # If this is really all it takes, that's pretty easy.
+    for n in 0:prob.nsteps-1
+        # Used for both times
+        lambda_np1 = view(lambda_history, :, 1, 1+n+1)
+
+        # Handle RHS / "Explicit" Part
+
+        t = n*dt
+        uv_mat .= view(history, :, :, 1+n)
+
+        for pcof_index in 1:length(pcof)
+            arbitrary_order_uv_partial_derivative!(
+                uv_partial_mat, uv_mat, prob, controls, t, pcof, N_derivatives, pcof_index
+            )
+
+            arbitrary_RHS!(RHS, uv_partial_mat, dt, N_derivatives)
+            gradient[pcof_index] -= dot(RHS, lambda_np1)
+        end
+
+        # Handle LHS / "Explicit" Part
+        t = (n+1)*dt
+        uv_mat .= view(history, :, :, 1+n+1)
+
+        for pcof_index in 1:length(pcof)
+            arbitrary_order_uv_partial_derivative!(
+                uv_partial_mat, uv_mat, prob, controls, t, pcof, N_derivatives, pcof_index
+            )
+
+            arbitrary_LHS!(LHS, uv_partial_mat, dt, N_derivatives)
+            gradient[pcof_index] += dot(LHS, lambda_np1)
+        end
+    end
 end
