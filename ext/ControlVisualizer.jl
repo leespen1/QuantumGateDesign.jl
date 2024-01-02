@@ -1,6 +1,9 @@
+module ControlVisualizer
+
+using HermiteOptimalControl
 using GLMakie
 #using CairoMakie
-using HermiteOptimalControl
+
 
 function visualize_control(control, tf, npoints; prob=missing, 
         pcof_init=missing, use_slidergrid=true, use_tboxes=true)
@@ -130,3 +133,4 @@ function visualize_control(control, tf, npoints; prob=missing,
 end
 
 
+end # Module
