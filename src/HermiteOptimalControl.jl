@@ -79,4 +79,6 @@ include("Tests/test_convergence.jl")
 
 include("Plotting/plot_control.jl")
 
+include("extension_compatibility.jl")
+
 end # module HermiteOptimalControl

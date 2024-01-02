@@ -5,7 +5,7 @@ using GLMakie
 #using CairoMakie
 
 
-function visualize_control(control, tf, npoints; prob=missing, 
+function HermiteOptimalControl.visualize_control(control, tf, npoints; prob=missing, 
         pcof_init=missing, use_slidergrid=true, use_tboxes=true)
     # Set up Makie figure and axis for plotting
     fig = Figure(;)
