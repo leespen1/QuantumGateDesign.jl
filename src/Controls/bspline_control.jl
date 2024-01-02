@@ -55,7 +55,7 @@ function eval_p_derivative(control::BSplineControl, t::Real, pcof::AbstractVecto
     elseif (order == 1)
         return eval_pt(control, t, pcof)
     else
-        throw("Order $order too high")
+        throw("Derivative order $order too high for this control")
     end
 
     return NaN
@@ -67,7 +67,7 @@ function eval_q_derivative(control::BSplineControl, t::Real, pcof::AbstractVecto
     elseif (order == 1)
         return eval_qt(control, t, pcof)
     else
-        throw("Order $order too high")
+        throw("Derivative order $order too high for this control")
     end
 
     return NaN
