@@ -1,7 +1,10 @@
 """
 Make a 1D problem with no controls. Corresponds to the dahlquist equation
 
-y' = λy
+y' = λy.
+
+The time-dependent Schrodinger equation is ψ' = -iHψ, and H must be hermitian.
+It follows that λ must be purely imaginary, or else -iλ will not be "hermitian."
 """
 function dahlquist_problem(lambda::Number; initial_condition::Number=1.0, with_control=false)
 
@@ -11,18 +14,23 @@ function dahlquist_problem(lambda::Number; initial_condition::Number=1.0, with_c
     tf = 1.0
     nsteps = 10
 
-    u0::Vector{Float64} = [real(initial_condition)]
-    v0::Vector{Float64} = [imag(initial_condition)]
+    u0::Matrix{Float64} = [real(initial_condition);;]
+    v0::Matrix{Float64} = [imag(initial_condition);;]
 
     system_sym = Matrix{Float64}(undef, 1, 1)
     system_asym = Matrix{Float64}(undef, 1, 1)
 
-    system_sym .= real(lambda)
-    system_asym .= imag(lambda)
+
+    scalar_hamiltonian = im*lambda
+
+    @assert LinearAlgebra.ishermitian(scalar_hamiltonian) # Make sure schrodinger problem is hermitian
+
+    system_sym .= real(scalar_hamiltonian)
+    system_asym .= imag(scalar_hamiltonian)
 
     if with_control
         sym_operators = [ones(1,1)]
-        asym_operators = [ones(1,1)]
+        asym_operators = [zeros(1,1)] # For a 1D problem, can't have asym operators
     else
         sym_operators = Matrix{Float64}[]
         asym_operators = Matrix{Float64}[]
