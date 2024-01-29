@@ -12,6 +12,7 @@ export convert_old_ordering_to_new
 # Export gradient evaulation methods
 export eval_grad_finite_difference, eval_grad_forced, discrete_adjoint
 export discrete_adjoint_arbitrary_order, compute_terminal_condition
+export eval_grad_forced_arbitrary_order
 
 # Export optimization callback
 export optimize_gate
@@ -80,5 +81,16 @@ include("Tests/test_convergence.jl")
 include("Plotting/plot_control.jl")
 
 include("extension_compatibility.jl")
+
+module OldCompat
+include("OldHardcoded/SchrodingerProb.jl")
+include("OldHardcoded/eval_grad_discrete_adjoint.jl")
+include("OldHardcoded/eval_grad_finite_difference.jl")
+include("OldHardcoded/eval_grad_forced.jl")
+include("OldHardcoded/forward_evolution.jl")
+include("OldHardcoded/hermite.jl")
+include("OldHardcoded/infidelity.jl")
+include("OldHardcoded/state_vector_helper.jl")
+end # module OldCompat
 
 end # module HermiteOptimalControl
