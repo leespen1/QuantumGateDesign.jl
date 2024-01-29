@@ -10,6 +10,7 @@ mutable struct SchrodingerProb{M, VM}
     asym_operators::Vector{M} # a - a^†
     u0::VM
     v0::VM
+    guard_subspace_projector::M
     tf::Float64
     nsteps::Int64
     N_ess_levels::Int64
@@ -50,11 +51,14 @@ mutable struct SchrodingerProb{M, VM}
             @assert size(asym_op,1) == size(asym_op,2) == N_tot_levels
         end
 
+        essential_subspace_projector = create_essential_subspace_projector(N_ess_levels, N_tot_levels)
+
         # Copy arrays when creating a Schrodinger problem
         new{M, VM}(
             copy(system_sym), copy(system_asym),
             deepcopy(sym_operators), deepcopy(asym_operators),
             copy(u0), copy(v0),
+            essential_subspace_projector,
             tf, nsteps,
             N_ess_levels, N_guard_levels, N_tot_levels,
             N_operators, real_system_size
@@ -166,4 +170,23 @@ function time_diff_prob(prob::SchrodingerProb)
     diff_prob.u0 .= 0
     diff_prob.v0 .= 0
     return diff_prob
+end
+
+"""
+Create the matrix that projects a state vector onto the guarded subspace.
+
+Currently hardcoded for a single qubit. Shouldn't be a challenge to do it for
+multiple qubits using kronecker products.
+"""
+function create_essential_subspace_projector(N_ess_levels::Int64, N_tot_levels::Int64)
+    W = zeros(N_tot_levels, N_tot_levels)
+    for i in (N_ess_levels+1):N_tot_levels
+        W[i,i] = 1
+    end
+
+    # Take kronecker product with 2x2 identity to get real-valued system version
+    identity_2by2 = [1 0; 0 1]
+    W_realsystem = LinearAlgebra.kron(identity_2by2, W)
+
+    return W_realsystem
 end
