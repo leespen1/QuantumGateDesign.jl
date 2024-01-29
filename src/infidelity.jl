@@ -34,3 +34,41 @@ function infidelity(prob, controls, pcof, target; order=2, forcing=missing, noBL
 
     return infidelity(final_state, target, N_ess)
 end
+
+"""
+dt is the timestep size.
+T is the total time
+W projects a state vector onto the guard subspace 
+(should decide whether W should have dimensions of real or complex system
+if complex, just take I₂×₂ * W.)
+
+"""
+function guard_penalty(history::AbstractArray{Float64, 3}, dt, T, W)
+    penalty_value = 0.0
+
+    N = size(history, 3)
+    W_uv_placeholder = zeros(size(history, 1))
+    for i in 1:N
+        uv_vec = view(history, :, 1, i)
+        mul!(W_uv_placeholder, W, uv_vec)
+        if (i == 1 || i == N)
+            penalty_value += 0.5*dot(uv_vec, W_uv_placeholder)
+        else
+            penalty_value += dot(uv_vec, W_uv_placeholder)
+        end
+    end
+    penalty_value *= dt/T
+
+    return penalty_value
+end
+
+function guard_penalty(history::AbstractArray{Float64, 4}, dt, T, W)
+    penalty_value = 0.0
+
+    for initial_condition_index in 1:size(history, 4)
+        history_local = view(history, :, :, :, initial_condition_index)
+        penalty_value += guard_penalty(history_local, dt, T, W)
+    end
+
+    return penalty_value
+end
