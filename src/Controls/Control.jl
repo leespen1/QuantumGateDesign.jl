@@ -116,36 +116,6 @@ function Base.iterate(control::AbstractControl, state=missing)
     return nothing
 end
 
-"""
-I'm not sure if creating the lambda/anonymous function has a significant
-negative impact on performance. If so, I could remedy this by having storing
-pcof in the Control object. Then I could have a method eval_p(control, t) which
-uses the pcof in the object, and eval_p(control, t, pcof) would mutate the pcof
-in the control object.
-"""
-function eval_pt(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
-    return ForwardDiff.derivative(t_dummy -> eval_p(control, t_dummy, pcof), t)
-end
-
-function eval_qt(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
-    return ForwardDiff.derivative(t_dummy -> eval_q(control, t_dummy, pcof), t)
-end
-
-function eval_grad_p(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
-    return ForwardDiff.gradient(pcof_dummy -> eval_p(control, t, pcof_dummy), pcof)
-end
-
-function eval_grad_q(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
-    return ForwardDiff.gradient(pcof_dummy -> eval_q(control, t, pcof_dummy), pcof)
-end
-
-function eval_grad_pt(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
-    return ForwardDiff.gradient(pcof_dummy -> eval_pt(control, t, pcof_dummy), pcof)
-end
-
-function eval_grad_qt(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
-    return ForwardDiff.gradient(pcof_dummy -> eval_qt(control, t, pcof_dummy), pcof)
-end
 
 """
 Arbitrary order version, only ever uses automatic differentiation to get high
@@ -209,80 +179,4 @@ function eval_grad_q_derivative(control::AbstractControl, t::Real,
         pcof::AbstractVector{<: Real},  order::Int64)
 
     return ForwardDiff.gradient(pcof_dummy -> eval_q_derivative(control, t, pcof_dummy, order), pcof)
-end
-#===============================================================================
-# 
-# Helper types for use in forced gradient method.
-# Allows for creation of Controls based on existing controls, but with the time
-# derivative taken or a partial derivative taken with respect to one of the
-# control parameters. 
-#
-# The latter method is currently inefficient, as for each partial derivative
-# the entire gradient is computed, but it is onle used in the forced gradient
-# computation. We only use that method for checking correctness of the discrete
-# adjoint, so it is not that important this method efficient (at the moment).
-#
-===============================================================================#
-
-"""
-For use in forced gradient
-"""
-struct GradControl{T} <: AbstractControl
-    N_coeff::Int64
-    tf::Float64
-    grad_index::Int64
-    original_control::T
-    function GradControl(original_control::T, grad_index::Int64) where T <: AbstractControl
-        new{T}(original_control.N_coeff, original_control.tf, grad_index, original_control)
-    end
-end
-
-function eval_p(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real})
-    return eval_grad_p(grad_control.original_control, t, pcof)[grad_control.grad_index]
-end
-
-function eval_pt(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real})
-    return eval_grad_pt(grad_control.original_control, t, pcof)[grad_control.grad_index]
-end
-
-function eval_q(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real})
-    return eval_grad_q(grad_control.original_control, t, pcof)[grad_control.grad_index]
-end
-
-function eval_qt(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real})
-    return eval_grad_qt(grad_control.original_control, t, pcof)[grad_control.grad_index]
-end
-
-function eval_p_derivative(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
-    return eval_grad_p_derivative(grad_control.original_control, t, pcof, order)[grad_control.grad_index]
-end
-
-function eval_q_derivative(grad_control::GradControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
-    return eval_grad_q_derivative(grad_control.original_control, t, pcof, order)[grad_control.grad_index]
-end
-
-struct TimeDerivativeControl{T} <: AbstractControl
-    N_coeff::Int64
-    tf::Float64
-    original_control::T
-    function TimeDerivativeControl(original_control::T) where T <: AbstractControl
-        new{T}(original_control.N_coeff, original_control.tf, original_control)
-    end
-end
-
-function eval_p(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{<: Real})
-    return eval_p_derivative(time_derivative_control.original_control, t, pcof, 1)
-end
-
-function eval_q(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{<: Real})
-    return eval_q_derivative(time_derivative_control.original_control, t, pcof, 1)
-end
-
-
-function eval_p_derivative(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
-    return eval_p_derivative(time_derivative_control.original_control, t, pcof, order+1)
-end
-
-function eval_q_derivative(time_derivative_control::TimeDerivativeControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
-    return eval_q_derivative(time_derivative_control.original_control, t, pcof, order+1)
 end
