@@ -51,6 +51,9 @@ mutable struct SchrodingerProb{M, VM}
             @assert size(asym_op,1) == size(asym_op,2) == N_tot_levels
         end
 
+        # Currently hardcoded for a single qubit. I should make a default here,
+        # and an assertion that the projector is symmetric (which is really the
+        # only requirement we have)
         essential_subspace_projector = create_essential_subspace_projector(N_ess_levels, N_tot_levels)
 
         # Copy arrays when creating a Schrodinger problem

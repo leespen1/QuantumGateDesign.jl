@@ -1,4 +1,4 @@
-function eval_grad_finite_difference_arbitrary_order(
+function eval_grad_finite_difference(
         prob::SchrodingerProb, controls,
         pcof::AbstractVector{Float64}, target::AbstractMatrix{Float64}, 
         dpcof=1e-5; order=2, cost_type=:Infidelity,
@@ -17,8 +17,8 @@ function eval_grad_finite_difference_arbitrary_order(
         pcof_l .= pcof
         pcof_l[i] -= dpcof
 
-        history_r = eval_forward_arbitrary_order(prob, controls, pcof_r, order=order)
-        history_l = eval_forward_arbitrary_order(prob, controls, pcof_l, order=order)
+        history_r = eval_forward(prob, controls, pcof_r, order=order)
+        history_l = eval_forward(prob, controls, pcof_l, order=order)
 
         cost_r = 0.0
         cost_l = 0.0

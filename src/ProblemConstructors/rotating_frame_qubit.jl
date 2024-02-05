@@ -24,7 +24,11 @@ function rotating_frame_qubit(N_ess_levels::Int, N_guard_levels::Int;
     sym_operator  = a + a'
     asym_operator = a - a'
 
-    u0, v0 = initial_basis(N_ess_levels, N_guard_levels)
+    u0 = zeros(N_tot_levels, N_ess_levels)
+    v0 = zeros(N_tot_levels, N_ess_levels)
+    for i in 1:N_ess_levels
+        u0[i,i] = 1
+    end
 
     return SchrodingerProb(
         system_sym, system_asym,
@@ -34,3 +38,4 @@ function rotating_frame_qubit(N_ess_levels::Int, N_guard_levels::Int;
         N_ess_levels, N_guard_levels
     )
 end
+

@@ -1,39 +1,19 @@
-"""
-Convert state vector history to population history.
 
-Each column of history should be the stacked real and imaginary parts of the 
-state vector: history[:,i] = vcat(u_i, v_i)
-"""
-#=
-function get_populations(history::AbstractMatrix{Float64})
-    N_tot_levels = div(size(history, 1), 2) # 
-    N_times = size(history, 2)
+function get_populations(history::AbstractArray{Float64, 3})
+    real_system_size = size(history, 1)
+    complex_system_size = div(real_system_size, 2)
 
-    populations = Matrix{Float64}(undef, N_tot_levels, N_times)
-    for time in 1:N_times
-        for level in 1:N_tot_levels
-            populations[level, time] = history[level, time]^2 + history[level+N_tot_levels, time]^2
+    N_times = size(history, 3)
+
+    populations = zeros(complex_system_size, N_times)
+
+    for n in 1:N_times
+        for k in 1:complex_system_size
+            populations[k, n] = history[k, 1, n]^2 + history[k+complex_system_size, 1, n]^2
         end
     end
 
     return populations
-end
-
-
-function get_populations(history::AbstractArray{Float64, 3})
-    populations_vec = [get_populations(history[:,:,i]) for i in 1:size(history, 3)]
-    return cat(populations_vec..., dims=3)
-end
-=#
-
-function get_populations(history::AbstractArray{T}) where T <: Real
-    return (abs.(real_to_complex(history))) .^ 2
-end
-
-
-function get_populations(prob, control, pcof)
-    history = eval_forward(prob, control, pcof)
-    return get_populations(history)
 end
 
 
@@ -106,6 +86,3 @@ function initial_basis(N_ess, N_guard)
     end
     return u0, v0
 end
-
-
-

@@ -7,7 +7,7 @@ u and v should be given, and the derivatives are to be computed in place by
 this method.
 
 """
-function arbitrary_order_uv_derivative!(uv_matrix::AbstractMatrix{Float64},
+function compute_derivatives!(uv_matrix::AbstractMatrix{Float64},
         prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{<: Real},
         N_derivatives::Int64; use_adjoint::Bool=false,
         forcing_matrix::Union{AbstractMatrix{Float64}, Missing}=missing
@@ -60,7 +60,7 @@ Returns Λ_(derivative_index)
 
 Need to describe the recursion better.
 """
-function arbitrary_order_adjoint_derivative_single(lambda_in::AbstractVector{Float64},
+function compute_single_adjoint_derivative(lambda_in::AbstractVector{Float64},
         prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{<: Real},
         derivative_index::Int64; 
     )
@@ -92,7 +92,7 @@ function arbitrary_order_adjoint_derivative_single(lambda_in::AbstractVector{Flo
             use_adjoint=true
         )
         
-        lambda_out .+= arbitrary_order_adjoint_derivative_single(
+        lambda_out .+= compute_single_adjoint_derivative(
             lambda_in_temp, prob, controls, t, pcof, (derivative_index-1)-derivative_order
         )
     end
@@ -105,7 +105,7 @@ WIP : Fixing the math, canrt just add an adjoint factor into uv_derivative
 
 I don't think the input should have 0 in the first column.
 """
-function arbitrary_order_adjoint_derivative!(
+function compute_adjoint_derivatives!(
         uv_matrix::AbstractMatrix{Float64},
         prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{<: Real},
         N_derivatives::Int64; 
@@ -113,7 +113,7 @@ function arbitrary_order_adjoint_derivative!(
 
     lambda_in = uv_matrix[:,1]
     for derivative_i in 1:N_derivatives
-        uv_matrix[:,1+derivative_i] .= arbitrary_order_adjoint_derivative_single(
+        uv_matrix[:,1+derivative_i] .= compute_single_adjoint_derivative(
             lambda_in, prob, controls, t, pcof, derivative_i
         )
     end
@@ -135,7 +135,7 @@ it functions the same as before, it is a different thing mathematically.
 
 
 """
-function arbitrary_order_uv_partial_derivative!(
+function compute_partial_derivative!(
         uv_partial_matrix::AbstractMatrix{Float64}, uv_matrix::AbstractMatrix{Float64},
         prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{<: Real},
         N_derivatives::Int64, global_pcof_index::Int64
@@ -207,7 +207,7 @@ end
 """
 Compute the RHS/LHS, assuming p=q=N_derivatives
 """
-function arbitrary_RHS!(RHS::AbstractVector{Float64}, uv_matrix::AbstractMatrix{Float64},
+function build_RHS!(RHS::AbstractVector{Float64}, uv_matrix::AbstractMatrix{Float64},
         dt::Real, N_derivatives::Int64)
 
     system_size = length(RHS)
@@ -222,7 +222,7 @@ end
 """
 Non-mutating version
 """
-function arbitrary_RHS(uv_matrix::AbstractMatrix{Float64},
+function build_RHS(uv_matrix::AbstractMatrix{Float64},
         dt::Real, N_derivatives::Int64)
 
     system_size = size(uv_matrix, 1)
@@ -233,7 +233,7 @@ function arbitrary_RHS(uv_matrix::AbstractMatrix{Float64},
     end
 end
 
-function arbitrary_LHS!(LHS::AbstractVector{Float64}, uv_matrix::AbstractMatrix{Float64},
+function build_LHS!(LHS::AbstractVector{Float64}, uv_matrix::AbstractMatrix{Float64},
         dt::Real, N_derivatives::Int64)
 
     system_size = length(LHS)
@@ -248,7 +248,7 @@ end
 """
 Non-mutating version
 """
-function arbitrary_LHS(uv_matrix::AbstractMatrix{Float64},
+function build_LHS(uv_matrix::AbstractMatrix{Float64},
         dt::Real, N_derivatives::Int64)
 
     system_size = size(uv_matrix, 1)

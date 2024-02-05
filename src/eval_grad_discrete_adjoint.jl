@@ -35,10 +35,10 @@ function compute_terminal_condition(
 
     function LHS_func_wrapper(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
         uv_mat[:,1] .= uv_in
-        arbitrary_order_adjoint_derivative!(uv_mat, prob, controls, t, pcof, N_derivatives)
+        compute_adjoint_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives)
         # Do I need to make and adjoint version of this? I don't think so, considering before LHS only used adjoint for utvt!, not the quadrature
         # But maybe there is a negative t I need to worry about. Maybe just provide dt as -dt
-        arbitrary_LHS!(uv_out, uv_mat, dt, N_derivatives)
+        build_LHS!(uv_out, uv_mat, dt, N_derivatives)
 
         return nothing
     end
@@ -62,14 +62,14 @@ end
 Arbitrary order version, should make one with target being abstract vector as
 well, so I can do state transfer problems.
 """
-function discrete_adjoint_arbitrary_order(
+function discrete_adjoint(
         prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}},
         controls, pcof::AbstractVector{Float64},
         target::AbstractMatrix{Float64}; 
         order=2, cost_type=:Infidelity, return_lambda_history=false
     )
 
-    history = eval_forward_arbitrary_order(prob, controls, pcof; order=order)
+    history = eval_forward(prob, controls, pcof; order=order)
 
     forcing = compute_guard_forcing(prob, history)
 
@@ -83,7 +83,7 @@ function discrete_adjoint_arbitrary_order(
         forcing=forcing[:,end,:]
     )
 
-    lambda_history = eval_adjoint_arbitrary_order(
+    lambda_history = eval_adjoint(
         prob, controls, pcof, terminal_condition, order=order, forcing=forcing)
 
     grad = zeros(length(pcof))
@@ -92,7 +92,7 @@ function discrete_adjoint_arbitrary_order(
         this_history = view(history, :, :, :, initial_condition_index)
         this_lambda_history = view(lambda_history, :, :, :, initial_condition_index)
 
-        disc_adj_calc_grad_arbitrary_order!(
+        accumulate_gradient!(
             grad, prob, controls, pcof, this_history, this_lambda_history, order=order
         )
 
@@ -108,7 +108,7 @@ end
 """
 Change name to 'accumulate gradient' or something
 """
-function disc_adj_calc_grad_arbitrary_order!(gradient::AbstractVector{Float64},
+function accumulate_gradient!(gradient::AbstractVector{Float64},
         prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
         history::AbstractArray{Float64, 3}, lambda_history::AbstractArray{Float64, 3};
         order=2
@@ -135,11 +135,11 @@ function disc_adj_calc_grad_arbitrary_order!(gradient::AbstractVector{Float64},
         uv_mat .= view(history, :, :, 1+n)
 
         for pcof_index in 1:length(pcof)
-            arbitrary_order_uv_partial_derivative!(
+            compute_partial_derivative!(
                 uv_partial_mat, uv_mat, prob, controls, t, pcof, N_derivatives, pcof_index
             )
 
-            arbitrary_RHS!(RHS, uv_partial_mat, dt, N_derivatives)
+            build_RHS!(RHS, uv_partial_mat, dt, N_derivatives)
             gradient[pcof_index] -= dot(RHS, lambda_np1)
         end
 
@@ -148,11 +148,11 @@ function disc_adj_calc_grad_arbitrary_order!(gradient::AbstractVector{Float64},
         uv_mat .= view(history, :, :, 1+n+1)
 
         for pcof_index in 1:length(pcof)
-            arbitrary_order_uv_partial_derivative!(
+            compute_partial_derivative!(
                 uv_partial_mat, uv_mat, prob, controls, t, pcof, N_derivatives, pcof_index
             )
 
-            arbitrary_LHS!(LHS, uv_partial_mat, dt, N_derivatives)
+            build_LHS!(LHS, uv_partial_mat, dt, N_derivatives)
             gradient[pcof_index] += dot(LHS, lambda_np1)
         end
     end

@@ -17,18 +17,10 @@ Every concrete subtype must have the following parameters
 The following methods can also be defined, but have defaults implemented using
 automatic differentiation:
     # For discrete adjoint / forced gradient calculation
-    eval_grad_p
-    eval_grad_q
-    eval_grad_pt
-    eval_grad_qt
-    ...
-    ...
-
-    # For higher order forward evolution 
-    eval_pt
-    eval_qt
-    eval_ptt
-    eval_qtt
+    eval_p_derivative
+    eval_q_derivative
+    eval_grad_p_derivative
+    eval_grad_q_derivative
     ...
     ...
 
@@ -168,6 +160,9 @@ function eval_q_derivative(control::AbstractControl, t::Real,
     return q_val
 end
 
+"""
+Evaluate gradient of p (or a derivative of p) with respect to the control parameters
+"""
 function eval_grad_p_derivative(control::AbstractControl, t::Real,
         pcof::AbstractVector{<: Real},  order::Int64)
 
