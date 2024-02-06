@@ -18,6 +18,7 @@ end
 @testset "Constructing Control Without Throwing Exception" begin
 end
 
+
 N_ess = 2
 N_guard = 2
 N_tot_levels = N_ess + N_guard
@@ -93,3 +94,4 @@ end
 @testset "Gradients Hard-Coded" begin
 end
 
+include("./hardcoded_derivatives.jl")
