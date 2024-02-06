@@ -4,6 +4,9 @@ module HermiteOptimalControl
 import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 
+# Export derivative computation functions
+export compute_derivatives!, compute_adjoint_derivatives!, compute_partial_derivative!
+
 # Export schrodinger problem definition and forward evolution methods
 export SchrodingerProb, VectorSchrodingerProb
 export eval_forward, eval_forward_forced

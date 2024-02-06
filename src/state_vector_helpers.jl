@@ -1,4 +1,37 @@
+"""
+Given a history array, with indices
+    history[component, derivative_order, time_index, initial_condition_index]
 
+Return state population array, with indices
+    populations[component, time_index, initial_condition_index]
+
+(drops derivative axis)
+"""
+function get_populations(history::AbstractArray{Float64, 4})
+    real_system_size = size(history, 1)
+    complex_system_size = div(real_system_size, 2)
+
+    N_times = size(history, 3)
+    N_initial_conditions = size(history, 4)
+
+    populations = zeros(complex_system_size, N_times, N_initial_conditions)
+
+    for i in 1:N_initial_conditions
+        populations[:,:,i] .= get_populations(view(history, :, :, :, i))
+    end
+
+    return populations
+end
+
+"""
+Given a history array, with indices
+    history[component, derivative_order, time_index]
+
+Return state population array, with indices
+    populations[component, time_index]
+
+(drops derivative axis)
+"""
 function get_populations(history::AbstractArray{Float64, 3})
     real_system_size = size(history, 1)
     complex_system_size = div(real_system_size, 2)
