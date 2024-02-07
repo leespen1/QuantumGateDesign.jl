@@ -110,6 +110,10 @@ function real_to_complex(x)
     return real_x .+ (im .* imag_x)
 end
 
+function real_to_complex(x_real, x_imag)
+    return x_real .+ (im .* x_imag)
+end
+
 function initial_basis(N_ess, N_guard)
     N_tot = N_ess + N_guard
     u0 = zeros(N_tot, N_ess)
