@@ -27,8 +27,8 @@ function infidelity(Q::AbstractMatrix{Float64}, target::AbstractMatrix{Float64},
 end
 
 
-function infidelity(prob, controls, pcof, target; order=2, forcing=missing, noBLAS=false)
-    history = eval_forward_arbitrary_order(prob, controls, pcof, order=order, forcing=forcing, noBLAS=noBLAS)
+function infidelity(prob, controls, pcof, target; order=2, forcing=missing)
+    history = eval_forward(prob, controls, pcof, order=order, forcing=forcing)
     final_state = history[:,1,end,:]
     N_ess = prob.N_ess_levels
 
