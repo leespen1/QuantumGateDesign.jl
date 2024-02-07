@@ -57,7 +57,7 @@ function optimize_gate(
     function eval_f(pcof::Vector{Float64})
         #println(pcof)
         history = eval_forward(schro_prob, controls, pcof, order=order)
-        QN = @view history[:,end,:]
+        QN = @view history[:,1,end,:]
         return infidelity(QN, target, schro_prob.N_ess_levels)
     end
 
@@ -67,6 +67,7 @@ function optimize_gate(
 
     N_parameters = length(pcof_init)
 
+    #=
     if ismissing(pcof_L)
         pcof_L = -ones(N_parameters) # A GHz control is pretty generous
     elseif isa(pcof_L, Real)
@@ -77,6 +78,7 @@ function optimize_gate(
     elseif isa(pcof_U, Real)
         pcof_U = ones(N_parameters) .* pcof_U
     end
+    =#
 
     @assert isa(pcof_L, Vector{Float64})
     @assert isa(pcof_U, Vector{Float64})
