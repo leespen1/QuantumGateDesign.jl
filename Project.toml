@@ -14,9 +14,15 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [weakdeps]
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
+QuantumOptics = "6e0679c1-51ea-5a7c-ac74-d61b76210b0c"
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
 
+
+# It seems the extensions only work if I 'activate' the local environment first
 [extensions]
-# name of extension to the left
-# extension dependencies required to load the extension to the right
-# use a list for multiple extension dependencies
 ControlVisualizer = "GLMakie"
+OrdinaryDiffEqInterface = "OrdinaryDiffEq"
+Dummy = "QuantumOptics"
+QuTipIntegration = ["PythonCall", "CondaPkg"]

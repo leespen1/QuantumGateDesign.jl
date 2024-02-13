@@ -5,7 +5,7 @@ import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 
 # Export derivative computation functions
-export compute_derivatives!, compute_adjoint_derivatives!, compute_partial_derivative!
+export compute_derivatives!, compute_adjoint_derivatives!, compute_partial_derivative!, apply_hamiltonian!
 
 # Export schrodinger problem definition and forward evolution methods
 export SchrodingerProb, VectorSchrodingerProb
@@ -83,7 +83,6 @@ include("Tests/test_convergence.jl")
 
 include("Plotting/plot_control.jl")
 
-include("extension_compatibility.jl")
 
 module OldCompat
 include("OldHardcoded/SchrodingerProb.jl")
@@ -95,5 +94,11 @@ include("OldHardcoded/hermite.jl")
 include("OldHardcoded/infidelity.jl")
 include("OldHardcoded/state_vector_helper.jl")
 end # module OldCompat
+
+# Define functions without methods, so that extensions can override them
+include("extension_compatibility.jl")
+export visualize_control
+export construct_ODEProb
+export convert_to_numpy, Qobj, unpack_Qobj, simulate_prob_no_control
 
 end # module HermiteOptimalControl

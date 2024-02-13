@@ -1,8 +1,9 @@
 module ControlVisualizer
 
+println("Loading ControlVisualizer")
+
 using HermiteOptimalControl
 using GLMakie
-#using CairoMakie
 
 
 """
