@@ -118,10 +118,10 @@ function bspline_control_autodiff(tf::Float64, D1::Int, omega::AbstractVector{Fl
 end
 
 
-function eval_p(control::BSplineControlAutodiff, t::Real, pcof::AbstractVector{<: Real})
+function eval_p(control::BSplineControlAutodiff, t::T, pcof::AbstractVector{<: Real})::T where T <: Real
     return bcarrier2(t, control.bcpar, 0, pcof)
 end
 
-function eval_q(control::BSplineControlAutodiff, t::Real, pcof::AbstractVector{<: Real})
+function eval_q(control::BSplineControlAutodiff, t::T, pcof::AbstractVector{<: Real})::T where T <: Real
     return bcarrier2(t, control.bcpar, 1, pcof)
 end

@@ -124,8 +124,13 @@ throws an error when trying to do a higher order than that of the interpolant
 Possibly type instability here, since ForwardDiff.derivative causes p_val to be a 
 ForwardDiff.Dual{...} type.
 """
-function eval_p_derivative(control::AbstractControl, t::Real,
-        pcof::AbstractVector{<: Real},  order::Int64)
+function eval_p_derivative(control::AbstractControl, t::T,
+        pcof::AbstractVector{<: Real},  order::Int64)::T where T <: Real
+    # Note, the type annotation on t and the return type *REALLY* helps the
+    # compiler out. If I don't do this, I get huge type-instability in the
+    # 5-arg mul! calls where the return value from this function is used as one
+    # of the scalar args. (I think compiler can't tell whether the return type
+    # will be a Float64 or a Dual)
 
     p_val = NaN
 
@@ -146,8 +151,8 @@ end
 Arbitrary order version, only ever uses automatic differentiation to get high
 order derivatives.
 """
-function eval_q_derivative(control::AbstractControl, t::Real,
-        pcof::AbstractVector{<: Real},  order::Int64)
+function eval_q_derivative(control::AbstractControl, t::T,
+        pcof::AbstractVector{<: Real},  order::Int64)::T where T <: Real
 
     q_val = NaN
 
