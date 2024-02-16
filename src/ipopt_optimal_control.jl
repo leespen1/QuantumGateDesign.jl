@@ -58,7 +58,11 @@ function optimize_gate(
         #println(pcof)
         history = eval_forward(schro_prob, controls, pcof, order=order)
         QN = @view history[:,1,end,:]
-        return infidelity(QN, target, schro_prob.N_ess_levels)
+        infidelity_val = infidelity(QN, target, schro_prob.N_ess_levels) 
+        dt = schro_prob.tf / schro_prob.nsteps
+        guard_pen_val = guard_penalty(history, dt, schro_prob.tf, schro_prob.guard_subspace_projector)
+
+        return infidelity_val + guard_pen_val
     end
 
     function eval_grad_f!(pcof::Vector{Float64}, grad_f::Vector{Float64})
@@ -106,18 +110,22 @@ function optimize_gate(
         dummy_eval_hessian!,
     )
 
-    maxIter = 1000
+    maxIter = 150
+    max_cpu_time = 300.0 # 5 minutes
     lbfgsMax = 200 
-    acceptTol = 1e-6 
-    ipTol = 1e-6
+    acceptTol = 5e-5 
+    ipTol = 5e-5
     acceptIter = 10 # Number of "acceptable" iterations before calling it quits
     print_level = 5 # Default is 5
+    nlp_lower_bound = 5e-5
+
 
     # Description of options: https://coin-or.github.io/Ipopt/OPTIONS.html
 
     Ipopt.AddIpoptStrOption(ipopt_prob, "hessian_approximation", "limited-memory"); # Use L-BFGS, approximate hessian
     Ipopt.AddIpoptIntOption(ipopt_prob, "limited_memory_max_history", lbfgsMax); # Maximum number of gradients to use for Hessian approximation (not really a memory concern for me)
     Ipopt.AddIpoptIntOption(ipopt_prob, "max_iter", maxIter); # Maximum number of iterations to run before terminating
+    Ipopt.AddIpoptNumOption(ipopt_prob, "max_cpu_time", max_cpu_time); # Maximum number of iterations to run before terminating
     Ipopt.AddIpoptNumOption(ipopt_prob, "tol", ipTol); # Relative convergence tolerance. Terminate if (scaled) NLP error becomes smaller than this (NLP = Nonlinear Programming, is NLP error just objective function, or something closely related?)
     Ipopt.AddIpoptNumOption(ipopt_prob, "acceptable_tol", acceptTol); # "Acceptable" relative convergence tolerance
     Ipopt.AddIpoptIntOption(ipopt_prob, "acceptable_iter", acceptIter); # If we perform this many iterations with "acceptable" NLP error, terminate optimization process (useful if we can't reach desired tolerance)
@@ -125,6 +133,8 @@ function optimize_gate(
     #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "first-order") # What does this do?
     Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "none") # Not sure what derivative test does, but it takes a minute.
     Ipopt.AddIpoptIntOption(ipopt_prob, "print_level", print_level)  
+    # Anything below this number will be considered -∞. I.e., terminate when objective goes beloww this
+    Ipopt.AddIpoptNumOption(ipopt_prob, "nlp_lower_bound_inf", nlp_lower_bound)
 
 
     ipopt_prob.x .= pcof_init
