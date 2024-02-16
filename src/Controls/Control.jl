@@ -87,6 +87,10 @@ function get_local_control_indices(controls, global_index)
     return control_index, local_index
 end
 
+function get_number_of_control_parameters(controls)
+    return sum(control.N_coeff for control in controls)
+end
+
 """
 For human readable display of control objects.
 """
