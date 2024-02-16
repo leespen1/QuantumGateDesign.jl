@@ -65,9 +65,8 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
-    
-    t = 0.0
-    dt = prob.tf/prob.nsteps
+    t::Float64 = 0.0
+    dt::Float64 = prob.tf/prob.nsteps
     N_derivatives = div(order, 2)
 
     # Check size of uv_history storage
@@ -144,7 +143,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         end
 
         uv_vec .= view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
-        IterativeSolvers.gmres!(uv_vec, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+        IterativeSolvers.gmres!(uv_vec, LHS_map, RHS, abstol=1e-15, reltol=1e-15, restart=prob.real_system_size)
         uv_mat[:,1] .= uv_vec
     end
 
@@ -274,7 +273,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
 
         # Use GMRES to perform the timestep (implicit part)
         uv_vec .= view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
-        IterativeSolvers.gmres!(uv_vec, LHS_map, RHS, abstol=1e-15, reltol=1e-15)
+        IterativeSolvers.gmres!(uv_vec, LHS_map, RHS, abstol=1e-15, reltol=1e-15, restart=prob.real_system_size)
         uv_mat[:,1] .= uv_vec
     end
 
@@ -336,4 +335,22 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
             order=order, forcing=this_forcing
         )
     end
+end
+
+mutable struct FwdEvalHolder{T1, T2}
+    t::Float64
+    dt::Float64
+    N_derivatives::Int64
+    uv_mat::Matrix{Float64}
+    pcof::Vector{Float64}
+    controls::T1
+    prob::T2
+end
+
+function (self::FwdEvalHolder)(out_vec, in_vec)
+    self.uv_mat[:,1] .= in_vec
+    compute_derivatives!(self.uv_mat, self.prob, self.controls, self.t, self.pcof, self.N_derivatives)
+    build_LHS!(out_vec, self.uv_mat, self.dt, self.N_derivatives)
+
+    return nothing
 end
