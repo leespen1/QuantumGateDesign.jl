@@ -1,7 +1,7 @@
 module HermiteOptimalControl
 
 
-import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
+import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra, BenchmarkTools
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 
 # Export derivative computation functions
