@@ -204,18 +204,15 @@ function coefficient(j,p,q)
     return factorial(p)*factorial(p+q-j)/(factorial(p+q)*factorial(p-j))
 end
 
-"""
-Compute the RHS/LHS, assuming p=q=N_derivatives
-"""
+
 function build_RHS!(RHS::AbstractVector{Float64}, uv_matrix::AbstractMatrix{Float64},
         dt::Real, N_derivatives::Int64)
-
-    system_size = length(RHS)
-    @assert system_size == size(uv_matrix, 1)
-
     RHS .= 0.0
+
     for j in 0:N_derivatives
-        RHS .+= coefficient(j,N_derivatives,N_derivatives) .* (dt^j) .* view(uv_matrix, 1:system_size, 1+j)
+        coeff = dt^j * coefficient(j, N_derivatives, N_derivatives)
+        derivative_vec = view(uv_matrix, :, 1+j)
+        LinearAlgebra.axpy!(coeff, derivative_vec, RHS)
     end
 end
 
@@ -228,20 +225,18 @@ function build_RHS(uv_matrix::AbstractMatrix{Float64},
     system_size = size(uv_matrix, 1)
     RHS = zeros(system_size)
 
-    for j in 0:N_derivatives
-        RHS += coefficient(j,N_derivatives, N_derivatives) * (dt^j) * view(uv_matrix, 1:system_size, 1+j)
-    end
+    build_RHS!(RHS, uv_matrix, dt, N_derivatives)
 end
+
 
 function build_LHS!(LHS::AbstractVector{Float64}, uv_matrix::AbstractMatrix{Float64},
         dt::Real, N_derivatives::Int64)
-
-    system_size = length(LHS)
-    @assert system_size == size(uv_matrix, 1)
-
     LHS .= 0.0
+
     for j in 0:N_derivatives
-        LHS .+= (-1)^j .* coefficient(j,N_derivatives, N_derivatives) .* (dt^j) .* view(uv_matrix, 1:system_size, 1+j)
+        coeff = (-dt)^j * coefficient(j, N_derivatives, N_derivatives)
+        derivative_vec = view(uv_matrix, :, 1+j)
+        LinearAlgebra.axpy!(coeff, derivative_vec, LHS)
     end
 end
 
@@ -254,9 +249,25 @@ function build_LHS(uv_matrix::AbstractMatrix{Float64},
     system_size = size(uv_matrix, 1)
     LHS = zeros(system_size)
 
+    build_LHS!(LHS, uv_matrix, dt, N_derivatives)
+end
+
+"""
+Given a matrix whose columns are a vector and its derivatives at time t,
+perform taylor expansion to approximate the vector at time t+dt.
+
+Overwrite out_vec with the result.
+"""
+function taylor_expand!(out_vec::AbstractVector{Float64}, uv_matrix::AbstractMatrix{Float64}, dt::Float64, N_derivatives::Int64)
+    out_vec .= 0.0
+
     for j in 0:N_derivatives
-        LHS += (-1)^j * coefficient(j,N_derivatives, N_derivatives) * (dt^j) * view(uv_matrix, 1:system_size, 1+j)
+        taylor_coeff = dt^j / factorial(j)
+        derivative_vec = view(uv_matrix, :, 1+j)
+        LinearAlgebra.axpy!(taylor_coeff, derivative_vec, out_vec)
     end
+
+    return nothing
 end
 
 """
