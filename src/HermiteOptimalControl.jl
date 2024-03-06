@@ -46,6 +46,8 @@ export infidelity
 
 export hermite_interp_poly
 
+export convert_juqbox
+
 include("SchrodingerProb.jl")
 include("../Daniel/hermite_map.jl")
 
@@ -77,6 +79,7 @@ include("state_vector_helpers.jl")
 include("ProblemConstructors/lowering_operators.jl")
 include("ProblemConstructors/rotating_frame_qubit.jl")
 include("ProblemConstructors/dahlquist_problem.jl")
+include("ProblemConstructors/juqbox_converter.jl")
 
 include("Tests/test_gradient.jl")
 include("Tests/test_convergence.jl")
