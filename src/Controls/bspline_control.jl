@@ -16,6 +16,22 @@ function bspline_control(tf::Float64, D1::Int, omega::AbstractVector{Float64})
     return BSplineControl(bcpar.Ncoeff, tf, bcpar)
 end
 
+"""
+Whereas juqbox uses one struct for multiple operators, here I use one struct
+per operator.
+"""
+function bspline_controls(tf::Float64, D1::Int, omega::AbstractMatrix{Float64})
+    N_controls = size(omega, 1)
+    N_freq = size(omega, 2)
+    controls = Vector{BSplineControl}()
+    for i in 1:N_controls 
+        omega_vec = omega[i,:]
+        push!(controls, bspline_control(tf, D1, omega_vec))
+    end
+
+    return controls
+end
+
 
 function eval_p(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
     return bcarrier2(t, control.bcpar, 0, pcof)
@@ -115,6 +131,22 @@ function bspline_control_autodiff(tf::Float64, D1::Int, omega::AbstractVector{Fl
     omega_bcpar = [omega] # Need to wrap in another vector, since bcparams generally expects multiple controls (multiple frequencies != multiple controls)
     bcpar = bcparams(tf, D1, omega_bcpar, pcof)
     return BSplineControlAutodiff(bcpar.Ncoeff, tf, bcpar)
+end
+
+"""
+Whereas juqbox uses one struct for multiple operators, here I use one struct
+per operator.
+"""
+function bspline_controls_autodiff(tf::Float64, D1::Int, omega::AbstractMatrix{Float64})
+    N_controls = size(omega, 1)
+    N_freq = size(omega, 2)
+    controls = Vector{BSplineControlAutodiff}()
+    for i in 1:N_controls 
+        omega_vec = omega[i,:]
+        push!(controls, bspline_control_autodiff(tf, D1, omega_vec))
+    end
+
+    return controls
 end
 
 
