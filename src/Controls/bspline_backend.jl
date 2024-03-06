@@ -208,18 +208,18 @@ struct bcparams
 end
 
 # simplified constructor (assumes no uncoupled terms)
-# function bcparams(T::Float64, D1::Int64, omega::Array{Float64,2}, pcof::Array{Float64,1})
-#   dtknot = T/(D1 -2)
-#   tcenter = dtknot.*(collect(1:D1) .- 1.5)
-#   Ncoupled = size(omega,1) # should check that Ncoupled >=1
-#   Nfreq = size(omega,2)
-#   Nunc = 0
-#   nCoeff = Nfreq*D1*2*Ncoupled
-#   if nCoeff != length(pcof)
-#     throw(DimensionMismatch("Inconsistent number of coefficients and size of parameter vector (nCoeff ≠ length(pcof)."))
-#   end
-#   bcparams(T, D1, Ncoupled, Nunc, omega, pcof)
-# end
+ function bcparams(T::Float64, D1::Int64, omega::Matrix{Float64}, pcof::Vector{Float64})
+   dtknot = T/(D1 -2)
+   tcenter = dtknot.*(collect(1:D1) .- 1.5)
+   Ncoupled = size(omega,1) # should check that Ncoupled >=1
+   Nfreq = size(omega,2)
+   Nunc = 0
+   nCoeff = Nfreq*D1*2*Ncoupled
+   if nCoeff != length(pcof)
+     throw(DimensionMismatch("Inconsistent number of coefficients and size of parameter vector (nCoeff ≠ length(pcof)."))
+   end
+   bcparams(T, D1, Ncoupled, Nunc, omega, pcof)
+ end
 
 # Updated simplified constructor with variable # freq's (no uncoupled terms)
 function bcparams(T::Float64, D1::Int64, omega::Vector{Vector{Float64}}, pcof::Vector{Float64})
