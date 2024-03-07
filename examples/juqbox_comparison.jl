@@ -138,6 +138,7 @@ maxeig = maximum(abs.(lamb))
 Pmin = 40 # should be 20 or higher
 samplerate1 = maxeig*Pmin/(2*pi)
 nsteps = ceil(Int64,Tmax*samplerate1)
+#nsteps = 100
 
 println("Number of time steps = ", nsteps)
 
