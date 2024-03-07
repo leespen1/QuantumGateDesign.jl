@@ -285,6 +285,16 @@ function apply_hamiltonian!(out_real::AbstractVector{Float64}, out_imag::Abstrac
 
     # Apply system hamiltonian if we aren't taking the derivative of the hamiltonian
     if (derivative_order == 0)
+        # Each of these `mul!`s does a single allocation of 64 bytes. I think
+        # that accounts for the allocations, and is consistent with REPL
+        # (actually less). So I need to fix this
+        #
+        # When I just do a loop with a bunch of apply_hamiltonian! calls, the
+        # allocation doesn't happen. So it appears to be a type inference problem.
+        # Try Cthulhu
+        #
+        # I guess it's not type-instability, but mul! allocates memory when the matrix is sparse and the vectors are views. 
+        # So what I guess I need are some working arrays.
         mul!(out_real, prob.system_asym, in_real, adjoint_factor, 1)
         mul!(out_real, prob.system_sym,  in_imag, adjoint_factor, 1)
 
