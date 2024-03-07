@@ -33,39 +33,39 @@ function bspline_controls(tf::Float64, D1::Int, omega::AbstractMatrix{Float64})
 end
 
 
-function eval_p(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
+function eval_p(control::BSplineControl, t::Float64, pcof::AbstractVector{<: Real})
     return bcarrier2(t, control.bcpar, 0, pcof)
 end
 
-function eval_q(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
+function eval_q(control::BSplineControl, t::Float64, pcof::AbstractVector{<: Real})
     return bcarrier2(t, control.bcpar, 1, pcof)
 end
 
-function eval_pt(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
+function eval_pt(control::BSplineControl, t::Float64, pcof::AbstractVector{<: Real})
     return bcarrier2_dt(t, control.bcpar, 0, pcof)
 end
 
-function eval_qt(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
+function eval_qt(control::BSplineControl, t::Float64, pcof::AbstractVector{<: Real})
     return bcarrier2_dt(t, control.bcpar, 1, pcof)
 end
 
-function eval_grad_p(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
+function eval_grad_p(control::BSplineControl, t::Float64, pcof::AbstractVector{<: Real})
     return gradbcarrier2(t, control.bcpar, 0)
 end
 
-function eval_grad_q(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
+function eval_grad_q(control::BSplineControl, t::Float64, pcof::AbstractVector{<: Real})
     return gradbcarrier2(t, control.bcpar, 1)
 end
 
-function eval_grad_pt(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
+function eval_grad_pt(control::BSplineControl, t::Float64, pcof::AbstractVector{<: Real})
     return gradbcarrier2_dt(t, control.bcpar, 0)
 end
 
-function eval_grad_qt(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real})
+function eval_grad_qt(control::BSplineControl, t::Float64, pcof::AbstractVector{<: Real})
     return gradbcarrier2_dt(t, control.bcpar, 1)
 end
 
-function eval_p_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
+function eval_p_derivative(control::BSplineControl, t::Float64, pcof::AbstractVector{<: Real}, order::Int64)::Float64
     if (order == 0)
         return eval_p(control, t, pcof)
     elseif (order == 1)
@@ -77,7 +77,7 @@ function eval_p_derivative(control::BSplineControl, t::Real, pcof::AbstractVecto
     return NaN
 end
 
-function eval_q_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
+function eval_q_derivative(control::BSplineControl, t::Float64, pcof::AbstractVector{<: Real}, order::Int64)::Float64
     if (order == 0)
         return eval_q(control, t, pcof)
     elseif (order == 1)

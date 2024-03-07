@@ -42,7 +42,7 @@ Evaluate a B-spline function. See also the `splineparams` constructor.
 - `param::splineparams`: Parameters for the spline
 - `splinefunc::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function bspline2(t::Real, param::splineparams, splinefunc::Int64)
+@inline function bspline2(t::T, param::splineparams, splinefunc::Int64)::T where T <: Real
   f = 0.0
 
   dtknot = param.dtknot
@@ -83,7 +83,7 @@ corresponds to ∇ q_j(t), where j = div(splinefunc,2).
 - `param::splineparams`: Spline parameter object
 - `splinefunc::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function gradbspline2(t::Real,param::splineparams, splinefunc::Int64)
+@inline function gradbspline2(t::Real, param::splineparams, splinefunc::Int64)
 
 # NOTE: param.Nseg used to be '2'
   g = zeros(param.Nseg*param.D1) # real and imag parts for both f and g 
@@ -254,7 +254,7 @@ Evaluate a B-spline function with carrier waves. See also the `bcparams` constru
 - `param::params`: Parameters for the spline
 - `func::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function bcarrier2(t::Real, bcpar::bcparams, func::Int64)
+@inline function bcarrier2(t::T, bcpar::bcparams, func::Int64)::T where T <: Real
     # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
     # in general, 0 <= func < 2*(Ncoupled + Nunc)
 
