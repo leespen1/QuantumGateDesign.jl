@@ -22,7 +22,7 @@
 #
 =#
 
-using HermiteOptimalControl
+using QuantumGateDesign
 
 function main(;d=3, N_guard=1, D1=missing, tf=missing, nsteps=missing)
 

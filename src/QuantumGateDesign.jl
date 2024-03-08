@@ -1,11 +1,11 @@
-module HermiteOptimalControl
+module QuantumGateDesign
 
 
-import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
+import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra, BenchmarkTools
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 
 # Export derivative computation functions
-export compute_derivatives!, compute_adjoint_derivatives!, compute_partial_derivative!
+export compute_derivatives!, compute_adjoint_derivatives!, compute_partial_derivative!, apply_hamiltonian!
 
 # Export schrodinger problem definition and forward evolution methods
 export SchrodingerProb, VectorSchrodingerProb
@@ -46,6 +46,8 @@ export infidelity
 
 export hermite_interp_poly
 
+export convert_juqbox
+
 include("SchrodingerProb.jl")
 include("../Daniel/hermite_map.jl")
 
@@ -77,13 +79,13 @@ include("state_vector_helpers.jl")
 include("ProblemConstructors/lowering_operators.jl")
 include("ProblemConstructors/rotating_frame_qubit.jl")
 include("ProblemConstructors/dahlquist_problem.jl")
+include("ProblemConstructors/juqbox_converter.jl")
 
 include("Tests/test_gradient.jl")
 include("Tests/test_convergence.jl")
 
 include("Plotting/plot_control.jl")
 
-include("extension_compatibility.jl")
 
 module OldCompat
 include("OldHardcoded/SchrodingerProb.jl")
@@ -96,4 +98,10 @@ include("OldHardcoded/infidelity.jl")
 include("OldHardcoded/state_vector_helper.jl")
 end # module OldCompat
 
-end # module HermiteOptimalControl
+# Define functions without methods, so that extensions can override them
+include("extension_compatibility.jl")
+export visualize_control
+export construct_ODEProb
+export convert_to_numpy, Qobj, unpack_Qobj, simulate_prob_no_control
+
+end # module QuantumGateDesign

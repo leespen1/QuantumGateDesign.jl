@@ -42,7 +42,7 @@ Evaluate a B-spline function. See also the `splineparams` constructor.
 - `param::splineparams`: Parameters for the spline
 - `splinefunc::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function bspline2(t::Real, param::splineparams, splinefunc::Int64)
+@inline function bspline2(t::T, param::splineparams, splinefunc::Int64)::T where T <: Real
   f = 0.0
 
   dtknot = param.dtknot
@@ -83,7 +83,7 @@ corresponds to ∇ q_j(t), where j = div(splinefunc,2).
 - `param::splineparams`: Spline parameter object
 - `splinefunc::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function gradbspline2(t::Real,param::splineparams, splinefunc::Int64)
+@inline function gradbspline2(t::Real, param::splineparams, splinefunc::Int64)
 
 # NOTE: param.Nseg used to be '2'
   g = zeros(param.Nseg*param.D1) # real and imag parts for both f and g 
@@ -208,18 +208,18 @@ struct bcparams
 end
 
 # simplified constructor (assumes no uncoupled terms)
-# function bcparams(T::Float64, D1::Int64, omega::Array{Float64,2}, pcof::Array{Float64,1})
-#   dtknot = T/(D1 -2)
-#   tcenter = dtknot.*(collect(1:D1) .- 1.5)
-#   Ncoupled = size(omega,1) # should check that Ncoupled >=1
-#   Nfreq = size(omega,2)
-#   Nunc = 0
-#   nCoeff = Nfreq*D1*2*Ncoupled
-#   if nCoeff != length(pcof)
-#     throw(DimensionMismatch("Inconsistent number of coefficients and size of parameter vector (nCoeff ≠ length(pcof)."))
-#   end
-#   bcparams(T, D1, Ncoupled, Nunc, omega, pcof)
-# end
+ function bcparams(T::Float64, D1::Int64, omega::Matrix{Float64}, pcof::Vector{Float64})
+   dtknot = T/(D1 -2)
+   tcenter = dtknot.*(collect(1:D1) .- 1.5)
+   Ncoupled = size(omega,1) # should check that Ncoupled >=1
+   Nfreq = size(omega,2)
+   Nunc = 0
+   nCoeff = Nfreq*D1*2*Ncoupled
+   if nCoeff != length(pcof)
+     throw(DimensionMismatch("Inconsistent number of coefficients and size of parameter vector (nCoeff ≠ length(pcof)."))
+   end
+   bcparams(T, D1, Ncoupled, Nunc, omega, pcof)
+ end
 
 # Updated simplified constructor with variable # freq's (no uncoupled terms)
 function bcparams(T::Float64, D1::Int64, omega::Vector{Vector{Float64}}, pcof::Vector{Float64})
@@ -254,7 +254,7 @@ Evaluate a B-spline function with carrier waves. See also the `bcparams` constru
 - `param::params`: Parameters for the spline
 - `func::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
-@inline function bcarrier2(t::Real, bcpar::bcparams, func::Int64)
+@inline function bcarrier2(t::T, bcpar::bcparams, func::Int64)::T where T <: Real
     # for a single oscillator, func=0 corresponds to p(t) and func=1 to q(t)
     # in general, 0 <= func < 2*(Ncoupled + Nunc)
 

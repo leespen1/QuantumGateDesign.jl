@@ -54,6 +54,7 @@ mutable struct SchrodingerProb{M, VM}
         # Currently hardcoded for a single qubit. I should make a default here,
         # and an assertion that the projector is symmetric (which is really the
         # only requirement we have)
+        # Wait, do I want to project onto essential or forbidden subspace?
         essential_subspace_projector = create_essential_subspace_projector(N_ess_levels, N_tot_levels)
 
         # Copy arrays when creating a Schrodinger problem
@@ -150,32 +151,6 @@ function Base.show(io::IO, ::MIME"text/plain", prob::SchrodingerProb{M, VM}) whe
 end
 
 """
-Return a Schrodinger Problem which is a copy of the one provided, but with the
-difference that the system operators and initial conditions are all zero, as
-they are constant in the original problem and therefore go to zero when we take
-the partial derivative with respect to a control parameter.
-
-Could do this in a non-copying way, but I am not worried about the performance
-of this right now. Especially since I only expect to use this method in
-eval_grad_forced.
-"""
-function differentiated_prob(prob::SchrodingerProb)
-    diff_prob = copy(prob)
-    diff_prob.system_sym .= 0
-    diff_prob.system_asym .= 0
-    diff_prob.u0 .= 0
-    diff_prob.v0 .= 0
-    return diff_prob
-end
-
-function time_diff_prob(prob::SchrodingerProb)
-    diff_prob = copy(prob)
-    diff_prob.u0 .= 0
-    diff_prob.v0 .= 0
-    return diff_prob
-end
-
-"""
 Create the matrix that projects a state vector onto the guarded subspace.
 
 Currently hardcoded for a single qubit. Shouldn't be a challenge to do it for
@@ -192,4 +167,23 @@ function create_essential_subspace_projector(N_ess_levels::Int64, N_tot_levels::
     W_realsystem = LinearAlgebra.kron(identity_2by2, W)
 
     return W_realsystem
+end
+
+"""
+Given a SchrodingerProb, return version where all the arrays are dense.
+"""
+function DenseSchrodingerProb(prob::SchrodingerProb)
+    dense_prob =  SchrodingerProb(
+        Array(prob.system_sym),
+        Array(prob.system_asym),
+        Array.(prob.sym_operators),
+        Array.(prob.asym_operators),
+        Array(prob.u0),
+        Array(prob.v0),
+        prob.tf,
+        prob.nsteps,
+        prob.N_ess_levels,
+        prob.N_guard_levels,
+    )
+    return dense_prob
 end
