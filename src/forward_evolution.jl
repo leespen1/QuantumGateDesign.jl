@@ -116,7 +116,11 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
 
     N_gmres_iterations = 0
 
-    gmres_iterable = IterativeSolvers.gmres_iterable!(zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size), abstol=1e-10, reltol=1e-10, restart=prob.real_system_size, initially_zero=false)
+    gmres_iterable = IterativeSolvers.gmres_iterable!(
+        zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
+        abstol=1e-10, reltol=1e-10, restart=prob.real_system_size,
+        initially_zero=false
+    )
 
     # Important to do this after setting up the linear map and gmres_iterable. One of those seems to be overwriting uv_mat
     uv_mat[1:prob.N_tot_levels,                       1] .= prob.u0
@@ -164,6 +168,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
 
         update_gmres_iterable!(gmres_iterable, uv_vec, RHS)
 
+        N_gmres_iterations = 0
         for iter in gmres_iterable
             N_gmres_iterations += 1
         end
@@ -441,24 +446,17 @@ function eval_forward_new!(uv_history::AbstractArray{Float64, 3},
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
         use_taylor_guess::Bool=true, verbose::Bool=false
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
-    println("using new eval_forward")
 
     #function TimestepHolder(system_size, N_derivatives, pcof, controls, prob)
     
-    t::Float64 = 0.0
-    dt::Float64 = prob.tf/prob.nsteps
+    t = 0.0
+    dt = prob.tf/prob.nsteps
     N_derivatives = div(order, 2)
 
     # Check size of uv_history storage
     @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
 
-    timestep_holder = TimestepHolder(prob.real_system_size, N_derivatives, pcof, controls, prob)
-
-    # Important to do this after setting up the linear map and gmres_iterable. One of those seems to be overwriting uv_mat
-    timestep_holder.uv_mat[1:prob.N_tot_levels,                       1] .= prob.u0
-    timestep_holder.uv_mat[prob.N_tot_levels+1:prob.real_system_size, 1] .= prob.v0
-    uv_history[:, :, 1] .= timestep_holder.uv_mat
-
+    timestep_holder = TimestepHolder(prob, controls, pcof, N_derivatives)
 
     # For some reason, using a Matrix as the preconditioner results in an error.
     #H_no_timing = [prob.system_asym prob.system_sym; -prob.system_sym prob.system_asym]
@@ -475,8 +473,8 @@ function eval_forward_new!(uv_history::AbstractArray{Float64, 3},
 
     # Compute the derivatives of uv at the final time and store them
     t = prob.nsteps*dt
-    current_uv_mat_view = view(uv_history, :, :, 1+prob.nsteps)
-    perform_timestep!(timestep_holder, t, dt, current_uv_mat_view)
+    compute_derivatives!(timestep_holder, t)
+    uv_history[:, :, 1+prob.nsteps] .= timestep_holder.uv_mat
 
     return nothing
 end
@@ -494,21 +492,38 @@ mutable struct TimestepHolder{T1, T2, T3, T4}
     prob::T2
     lhs_holder::T3
     gmres_iterable::T4
-    function TimestepHolder(system_size, N_derivatives, pcof, controls::T1, prob::T2) where {T1, T2}
+    function TimestepHolder(prob::T2, controls::T1, pcof, N_derivatives)  where {T1, T2}
+        system_size = prob.real_system_size
         uv_mat = zeros(system_size, 1+N_derivatives) 
         uv_vec = zeros(system_size) 
+
         RHS = zeros(system_size) 
         t = 0.0
-        dt = 0.0
+        dt = prob.tf / prob.nsteps
+
         lhs_holder = LHSHolder(t, dt, N_derivatives, uv_mat, pcof, controls, prob)
+
         # Create linear map out of LHS_func_wrapper, to use in GMRES
         LHS_map = LinearMaps.LinearMap(
             lhs_holder,
-            prob.real_system_size, prob.real_system_size,
+            system_size, system_size,
             ismutating=true
         )
-        gmres_iterable = IterativeSolvers.gmres_iterable!(zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size), abstol=1e-10, reltol=1e-10, restart=prob.real_system_size, initially_zero=false)
-        new{T1, T2, typeof(lhs_holder), typeof(gmres_iterable)}(N_derivatives, uv_mat, uv_vec, RHS, pcof, controls, prob, lhs_holder, gmres_iterable)
+
+        gmres_iterable = IterativeSolvers.gmres_iterable!(
+            zeros(system_size), LHS_map, zeros(system_size),
+            abstol=1e-10, reltol=1e-10, restart=system_size,
+            initially_zero=false
+        )
+
+        # For some reason, it is important that I do this after creating the gmres_iterable
+        uv_mat[1:prob.N_tot_levels,                       1] .= prob.u0
+        uv_mat[prob.N_tot_levels+1:prob.real_system_size, 1] .= prob.v0
+
+
+        new{T1, T2, typeof(lhs_holder), typeof(gmres_iterable)}(
+            N_derivatives, uv_mat, uv_vec, RHS, pcof, controls, prob,
+            lhs_holder, gmres_iterable)
     end
 end
 
@@ -534,13 +549,13 @@ function (self::LHSHolder)(out_vec, in_vec)
     return nothing
 end
 
-function perform_timestep!(timestep_holder::TimestepHolder, t, dt, uv_matrix_copy_storage=missing)
-    timestep_holder.lhs_holder.tnext = t+dt
-    timestep_holder.lhs_holder.dt = dt
+function compute_derivatives!(timestep_holder::TimestepHolder, t)
+    compute_derivatives!(timestep_holder.uv_mat, timestep_holder.prob, timestep_holder.controls, t, timestep_holder.pcof, timestep_holder.N_derivatives)
+end
 
+function perform_timestep!(timestep_holder::TimestepHolder, t, dt, uv_matrix_copy_storage=missing; use_taylor_guess=true)
 
-    compute_derivatives!(timestep_holder.uv_mat, timestep_holder.prob, timestep_holder.controls,
-                         t, timestep_holder.pcof, timestep_holder.N_derivatives)
+    compute_derivatives!(timestep_holder, t)
 
     # Optionally copy uv_matrix in a an outside matrix
     if !ismissing(uv_matrix_copy_storage)
@@ -549,19 +564,27 @@ function perform_timestep!(timestep_holder::TimestepHolder, t, dt, uv_matrix_cop
     
     build_RHS!(timestep_holder.RHS, timestep_holder.uv_mat, dt, timestep_holder.N_derivatives)
 
-    if true #use_taylor_guess
-        taylor_expand!(timestep_holder.uv_vec, timestep_holder.uv_mat, dt, timestep_holder.N_derivatives) # Use taylor expansion as guess
+    if use_taylor_guess
+        taylor_expand!(timestep_holder.uv_vec, timestep_holder.uv_mat, dt,
+                       timestep_holder.N_derivatives) # Use taylor expansion as guess
     else
         timestep_holder.uv_vec .= view(timestep_holder.uv_mat, 1:timestep_holder.prob.real_system_size, 1) # Use current timestep as initial guess for gmres
     end
 
+    # Set up gmres/linear map to do the timestep
+    timestep_holder.lhs_holder.tnext = t+dt
+    timestep_holder.lhs_holder.dt = dt
 
-    update_gmres_iterable!(timestep_holder.gmres_iterable, timestep_holder.uv_vec, timestep_holder.RHS)
+    update_gmres_iterable!(timestep_holder.gmres_iterable, timestep_holder.uv_vec,
+                           timestep_holder.RHS)
 
+
+    N_gmres_iterations = 0
     for iter in timestep_holder.gmres_iterable
-        #N_gmres_iterations += 1
+        N_gmres_iterations += 1
     end
 
+    timestep_holder.uv_vec .= timestep_holder.gmres_iterable.x
     timestep_holder.uv_mat[:,1] .= timestep_holder.uv_vec
 
     return nothing
