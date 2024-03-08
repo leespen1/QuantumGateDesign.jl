@@ -38,7 +38,7 @@ Can also use Cython strings
 
 using CondaPkg
 using PythonCall
-using HermiteOptimalControl
+using QuantumGateDesign
 
 CondaPkg.add("numpy")
 CondaPkg.add("qutip")

@@ -1,4 +1,4 @@
-module HermiteOptimalControl
+module QuantumGateDesign
 
 
 import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra, BenchmarkTools
@@ -104,4 +104,4 @@ export visualize_control
 export construct_ODEProb
 export convert_to_numpy, Qobj, unpack_Qobj, simulate_prob_no_control
 
-end # module HermiteOptimalControl
+end # module QuantumGateDesign

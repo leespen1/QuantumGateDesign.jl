@@ -35,7 +35,7 @@ Base.show(io::IO, f::Float64) = @printf(io, "%20.13e", f)
 
 using Juqbox
 
-using HermiteOptimalControl
+using QuantumGateDesign
 
 # function my_initial_cond(Ntot, N, Ne, Ng)
 #     Ident = Matrix{Float64}(I, Ntot, Ntot)
@@ -273,4 +273,4 @@ ret = traceobjgrad(pcof0, params, wa, true, false)
 history_juqbox = ret[2]
 
 prob = convert_juqbox(params)
-controls = HermiteOptimalControl.bspline_controls(prob.tf, D1, om)
+controls = QuantumGateDesign.bspline_controls(prob.tf, D1, om)

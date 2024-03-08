@@ -1,6 +1,6 @@
 module Dummy
 
-using HermiteOptimalControl
+using QuantumGateDesign
 using QuantumOptics
 
 println("The extension is loaded")

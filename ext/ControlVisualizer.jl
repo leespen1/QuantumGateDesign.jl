@@ -2,7 +2,7 @@ module ControlVisualizer
 
 println("Loading ControlVisualizer")
 
-using HermiteOptimalControl
+using QuantumGateDesign
 using GLMakie
 
 
@@ -12,7 +12,7 @@ Visualize a Control Using Makie
 This is really old. From back when I was using functions as parameters for the
 object instead of methods for the type. Needs to be updated to work.
 """
-function HermiteOptimalControl.visualize_control(control; n_points=101, prob=missing, 
+function QuantumGateDesign.visualize_control(control; n_points=101, prob=missing, 
         pcof_init=missing, use_tboxes=true)
 
     tf = control.tf

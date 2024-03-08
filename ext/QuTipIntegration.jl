@@ -4,7 +4,7 @@ println("Loading QuTipIntegration")
 
 using CondaPkg
 using PythonCall
-using HermiteOptimalControl
+using QuantumGateDesign
 
 CondaPkg.add("numpy")
 CondaPkg.add("qutip")
@@ -52,19 +52,19 @@ Alternatively, could sample the julia controls and do the hamiltonian/amp list o
 Can also use Cython strings
 ===============================================================================#
 
-HermiteOptimalControl.convert_to_numpy(A::AbstractArray{<: Real}) = np.array(A, dtype=np.float64)
+QuantumGateDesign.convert_to_numpy(A::AbstractArray{<: Real}) = np.array(A, dtype=np.float64)
 # Make sure complex matrices are stored in the correct format
 # Note that numpy.complex128 stores the real and imaginary parts as 64-bit
 # floating points, which is equivalent to Julia's ComplexF64.
-HermiteOptimalControl.convert_to_numpy(A::AbstractArray{<: Complex}) = np.array(A, dtype=np.complex128)
+QuantumGateDesign.convert_to_numpy(A::AbstractArray{<: Complex}) = np.array(A, dtype=np.complex128)
 
-HermiteOptimalControl.Qobj(A::AbstractArray) = qutip.Qobj(convert_to_numpy(A))
+QuantumGateDesign.Qobj(A::AbstractArray) = qutip.Qobj(convert_to_numpy(A))
 
 """
 Get the qutip.Qobj version of an array (which is used to store operators, kets,
 etc)
 """
-function HermiteOptimalControl.Qobj(A_real::AbstractArray{<: Real}, A_imag::AbstractArray{<: Real})
+function QuantumGateDesign.Qobj(A_real::AbstractArray{<: Real}, A_imag::AbstractArray{<: Real})
     return Qobj(A_real .+ (im .* A_imag))
 end
 
@@ -75,7 +75,7 @@ numpy arrays, but not sparse ones, so we convert to dense.
 Once we get the dense, numpy matrix, we call PyArray on it so we can deal with
 it using Julia indices.
 """
-function HermiteOptimalControl.unpack_Qobj(qobj)
+function QuantumGateDesign.unpack_Qobj(qobj)
     return PyArray(qobj.data.todense())
 end
 
@@ -85,7 +85,7 @@ https://qutip.org/docs/latest/guide/dynamics/dynamics-time.html
 
 Here, I will assume there is no time-dependence in the hamiltonian
 """
-function HermiteOptimalControl.simulate_prob_no_control(prob::SchrodingerProb; atol=1e-15, rtol=1e-15, kwargs ...)
+function QuantumGateDesign.simulate_prob_no_control(prob::SchrodingerProb; atol=1e-15, rtol=1e-15, kwargs ...)
 
     H = Qobj(prob.system_sym, prob.system_asym)
 

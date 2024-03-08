@@ -1,4 +1,4 @@
-using HermiteOptimalControl
+using QuantumGateDesign
 using OrdinaryDiffEq
 using ProfileView
 using BenchmarkTools
@@ -6,12 +6,12 @@ using BenchmarkTools
 include("SWAP_example.jl")
 
 prob, control, pcof, target, pcof_u, pcof_l= main(d=1, N_guard=1, tf=1.0, D1=10)
-control = HermiteOptimalControl.SinCosControl(prob.tf)
+control = QuantumGateDesign.SinCosControl(prob.tf)
 pcof = [1.0, 1.0]
 
 @btime history = eval_forward(prob, control, pcof, order=2);
 
-ode_prob = HermiteOptimalControl.construct_ODEProb(prob, control, pcof)
+ode_prob = QuantumGateDesign.construct_ODEProb(prob, control, pcof)
 @btime ode_ret = solve(ode_prob, Tsit5(), reltol=1e-14, abstol=1e-14);
 
 # For 4th order, 400 timesteps gets 1e-12 norm agreement, 1e-13 entry agreement.

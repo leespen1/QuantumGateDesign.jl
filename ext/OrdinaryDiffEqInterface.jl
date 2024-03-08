@@ -2,7 +2,7 @@ module OrdinaryDiffEqInterface
 
 println("Loading OrdinaryDiffEqInterface")
 
-using HermiteOptimalControl
+using QuantumGateDesign
 using OrdinaryDiffEq
 
 #===============================================================================
@@ -69,7 +69,7 @@ function ODE_f!(du::M, u::M, p, t) where {M <: AbstractMatrix}
     return nothing
 end
 
-function HermiteOptimalControl.construct_ODEProb(prob::SchrodingerProb, controls, pcof::AbstractVector{<: Real})
+function QuantumGateDesign.construct_ODEProb(prob::SchrodingerProb, controls, pcof::AbstractVector{<: Real})
     p = ODEparams(prob, controls, pcof)
     w0 = vcat(prob.u0, prob.v0)
     tf = prob.tf
