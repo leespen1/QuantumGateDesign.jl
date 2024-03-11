@@ -78,19 +78,14 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
 
     # Allocate memory for storing u,v, and their derivatives at a single point in time
     uv_mat = Matrix{Float64}(undef, prob.real_system_size, 1+N_derivatives)
-    #uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
-
     # Allocate memory for storing just u,v at a single point in time (to pass into/out of GMRES)
     uv_vec = Vector{Float64}(undef, prob.real_system_size)
-    #uv_vec = zeros(prob.real_system_size)
-
     # Allocate memory for storing the right hand side (explicit part) of each timestep (to use as RHS of GMRES)
     RHS = Vector{Float64}(undef, prob.real_system_size)
 
     uv_mat .= 0
     uv_vec .= 0
     RHS .= 0
-    #RHS::Vector{Float64} = zeros(prob.real_system_size)
 
     # Allocate a matrix for storing the forcing at a single point in time (if we have forcing)
     if ismissing(forcing)
@@ -156,7 +151,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         t = (n+1)*dt
         lhs_holder.tnext = t
 
-        # Account for forcing from next timestep
+        # Account for forcing from next timestep (which is still explicit)
         if !ismissing(forcing_next_time_mat)
             forcing_next_time_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n+1)
             forcing_helper_mat .= 0
@@ -173,9 +168,10 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
             N_gmres_iterations += 1
         end
 
-
         uv_mat[:,1] .= gmres_iterable.x
     end
+
+
     N_gmres_iterations /= prob.nsteps
     if verbose
         println("Average # of gmres iterations: ", N_gmres_iterations)
@@ -244,11 +240,13 @@ function eval_adjoint(
     return uv_history
 end
 
+
 function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         prob::SchrodingerProb{M, V}, controls,
         pcof::AbstractVector{<: Real}, terminal_condition::AbstractVector{Float64}
         ; order::Int=2,
-        forcing::Union{AbstractArray{Float64, 2}, Missing}=missing
+        forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
+        use_taylor_guess=true
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     
@@ -260,45 +258,57 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
     @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
 
     # Allocate memory for storing u,v, and their derivatives at a single point in time
-    uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
-    uv_mat[1:prob.N_tot_levels,                       1] .= terminal_condition[1:prob.N_tot_levels]
-    uv_mat[prob.N_tot_levels+1:prob.real_system_size, 1] .= terminal_condition[prob.N_tot_levels+1:prob.real_system_size]
-
-    uv_history[:, :, 1+prob.nsteps] .= uv_mat
-
+    uv_mat = Matrix{Float64}(undef, prob.real_system_size, 1+N_derivatives)
     # Allocate memory for storing just u,v at a single point in time (to pass into/out of GMRES)
-    uv_vec = zeros(prob.real_system_size)
+    uv_vec = Vector{Float64}(undef, prob.real_system_size)
     # Allocate memory for storing the right hand side (explicit part) of each timestep (to use as RHS of GMRES)
-    RHS::Vector{Float64} = zeros(prob.real_system_size)
+    RHS = Vector{Float64}(undef, prob.real_system_size)
 
-    # This probably creates type-instability, as functions have singleton types, 
-    # and this function is (I'm pretty sure) not created until runtime
-    #
-    # Create wrapper for computing action of LHS on uvₙ₊₁ at each timestep (to be compatible with LinearMaps)
-    function LHS_func_wrapper(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
-        uv_mat[:,1] .= uv_in
-        compute_adjoint_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives)
-        # Do I need to make and adjoint version of this? I don't think so, considering before LHS only used adjoint for utvt!, not the quadrature
-        # But maybe there is a negative t I need to worry about. Maybe just provide dt as -dt
-        build_LHS!(uv_out, uv_mat, dt, N_derivatives)
+    uv_mat .= 0
+    uv_vec .= 0
+    RHS .= 0
 
-        return nothing
+    # Allocate a matrix for storing the forcing at a single point in time (if we have forcing)
+    if ismissing(forcing)
+        forcing_mat = missing
+        forcing_next_time_mat = missing
+        forcing_helper_mat = missing
+        forcing_helper_vec = missing 
+    else
+        forcing_mat = zeros(prob.real_system_size, N_derivatives)
+        forcing_next_time_mat = zeros(prob.real_system_size, N_derivatives)
+        forcing_helper_mat = zeros(prob.real_system_size, 1+N_derivatives) # For computing derivatives of forcing at next timestep
+        forcing_helper_vec = zeros(prob.real_system_size) # For subtracting LHS forcing terms from the RHS (since they are explicit)
     end
+
+    lhs_holder = LHSHolderAdjoint(t, dt, N_derivatives, uv_mat, pcof, controls, prob)
 
     # Create linear map out of LHS_func_wrapper, to use in GMRES
     LHS_map = LinearMaps.LinearMap(
-        LHS_func_wrapper,
+        lhs_holder,
         prob.real_system_size, prob.real_system_size,
         ismutating=true
     )
 
+    N_gmres_iterations = 0
+
+    gmres_iterable = IterativeSolvers.gmres_iterable!(
+        zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
+        abstol=1e-10, reltol=1e-10, restart=prob.real_system_size,
+        initially_zero=false
+    )
+
+    # Important to do this after setting up the linear map and gmres_iterable. One of those seems to be overwriting uv_mat
+    uv_mat[1:prob.N_tot_levels,                       1] .= view(terminal_condition,1:prob.N_tot_levels)
+    uv_mat[prob.N_tot_levels+1:prob.real_system_size, 1] .= view(terminal_condition,prob.N_tot_levels+1:prob.real_system_size)
+
+    uv_history[:, :, 1+prob.nsteps] .= uv_mat
+
+
     # Perform the timesteps
     for n in prob.nsteps:-1:2
-
-        # Compute the RHS (explicit part). 
-        # NOTE THAT SAME TIME IS USED FOR EXPLICIT AND IMPLICIT PART, UNLIKE IN FORWARD EVOLUTION
+        # Compute the RHS (explicit part)
         t = (n-1)*dt
-
         compute_adjoint_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives)
         uv_history[:, :, 1+n] .= uv_mat
         build_RHS!(RHS, uv_mat, dt, N_derivatives)
@@ -309,10 +319,25 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
             RHS .+= view(forcing, :, 1+n-1) 
         end
 
+        ## Not sure how valid the taylor guess is here, since the ODE is not the same
+        #if use_taylor_guess
+        #    taylor_expand!(uv_vec, uv_mat, -dt, N_derivatives) # Use taylor expansion as guess
+        #else
+        #    uv_vec .= view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
+        #end
+
         # Use GMRES to perform the timestep (implicit part)
+        lhs_holder.tnext = t # Should rename tnext to t_imp, since it's not necessarily 'next'
+
         uv_vec .= view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
-        IterativeSolvers.gmres!(uv_vec, LHS_map, RHS, abstol=1e-15, reltol=1e-15, restart=prob.real_system_size)
-        uv_mat[:,1] .= uv_vec
+        update_gmres_iterable!(gmres_iterable, uv_vec, RHS)
+
+        N_gmres_iterations = 0
+        for iter in gmres_iterable
+            N_gmres_iterations += 1
+        end
+
+        uv_mat[:,1] .= gmres_iterable.x
     end
 
     # Compute the derivatives of uv at n=1 and store them
@@ -322,7 +347,6 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
 
     return nothing
 end
-
 
 
 function eval_adjoint(
@@ -458,11 +482,6 @@ function eval_forward_new!(uv_history::AbstractArray{Float64, 3},
 
     timestep_holder = TimestepHolder(prob, controls, pcof, N_derivatives)
 
-    # For some reason, using a Matrix as the preconditioner results in an error.
-    #H_no_timing = [prob.system_asym prob.system_sym; -prob.system_sym prob.system_asym]
-    #LHS_no_timing = Array(LinearAlgebra.diagm(ones(prob.real_system_size)) .- (dt .* H_no_timing))
-    #LHS_no_timing = LinearAlgebra.diagm(ones(prob.real_system_size))
-
     # Perform the timesteps
     for n in 0:prob.nsteps-1
         t = n*dt
@@ -485,7 +504,9 @@ Work in progress, trying to change from inline function
 mutable struct TimestepHolder{T1, T2, T3, T4}
     N_derivatives::Int64
     uv_mat::Matrix{Float64}
+    forcing_mat::Matrix{Float64}
     uv_vec::Vector{Float64}
+    forcing_vec::Vector{Float64}
     RHS::Vector{Float64}
     pcof::Vector{Float64}
     controls::T1
@@ -494,8 +515,12 @@ mutable struct TimestepHolder{T1, T2, T3, T4}
     gmres_iterable::T4
     function TimestepHolder(prob::T2, controls::T1, pcof, N_derivatives)  where {T1, T2}
         system_size = prob.real_system_size
+
         uv_mat = zeros(system_size, 1+N_derivatives) 
+        forcing_mat = zeros(system_size, 1+N_derivatives) 
+
         uv_vec = zeros(system_size) 
+        forcing_vec = zeros(system_size) 
 
         RHS = zeros(system_size) 
         t = 0.0
@@ -522,7 +547,7 @@ mutable struct TimestepHolder{T1, T2, T3, T4}
 
 
         new{T1, T2, typeof(lhs_holder), typeof(gmres_iterable)}(
-            N_derivatives, uv_mat, uv_vec, RHS, pcof, controls, prob,
+            N_derivatives, uv_mat, forcing_mat, uv_vec, forcing_vec, RHS, pcof, controls, prob,
             lhs_holder, gmres_iterable)
     end
 end
@@ -549,13 +574,26 @@ function (self::LHSHolder)(out_vec, in_vec)
     return nothing
 end
 
-function compute_derivatives!(timestep_holder::TimestepHolder, t)
-    compute_derivatives!(timestep_holder.uv_mat, timestep_holder.prob, timestep_holder.controls, t, timestep_holder.pcof, timestep_holder.N_derivatives)
+function compute_derivatives!(timestep_holder::TimestepHolder, t; forcing_matrix=missing)
+    compute_derivatives!(
+        timestep_holder.uv_mat, timestep_holder.prob, timestep_holder.controls,
+        t, timestep_holder.pcof, timestep_holder.N_derivatives,
+        forcing_matrix=forcing_matrix
+    )
 end
 
-function perform_timestep!(timestep_holder::TimestepHolder, t, dt, uv_matrix_copy_storage=missing; use_taylor_guess=true)
+function compute_forcing_derivatives!(timestep_holder::TimestepHolder, t, forcing_matrix)
+    compute_derivatives!(
+        timestep_holder.forcing_mat, timestep_holder.prob, timestep_holder.controls,
+        t, timestep_holder.pcof, timestep_holder.N_derivatives,
+        forcing_mat=forcing_mat
+    )
+end
 
-    compute_derivatives!(timestep_holder, t)
+function perform_timestep!(timestep_holder::TimestepHolder, t, dt,
+        uv_matrix_copy_storage=missing; forcing_mat_tn=missing, forcing_mat_tnp1=missing, use_taylor_guess=true)
+
+    compute_derivatives!(timestep_holder, t, forcing_matrix=forcing_mat_tn)
 
     # Optionally copy uv_matrix in a an outside matrix
     if !ismissing(uv_matrix_copy_storage)
@@ -564,9 +602,20 @@ function perform_timestep!(timestep_holder::TimestepHolder, t, dt, uv_matrix_cop
     
     build_RHS!(timestep_holder.RHS, timestep_holder.uv_mat, dt, timestep_holder.N_derivatives)
 
-    if use_taylor_guess
-        taylor_expand!(timestep_holder.uv_vec, timestep_holder.uv_mat, dt,
-                       timestep_holder.N_derivatives) # Use taylor expansion as guess
+    if !ismissing(forcing_mat_tnp1)
+        forcing_helper_mat .= 0
+        compute_forcing_derivatives!(timestep_holder, t+dt, forcing_mat_tnp1)
+        build_LHS!(timestep_holder.forcing_vec, 
+                   timestep_holder.forcing_mat_tnp1, dt, N_derivatives)
+
+        axpy!(-1.0, timestep_holder.forcing_vec, timestep_holder.RHS)
+    end
+
+    if use_taylor_guess # Use taylor expansion as initial guess
+        taylor_expand!(
+            timestep_holder.uv_vec, timestep_holder.uv_mat, dt,
+            timestep_holder.N_derivatives
+        ) 
     else
         timestep_holder.uv_vec .= view(timestep_holder.uv_mat, 1:timestep_holder.prob.real_system_size, 1) # Use current timestep as initial guess for gmres
     end
@@ -585,10 +634,29 @@ function perform_timestep!(timestep_holder::TimestepHolder, t, dt, uv_matrix_cop
     end
 
     timestep_holder.uv_vec .= timestep_holder.gmres_iterable.x
-    timestep_holder.uv_mat[:,1] .= timestep_holder.uv_vec
 
     return nothing
+
 end
 
 
+mutable struct LHSHolderAdjoint{T1, T2}
+    tnext::Float64
+    dt::Float64
+    N_derivatives::Int64
+    uv_mat::Matrix{Float64}
+    pcof::Vector{Float64}
+    controls::T1
+    prob::T2
+end
 
+"""
+Work in progress, callable struct
+"""
+function (self::LHSHolderAdjoint)(out_vec, in_vec)
+    self.uv_mat[:,1] .= in_vec
+    compute_adjoint_derivatives!(self.uv_mat, self.prob, self.controls, self.tnext, self.pcof, self.N_derivatives)
+    build_LHS!(out_vec, self.uv_mat, self.dt, self.N_derivatives)
+
+    return nothing
+end
