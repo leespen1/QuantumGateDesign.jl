@@ -401,48 +401,6 @@ end
 
 
 
-function jacobi!(x, LHS_map, RHS, tol=1e-10)
-    xn = copy(x)
-    xnp1 = copy(x)
-
-    err = tol + 1
-    n_iterations = 0
-    # x^(n+1) = (b + x^n - B*x^n)
-    while err > tol
-         xn .= xnp1
-         LinearAlgebra.axpy!(1, RHS, xnp1)
-         mul!(xnp1, LHS_map, xn, -1, 1)
-         err = LinearAlgebra.norm(xn .- xnp1)/norm(xnp1)
-         n_iterations += 1
-    end
-
-    x .= xnp1
-
-    return n_iterations
-end 
-
-
-
-function jacobi_real!(x, LHS_map, RHS, tol=1e-10)
-    xn = copy(x)
-    xnp1 = copy(x)
-
-    err = tol + 1
-    n_iterations = 0
-    # x^(n+1) = (b + x^n - B*x^n)
-    while err > tol
-         xn .= xnp1
-         LinearAlgebra.axpy!(1, RHS, xnp1)
-         mul!(xnp1, LHS_map, xn, -1, 1)
-         err = LinearAlgebra.norm(xn .- xnp1)/norm(xnp1)
-         n_iterations += 1
-    end
-
-    x .= xnp1
-
-    return n_iterations
-end 
-
 function update_gmres_iterable!(iterable, x, b)
     iterable.b .= b
     iterable.x .= x
@@ -482,11 +440,30 @@ function eval_forward_new!(uv_history::AbstractArray{Float64, 3},
 
     timestep_holder = TimestepHolder(prob, controls, pcof, N_derivatives)
 
+    # Set up forcing matrices if forcing is provided
+    if ismissing(forcing)
+        forcing_tn = missing
+        forcing_tnp1 = missing
+    else
+        forcing_tn = similar(forcing, size(forcing, 1), size(forcing, 2))
+        forcing_tnp1 = similar(forcing_tn)
+        forcing_tn .= 0
+        forcing_tnp1 .= 0
+    end
+
     # Perform the timesteps
     for n in 0:prob.nsteps-1
         t = n*dt
+
+        if !ismissing(forcing)
+            forcing_tn .= view(forcing, :, :, 1+n)
+            forcing_tnp1 .= view(forcing, :, :, 1+n+1)
+        end
+
         current_uv_mat_view = view(uv_history, :, :, 1+n)
-        perform_timestep!(timestep_holder, t, dt, current_uv_mat_view)
+
+        perform_timestep!(timestep_holder, t, dt, current_uv_mat_view,
+                          forcing_mat_tn=forcing_tn, forcing_mat_tnp1=forcing_tnp1)
     end
 
 
@@ -544,8 +521,8 @@ mutable struct TimestepHolder{T1, T2, T3, T4}
         )
 
         # For some reason, it is important that I do this after creating the gmres_iterable
-        uv_mat[1:prob.N_tot_levels,                       1] .= prob.u0
-        uv_mat[prob.N_tot_levels+1:prob.real_system_size, 1] .= prob.v0
+        uv_vec[1:prob.N_tot_levels]                       .= prob.u0
+        uv_vec[prob.N_tot_levels+1:prob.real_system_size] .= prob.v0
 
 
         new{T1, T2, typeof(lhs_holder), typeof(gmres_iterable)}(
@@ -578,6 +555,7 @@ end
 
 function compute_derivatives!(timestep_holder::TimestepHolder, t; forcing_matrix=missing)
     # Set first column to value of uv
+    #println("In compute_derivatives!: ", timestep_holder.uv_vec)
     timestep_holder.uv_mat[:,1] .= timestep_holder.uv_vec
     # Compute the derivatives
     compute_derivatives!(
@@ -588,18 +566,20 @@ function compute_derivatives!(timestep_holder::TimestepHolder, t; forcing_matrix
 end
 
 function compute_forcing_derivatives!(timestep_holder::TimestepHolder, t, forcing_matrix)
+    #timestep_holder.forcing_mat[:,1] .= 0
+    timestep_holder.forcing_mat .= 0
     compute_derivatives!(
         timestep_holder.forcing_mat, timestep_holder.prob, timestep_holder.controls,
         t, timestep_holder.pcof, timestep_holder.N_derivatives,
-        forcing_mat=forcing_mat
+        forcing_matrix=forcing_matrix
     )
 end
 
 function perform_timestep!(timestep_holder::TimestepHolder, t, dt,
-        uv_matrix_copy_storage=missing; forcing_mat_tn=missing, forcing_mat_tnp1=missing, use_taylor_guess=true)
+        uv_matrix_copy_storage=missing; forcing_mat_tn=missing, forcing_mat_tnp1=missing,
+        use_taylor_guess=true)
 
-    #compute_derivatives!(timestep_holder, t, forcing_matrix=forcing_mat_tn)
-    compute_derivatives!(timestep_holder, t)
+    compute_derivatives!(timestep_holder, t, forcing_matrix=forcing_mat_tn)
 
     # Optionally copy uv_matrix in a an outside matrix
     if !ismissing(uv_matrix_copy_storage)
@@ -608,20 +588,16 @@ function perform_timestep!(timestep_holder::TimestepHolder, t, dt,
     
     build_RHS!(timestep_holder.RHS, timestep_holder.uv_mat, dt, timestep_holder.N_derivatives)
 
-    #if !ismissing(forcing_mat_tnp1)
-    #    forcing_helper_mat .= 0
-    #    compute_forcing_derivatives!(timestep_holder, t+dt, forcing_mat_tnp1)
-    #    build_LHS!(timestep_holder.forcing_vec, 
-    #               timestep_holder.forcing_mat_tnp1, dt, N_derivatives)
-
-    #    axpy!(-1.0, timestep_holder.forcing_vec, timestep_holder.RHS)
-    #end
+    if !ismissing(forcing_mat_tnp1)
+        compute_forcing_derivatives!(timestep_holder, t+dt, forcing_mat_tnp1)
+        build_LHS!(timestep_holder.forcing_vec,  timestep_holder.forcing_mat,
+                   dt, timestep_holder.N_derivatives)
+        axpy!(-1.0, timestep_holder.forcing_vec, timestep_holder.RHS)
+    end
 
     if use_taylor_guess # Use taylor expansion as initial guess
-        taylor_expand!(
-            timestep_holder.uv_vec, timestep_holder.uv_mat, dt,
-            timestep_holder.N_derivatives
-        ) 
+        taylor_expand!(timestep_holder.uv_vec, timestep_holder.uv_mat, dt,
+                       timestep_holder.N_derivatives) 
     else # I think technically this isn't necessary
         timestep_holder.uv_vec .= view(timestep_holder.uv_mat, 1:timestep_holder.prob.real_system_size, 1) # Use current timestep as initial guess for gmres
     end
@@ -630,9 +606,8 @@ function perform_timestep!(timestep_holder::TimestepHolder, t, dt,
     timestep_holder.lhs_holder.tnext = t+dt
     timestep_holder.lhs_holder.dt = dt
 
-    update_gmres_iterable!(
-        timestep_holder.gmres_iterable, timestep_holder.uv_vec, timestep_holder.RHS
-    )
+    update_gmres_iterable!(timestep_holder.gmres_iterable,
+                           timestep_holder.uv_vec, timestep_holder.RHS)
 
     # Do the gmres solve
     N_gmres_iterations = 0

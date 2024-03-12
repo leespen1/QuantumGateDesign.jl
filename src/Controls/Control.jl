@@ -175,12 +175,53 @@ Evaluate gradient of p (or a derivative of p) with respect to the control parame
 function eval_grad_p_derivative(control::AbstractControl, t::Real,
         pcof::AbstractVector{<: Real},  order::Int64)
 
-    return ForwardDiff.gradient(pcof_dummy -> eval_p_derivative(control, t, pcof_dummy, order), pcof)
+    return ForwardDiff.gradient(pcof_dummy -> eval_p_derivative_untyped(control, t, pcof_dummy, order), pcof)
 end
 
 
 function eval_grad_q_derivative(control::AbstractControl, t::Real,
         pcof::AbstractVector{<: Real},  order::Int64)
 
-    return ForwardDiff.gradient(pcof_dummy -> eval_q_derivative(control, t, pcof_dummy, order), pcof)
+    return ForwardDiff.gradient(pcof_dummy -> eval_q_derivative_untyped(control, t, pcof_dummy, order), pcof)
+end
+
+"""
+Version without the restriction on the return type. This version will be
+horribly type-unstable in the forward evolution, but I am making this untyped
+version until 
+"""
+function eval_p_derivative_untyped(control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real},  order::Int64)
+
+    p_val = NaN
+
+    if (order == 0) 
+        p_val = eval_p(control, t, pcof)
+    elseif (order > 0)
+        # This will work recursively until we get to order 0 (no derivative, where the function is implemented explicitly )
+        # Not sure if the lambda functions will hurt performance significantly
+        p_val = ForwardDiff.derivative(t_dummy -> eval_p_derivative_untyped(control, t_dummy, pcof, order-1), t)
+    else
+        throw(ArgumentError("Negative derivative order supplied."))
+    end
+
+    return p_val
+end
+
+function eval_q_derivative_untyped(control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real},  order::Int64)
+
+    q_val = NaN
+
+    if (order == 0) 
+        q_val = eval_q(control, t, pcof)
+    elseif (order > 0)
+        # This will work recursively until we get to order 0 (no derivative, where the function is implemented explicitly )
+        # Not sure if the lambda functions will hurt performance significantly
+        q_val = ForwardDiff.derivative(t_dummy -> eval_q_derivative_untyped(control, t_dummy, pcof, order-1), t)
+    else
+        throw(ArgumentError("Negative derivative order supplied."))
+    end
+
+    return q_val
 end
