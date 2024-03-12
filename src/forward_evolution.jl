@@ -513,6 +513,8 @@ mutable struct TimestepHolder{T1, T2, T3, T4}
     prob::T2
     lhs_holder::T3
     gmres_iterable::T4
+    # I don't think this really needs to be an inner constructor. Shouldn't be
+    # significant, and it would make the types easier if I do it as an outer constructor.
     function TimestepHolder(prob::T2, controls::T1, pcof, N_derivatives)  where {T1, T2}
         system_size = prob.real_system_size
 
@@ -575,6 +577,9 @@ function (self::LHSHolder)(out_vec, in_vec)
 end
 
 function compute_derivatives!(timestep_holder::TimestepHolder, t; forcing_matrix=missing)
+    # Set first column to value of uv
+    timestep_holder.uv_mat[:,1] .= timestep_holder.uv_vec
+    # Compute the derivatives
     compute_derivatives!(
         timestep_holder.uv_mat, timestep_holder.prob, timestep_holder.controls,
         t, timestep_holder.pcof, timestep_holder.N_derivatives,
@@ -593,7 +598,8 @@ end
 function perform_timestep!(timestep_holder::TimestepHolder, t, dt,
         uv_matrix_copy_storage=missing; forcing_mat_tn=missing, forcing_mat_tnp1=missing, use_taylor_guess=true)
 
-    compute_derivatives!(timestep_holder, t, forcing_matrix=forcing_mat_tn)
+    #compute_derivatives!(timestep_holder, t, forcing_matrix=forcing_mat_tn)
+    compute_derivatives!(timestep_holder, t)
 
     # Optionally copy uv_matrix in a an outside matrix
     if !ismissing(uv_matrix_copy_storage)
@@ -602,21 +608,21 @@ function perform_timestep!(timestep_holder::TimestepHolder, t, dt,
     
     build_RHS!(timestep_holder.RHS, timestep_holder.uv_mat, dt, timestep_holder.N_derivatives)
 
-    if !ismissing(forcing_mat_tnp1)
-        forcing_helper_mat .= 0
-        compute_forcing_derivatives!(timestep_holder, t+dt, forcing_mat_tnp1)
-        build_LHS!(timestep_holder.forcing_vec, 
-                   timestep_holder.forcing_mat_tnp1, dt, N_derivatives)
+    #if !ismissing(forcing_mat_tnp1)
+    #    forcing_helper_mat .= 0
+    #    compute_forcing_derivatives!(timestep_holder, t+dt, forcing_mat_tnp1)
+    #    build_LHS!(timestep_holder.forcing_vec, 
+    #               timestep_holder.forcing_mat_tnp1, dt, N_derivatives)
 
-        axpy!(-1.0, timestep_holder.forcing_vec, timestep_holder.RHS)
-    end
+    #    axpy!(-1.0, timestep_holder.forcing_vec, timestep_holder.RHS)
+    #end
 
     if use_taylor_guess # Use taylor expansion as initial guess
         taylor_expand!(
             timestep_holder.uv_vec, timestep_holder.uv_mat, dt,
             timestep_holder.N_derivatives
         ) 
-    else
+    else # I think technically this isn't necessary
         timestep_holder.uv_vec .= view(timestep_holder.uv_mat, 1:timestep_holder.prob.real_system_size, 1) # Use current timestep as initial guess for gmres
     end
 
@@ -624,19 +630,20 @@ function perform_timestep!(timestep_holder::TimestepHolder, t, dt,
     timestep_holder.lhs_holder.tnext = t+dt
     timestep_holder.lhs_holder.dt = dt
 
-    update_gmres_iterable!(timestep_holder.gmres_iterable, timestep_holder.uv_vec,
-                           timestep_holder.RHS)
+    update_gmres_iterable!(
+        timestep_holder.gmres_iterable, timestep_holder.uv_vec, timestep_holder.RHS
+    )
 
-
+    # Do the gmres solve
     N_gmres_iterations = 0
     for iter in timestep_holder.gmres_iterable
         N_gmres_iterations += 1
     end
 
+    # Grab solution from gmres iterable
     timestep_holder.uv_vec .= timestep_holder.gmres_iterable.x
 
     return nothing
-
 end
 
 
