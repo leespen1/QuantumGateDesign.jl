@@ -34,6 +34,7 @@ mutable struct SchrodingerProb{M, VM}
             nsteps::Int64,
             N_ess_levels::Int64,
             N_guard_levels::Int64,
+            essential_subspace_projector::Union{M, Missing}=missing
         ) where {M<:AbstractMatrix{Float64}, VM<:AbstractVecOrMat{Float64}}
         N_tot_levels = N_ess_levels + N_guard_levels
         # Check dimensions of all matrices and vectors
@@ -55,7 +56,9 @@ mutable struct SchrodingerProb{M, VM}
         # and an assertion that the projector is symmetric (which is really the
         # only requirement we have)
         # Wait, do I want to project onto essential or forbidden subspace?
-        essential_subspace_projector = create_essential_subspace_projector(N_ess_levels, N_tot_levels)
+        if ismissing(essential_subspace_projector)
+            essential_subspace_projector = create_essential_subspace_projector(N_ess_levels, N_tot_levels)
+        end
 
         # Copy arrays when creating a Schrodinger problem
         new{M, VM}(
