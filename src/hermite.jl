@@ -320,3 +320,71 @@ function apply_hamiltonian!(out_real::AbstractVector{Float64}, out_imag::Abstrac
         mul!(out_imag, sym_op,  in_real, -adjoint_factor*p_val, 1)
     end
 end
+
+"""
+Construct the LHS matrix from the timestep. Not used in the actual algorithm,
+but good for checking condition numbers.
+"""
+function form_LHS(prob::SchrodingerProb, controls, t::Real,
+        pcof::AbstractVector{<: Real}, dt::Real, order::Int)
+    
+    real_system_size = prob.real_system_size
+    complex_system_size = div(real_system_size, 2)
+    N_derivatives = div(order, 2)
+
+    LHS_mat = zeros(real_system_size, real_system_size)
+    LHS_vec = zeros(real_system_size)
+    uv_matrix = zeros(real_system_size, 1+N_derivatives)
+    for i in 1:real_system_size
+        uv_matrix .= 0
+        LHS_vec .= 0
+        uv_matrix[i,1] = 1
+        compute_derivatives!(uv_matrix, prob, controls, t, pcof, N_derivatives)
+        build_LHS!(LHS_vec, uv_matrix, dt, N_derivatives)
+        LHS_mat[:,i] .= LHS_vec
+    end
+
+    return LHS_mat
+end
+
+"""
+Construct the RHS matrix (but don't multiply onto vector) from the timestep. Not used in the actual algorithm,
+but good for checking condition numbers.
+"""
+function form_RHS(prob::SchrodingerProb, controls, t::Real,
+        pcof::AbstractVector{<: Real}, dt::Real, order::Int)
+    
+    real_system_size = prob.real_system_size
+    complex_system_size = div(real_system_size, 2)
+    N_derivatives = div(order, 2)
+
+    RHS_mat = zeros(real_system_size, real_system_size)
+    RHS_vec = zeros(real_system_size)
+    uv_matrix = zeros(real_system_size, 1+N_derivatives)
+    for i in 1:real_system_size
+        uv_matrix .= 0
+        RHS_vec .= 0
+        uv_matrix[i,1] = 1
+        compute_derivatives!(uv_matrix, prob, controls, t, pcof, N_derivatives)
+        build_RHS!(RHS_vec, uv_matrix, dt, N_derivatives)
+        RHS_mat[:,i] .= RHS_vec
+    end
+
+    return RHS_mat
+end
+
+"""
+Construct the LHS and RHS matrices from the timestep, with appropraite times
+from each.
+"""
+function form_LHS_RHS(prob::SchrodingerProb, controls, t::Real,
+        pcof::AbstractVector{<: Real}, dt::Real, order::Int)
+    tn = t
+    tnp1 = t + dt
+
+    RHS = form_RHS(prob, controls, tn, pcof, dt, order)
+    LHS = form_LHS(prob, controls, tnp1, pcof, dt, order)
+
+    return LHS, RHS
+end
+
