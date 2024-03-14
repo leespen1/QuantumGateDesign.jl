@@ -1,4 +1,4 @@
-using HermiteOptimalControl
+using QuantumGateDesign
 using Test: @testset, @test
 
 
@@ -71,7 +71,7 @@ for order in orders
     @testset "Order: $order" begin
     for cost_type in cost_types
         @testset "Cost Function: $cost_type" begin
-        HermiteOptimalControl.test_gradient_agreement(
+        QuantumGateDesign.test_gradient_agreement(
             prob, control, pcof, target, order=order, cost_type=cost_type,
             print_results=true
         )

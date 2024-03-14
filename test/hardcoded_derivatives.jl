@@ -27,7 +27,7 @@ Notes/Improvements
 - This test does not include any forcing 
 
 =#
-using HermiteOptimalControl
+using QuantumGateDesign
 using Test
 
 @testset "Checking Correctness of Derivative Calculations" begin
@@ -178,7 +178,7 @@ N_ess_levels = 2
 N_guard_levels = 0
 
 prob = SchrodingerProb(system_sym, system_asym, sym_ops, asym_ops, u0, v0, tf, nsteps, N_ess_levels, N_guard_levels)
-control = HermiteOptimalControl.SingleSymCosControl(tf, frequency=1)
+control = QuantumGateDesign.SingleSymCosControl(tf, frequency=1)
 pcof = [θ]
 
 # Regular Derivatives Test
