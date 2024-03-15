@@ -164,3 +164,4 @@ history_juqbox = ret[2]
 
 prob = convert_juqbox(params)
 controls = QuantumGateDesign.bspline_controls(prob.tf, D1, om)
+controls_autodiff = QuantumGateDesign.bspline_controls_autodiff(prob.tf, D1, om)
