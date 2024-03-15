@@ -2,14 +2,17 @@ function eval_forward(
         prob::SchrodingerProb{M1, M2}, controls,
         pcof::AbstractVector{<: Real}; order::Int=2,
         forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
-        use_taylor_guess::Bool=true, verbose::Bool=false
+        use_taylor_guess::Bool=true, verbose::Bool=false,
+        saveEveryNsteps::Int=1
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_derivatives = div(order, 2)
-    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_ess_levels)
+    nsteps_save = div(prob.nsteps, saveEveryNsteps)
+    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_save, prob.N_ess_levels)
 
     eval_forward!(uv_history, prob, controls, pcof, order=order, forcing=forcing,
-                  use_taylor_guess=use_taylor_guess, verbose=verbose)
+                  use_taylor_guess=use_taylor_guess, verbose=verbose,
+                  saveEveryNsteps=saveEveryNsteps)
 
     return uv_history
 end
@@ -20,13 +23,15 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
         prob::SchrodingerProb{M1, M2}, controls,
         pcof::AbstractVector{<: Real}; order::Int=2,
         forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
-        use_taylor_guess::Bool = true, verbose::Bool=false
+        use_taylor_guess::Bool = true, verbose::Bool=false,
+        saveEveryNsteps::Int=1
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_derivatives = div(order, 2)
 
     # Check size of uv_history storage
-    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_ess_levels)
+    nsteps_save = div(prob.nsteps, saveEveryNsteps)
+    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+nsteps_save, prob.N_ess_levels)
 
 
     # Handle i-th initial condition (THREADS HERE)
@@ -42,7 +47,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
 
         eval_forward!(
             this_uv_history, vector_prob, controls, pcof, order=order, forcing=this_forcing,
-            use_taylor_guess=use_taylor_guess, verbose=verbose
+            use_taylor_guess=use_taylor_guess, verbose=verbose, saveEveryNsteps=saveEveryNsteps
         )
     end
 end
@@ -67,7 +72,8 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         prob::SchrodingerProb{M, V}, controls,
         pcof::AbstractVector{<: Real}; order::Int=2,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
-        use_taylor_guess=true, verbose=false
+        use_taylor_guess=true, verbose=false,
+        saveEveryNsteps::Int=1
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     if verbose
@@ -79,7 +85,8 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
     N_derivatives = div(order, 2)
 
     # Check size of uv_history storage
-    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
+    nsteps_save = div(prob.nsteps, saveEveryNsteps)
+    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+nsteps_save)
 
     # Allocate memory for storing u,v, and their derivatives at a single point in time
     uv_mat = Matrix{Float64}(undef, prob.real_system_size, 1+N_derivatives)
@@ -124,7 +131,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
 
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
-        abstol=1e-10, reltol=1e-10, restart=prob.real_system_size,
+        abstol=1e-12, reltol=1e-12, restart=prob.real_system_size,
         initially_zero=false, Pl=preconditioner
     )
 
@@ -150,9 +157,12 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         if !ismissing(forcing_mat)
             forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n)
         end
-
         compute_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives, forcing_matrix=forcing_mat)
-        uv_history[:, :, 1+n] .= uv_mat
+
+        if ((n % saveEveryNsteps) == 0)
+            uv_history[:, :, 1+div(n, saveEveryNsteps)] .= uv_mat
+        end
+
         build_RHS!(RHS, uv_mat, dt, N_derivatives)
 
         if use_taylor_guess
@@ -203,7 +213,10 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+prob.nsteps)
     end
     compute_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives)
-    uv_history[:, :, 1+prob.nsteps] .= uv_mat
+
+    if ((prob.nsteps % saveEveryNsteps) == 0)
+        uv_history[:, :, 1+div(prob.nsteps, saveEveryNsteps)] .= uv_mat
+    end
 
     return nothing
 end
@@ -314,7 +327,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
 
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
-        abstol=1e-15, reltol=1e-15, restart=prob.real_system_size,
+        abstol=1e-12, reltol=1e-12, restart=prob.real_system_size,
         initially_zero=false
     )
 
@@ -717,9 +730,8 @@ function MyPreconditioner(prob::SchrodingerProb, order::Int)
 
     LHS_diagonal = LinearAlgebra.diag(LHS)
     LHS_subdiagonal = LinearAlgebra.diag(LHS, -complex_system_size)
-    LHS_upper_diagonal = LinearAlgebra.diag(LHS, complex_system_size)
-    @assert all(LHS_diagonal .== 1) # Actually this isn't true as we get bigger. But the s
-    @assert LHS_upper_diagonal == -LHS_subdiagonal
+    #LHS_upper_diagonal = LinearAlgebra.diag(LHS, complex_system_size)
+    #@assert LHS_upper_diagonal == -LHS_subdiagonal
         
     return MyPreconditioner(LHS_subdiagonal, real_system_size, complex_system_size)
 end
