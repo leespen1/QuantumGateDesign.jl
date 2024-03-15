@@ -10,32 +10,23 @@ solutions, with the number of points in time compared taken to be the number
 of points in time when using the fewest steps / largest step size.
 
 Note: Plots.scalefontsizes(1.5-2.0) seems appropriate for slideshow
+
+I need a better solution for getting a 'fine-grain solution'. Don't want to do
+way more computation than necessary to get the 'true' solution.
+
+Richardson extrapolation seems like a good idea for that.
 """
 function get_history_convergence(prob, control, pcof, N_iterations;
-        orders=(2, 4, 6, 8), nsteps_change_factor=2,
-        duration_error=true,
-        include_orderlines=true, fontsize=16, true_history=missing,
-        error_limit=1e-15, n_runs=1
+        orders=(2, 4, 6, 8),
+        true_history=missing, error_limit=1e-15, n_runs=1
     )
     base_nsteps = prob.nsteps
+    nsteps_change_factor = 2
 
     # Copy problem so we can mutate nsteps without altering input
     prob_copy = copy(prob)
-    histories = Vector[]
 
-    # Get "true" solution using many timesteps with highest order method
-    if ismissing(true_history)
-        println("True history not provided, calculating 'fine-grain' numerical solution")
-        most_steps = base_nsteps*(nsteps_change_factor ^ N_iterations)
-        prob_copy.nsteps = most_steps
-        true_history = eval_forward(
-            prob_copy, control, pcof, order=orders[end]
-        )
-
-        # Parse history to include only times included when using base_nsteps
-        true_history = true_history[:,1,1:(nsteps_change_factor^N_iterations):end,:]
-    end
-
+    histories = []
 
     errors_all = Matrix{Float64}(undef, N_iterations, length(orders))
     timing_all = Matrix{Float64}(undef, N_iterations, length(orders))
@@ -47,10 +38,6 @@ function get_history_convergence(prob, control, pcof, N_iterations;
 
     step_sizes = (prob.tf/base_nsteps) ./ [nsteps_change_factor^k for k in 0:N_iterations-1]
 
-
-    N_initial_conditions = size(prob.u0, 2)
-
-    try
     for (j, order) in enumerate(orders)
         errors = Vector{Float64}(undef, N_iterations)
         timing = Vector{Float64}(undef, N_iterations)
@@ -65,13 +52,40 @@ function get_history_convergence(prob, control, pcof, N_iterations;
         println("========================================")
         println("Running Order ", order)
         println("========================================")
+
+        histories_this_order = []
+
+        if ismissing(true_history)
+            println("----------------------------------------")
+            println("True history not given, using Richardson extrapolation\n")
+            println("Calculating solution with base_nsteps=", base_nsteps)
+            println("----------------------------------------")
+            prob_copy.nsteps = base_nsteps
+            base_history = eval_forward(
+                prob_copy, control, pcof, order=order,
+                saveEveryNsteps=div(prob_copy.nsteps, base_nsteps)
+            )
+            # Only include state, not derivatives
+            base_history = base_history[:,1,:,:]
+            push!(histories_this_order, base_history)
+        end
+
+
         for k in 1:N_iterations
-            nsteps_multiplier = nsteps_change_factor^(k-1)
+            nsteps_multiplier = nsteps_change_factor^k
             prob_copy.nsteps = base_nsteps*nsteps_multiplier
 
             elapsed_times = zeros(n_runs)
-            for rerun_i in 1:n_runs
-                elapsed_times[rerun_i] = @elapsed history = eval_forward(prob_copy, control, pcof, order=order)
+
+            elapsed_times[1] = @elapsed history = eval_forward(
+                prob_copy, control, pcof, order=order,
+                saveEveryNsteps=div(prob_copy.nsteps, base_nsteps)
+            )
+            for rerun_i in 2:n_runs
+                elapsed_times[rerun_i] = @elapsed history = eval_forward(
+                    prob_copy, control, pcof, order=order,
+                    saveEveryNsteps=div(prob_copy.nsteps, base_nsteps)
+                )
             end
             mean_elapsed_time = sum(elapsed_times)/length(elapsed_times)
             stddev_elapsed_time = sum((elapsed_times .- mean_elapsed_time) .^ 2)
@@ -79,13 +93,15 @@ function get_history_convergence(prob, control, pcof, N_iterations;
             stddev_elapsed_time = sqrt(stddev_elapsed_time)
 
 
-            # Skip over steps to match base_nsteps solution
-            history = history[:,1,1:nsteps_multiplier:end,:]
+            # Only compare state, not derivatives
+            history = history[:,1,:,:]
+            push!(histories_this_order, history)
 
-            if duration_error # Use error across entire duration of problem
+            if ismissing(true_history)
+                history_prev = histories_this_order[k]
+                error = richardson_extrap_rel_err(history, history_prev, order)
+            else
                 error = norm(history - true_history)/norm(true_history)
-            else # Only use error at final state
-                error = norm(history[:,end,:] - true_history[:,end,:])/norm(true_history[:,end,:])
             end
 
             errors[k] = error
@@ -104,6 +120,7 @@ function get_history_convergence(prob, control, pcof, N_iterations;
             end
         end
 
+        push!(histories, histories_this_order)
 
         errors_all[:,j] .= errors
         timing_all[:,j] .= timing
@@ -111,133 +128,9 @@ function get_history_convergence(prob, control, pcof, N_iterations;
         #errors_all[:,length(orders)+j] .= order_line
     end
 
-    # If interrupted by keyboard, stop early but still finish the graph
-    catch e
-        if e isa InterruptException
-            println("Keyboard interruption, ending early")
-        # If not keyboard interruption, still throw the error
-        else
-            throw(e)
-        end
-    end
-
     return step_sizes, errors_all, timing_all, timing_stddev_all
+    #return step_sizes, errors_all, timing_all, timing_stddev_all, histories
 end
-
-
-
-function get_history_convergence_juqbox(prob, pcof, wa, N_iterations;
-        orders=(2,), nsteps_change_factor=2,
-        duration_error=true,
-        include_orderlines=true, fontsize=16, true_history=missing,
-        error_limit=1e-15, n_runs=1
-    )
-    base_nsteps = prob.nsteps
-
-    histories = Vector[]
-
-    # Get "true" solution using many timesteps with highest order method
-    if ismissing(true_history)
-        println("True history not provided, using 'fine-grain' numerical solution")
-        most_steps = base_nsteps*(nsteps_change_factor ^ N_iterations)
-        prob.nsteps = most_steps
-        ret = traceobjgrad(pcof, prob, wa, true, false)
-        true_history = ret[2]
-
-        # Parse history to include only times included when using base_nsteps
-        true_history = true_history[:,:,1:(nsteps_change_factor^N_iterations):end]
-    end
-
-
-    errors_all = Matrix{Float64}(undef, N_iterations, length(orders))
-    timing_all = Matrix{Float64}(undef, N_iterations, length(orders))
-    timing_stddev_all = Matrix{Float64}(undef, N_iterations, length(orders))
-    # Fill with NaN, so that we can break the loop early and still plot, ignoring unfilled values
-    errors_all .= NaN
-    timing_all .= NaN
-    timing_stddev_all .= NaN
-
-    step_sizes = (prob.T/base_nsteps) ./ [nsteps_change_factor^k for k in 0:N_iterations-1]
-
-    N_initial_conditions = size(prob.Uinit, 2)
-
-    try
-    for (j, order) in enumerate(orders)
-        errors = Vector{Float64}(undef, N_iterations)
-        timing = Vector{Float64}(undef, N_iterations)
-        timing_stddev = Vector{Float64}(undef, N_iterations)
-        errors .= NaN
-        timing .= NaN
-        timing_stddev .= NaN
-
-
-        N_derivatives = div(order, 2)
-
-        println("========================================")
-        println("Running Order ", order)
-        println("========================================")
-        for k in 1:N_iterations
-            nsteps_multiplier = nsteps_change_factor^(k-1)
-            prob.nsteps = base_nsteps*nsteps_multiplier
-
-            elapsed_times = zeros(n_runs)
-            for rerun_i in 1:n_runs
-                elapsed_times[rerun_i] = @elapsed ret = traceobjgrad(pcof, prob, wa, true, false)
-            end
-            mean_elapsed_time = sum(elapsed_times)/length(elapsed_times)
-            stddev_elapsed_time = sum((elapsed_times .- mean_elapsed_time) .^ 2)
-            stddev_elapsed_time /= length(elapsed_times)-1
-            stddev_elapsed_time = sqrt(stddev_elapsed_time)
-
-
-            history = ret[2]
-            # Skip over steps to match base_nsteps solution
-            history = history[:,:,1:nsteps_multiplier:end]
-
-            if duration_error # Use error across entire duration of problem
-                error = norm(history - true_history)/norm(true_history)
-            else # Only use error at final state
-                error = norm(history[:,:,end] - true_history[:,:,end])/norm(true_history[:,:,end])
-            end
-
-            errors[k] = error
-            timing[k] = mean_elapsed_time
-            timing_stddev[k] = stddev_elapsed_time
-
-            println("Nsteps = ", prob.nsteps)
-            println("Error = ", error)
-            println("Mean Elapsed Time = ", mean_elapsed_time)
-            println("StdDev Elapsed Time = ", stddev_elapsed_time)
-            println("----------------------------------------")
-
-            # Break once we reach high enough precision
-            if error < error_limit 
-                break
-            end
-        end
-
-
-        errors_all[:,j] .= errors
-        timing_all[:,j] .= timing
-        timing_stddev_all[:,j] .= timing_stddev
-        #errors_all[:,length(orders)+j] .= order_line
-    end
-
-    # If interrupted by keyboard, stop early but still finish the graph
-    catch e
-        if e isa InterruptException
-            println("Keyboard interruption, ending early")
-        # If not keyboard interruption, still throw the error
-        else
-            throw(e)
-        end
-    end
-
-    prob.nsteps = base_nsteps # Return step sizes to original
-
-    return step_sizes, errors_all, timing_all, timing_stddev_all
-end
-
 
 
 
@@ -265,12 +158,14 @@ function plot_history_convergence(step_sizes, errors_all, timing_all, timing_std
     return pl_stepsize, pl_timing
 end
 
+
+
 function plot_history_convergence!(pl_stepsize, pl_timing, step_sizes, errors_all, timing_all, timing_stddev_all;
         orders=(2, 4, 6, 8, 10), include_orderlines=true, fontsize=16, orderline_offset=0,
         labels=missing
     )
 
-    N_orders = size(step_sizes, 2)
+    N_orders = size(errors_all, 2)
 
     if ismissing(labels)
         labels = ["Order=$order" for order in orders]
@@ -317,4 +212,27 @@ function plot_history_convergence!(pl_stepsize, pl_timing, step_sizes, errors_al
     return pl_stepsize, pl_timing
 end
 
+"""
+Given solutions with stepsize h and 2h, which have error of order 'order', compute
+an order 'order+1' estimate in the error of Aₕ 
+"""
+function richardson_extrap_rel_err(Aₕ, A₂ₕ, order)
+    richardson_sol = richardson_extrap_sol(Aₕ, A₂ₕ, order)
+    return norm(richardson_sol - Aₕ)/norm(richardson_sol)
+end
 
+"""
+Given solutions with stepsize h and 2h, which have error of order 'order', compute
+an order 'order+1' solution 
+"""
+function richardson_extrap_sol(Aₕ, A₂ₕ, order)
+    n = order
+    return ((2^n)*Aₕ - A₂ₕ)/(2^n-1)
+end
+
+"""
+Given CPU times and relative errors, estimate the stepsize which would give a
+relative error of 1e-7
+"""
+function get_error_limits()
+end
