@@ -35,7 +35,7 @@ export composite_system_lowering_operators
 export rotating_frame_qubit, dahlquist_problem
 
 # Export testing functions
-export plot_history_convergence, plot_history_convergence_new
+export get_history_convergence, plot_history_convergence, plot_history_convergence_new
 
 # Export plotting functions
 export plot_control
