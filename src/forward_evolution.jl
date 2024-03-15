@@ -8,7 +8,8 @@ function eval_forward(
     N_derivatives = div(order, 2)
     uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_ess_levels)
 
-    eval_forward!(uv_history, prob, controls, pcof, order=order, forcing=forcing, use_taylor_guess=use_taylor_guess)
+    eval_forward!(uv_history, prob, controls, pcof, order=order, forcing=forcing,
+                  use_taylor_guess=use_taylor_guess, verbose=verbose)
 
     return uv_history
 end
@@ -69,6 +70,10 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         use_taylor_guess=true, verbose=false
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
+    if verbose
+        println("Verbose output")
+    end
+
     t = 0.0
     dt = prob.tf/prob.nsteps
     N_derivatives = div(order, 2)
@@ -109,12 +114,18 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         ismutating=true
     )
 
-    N_gmres_iterations = 0
+    #A = [prob.system_asym prob.system_sym; -prob.system_sym prob.system_asym]
+    #preconditioner_mat = LinearAlgebra.I - dt .* A 
+    #for n in 2:N_derivatives
+    #    @. preconditioner_mat += (-1)^n * (dt^n) * A^n
+    #end
+    preconditioner = IterativeSolvers.Identity()
+
 
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
-        abstol=1e-15, reltol=1e-15, restart=prob.real_system_size,
-        initially_zero=false
+        abstol=1e-10, reltol=1e-10, restart=prob.real_system_size,
+        initially_zero=false, Pl=preconditioner
     )
 
     # Important to do this after setting up the linear map and gmres_iterable. One of those seems to be overwriting uv_mat
@@ -127,6 +138,9 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
     #H_no_timing = [prob.system_asym prob.system_sym; -prob.system_sym prob.system_asym]
     #LHS_no_timing = Array(LinearAlgebra.diagm(ones(prob.real_system_size)) .- (dt .* H_no_timing))
     #LHS_no_timing = LinearAlgebra.diagm(ones(prob.real_system_size))
+    max_N_gmres_iterations = 0
+    min_N_gmres_iterations = 100000
+    avg_N_gmres_iterations = 0
 
     # Perform the timesteps
     for n in 0:prob.nsteps-1
@@ -167,14 +181,20 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         for iter in gmres_iterable
             N_gmres_iterations += 1
         end
+        avg_N_gmres_iterations += N_gmres_iterations
+        max_N_gmres_iterations = max(N_gmres_iterations, max_N_gmres_iterations)
+        min_N_gmres_iterations = min(N_gmres_iterations, min_N_gmres_iterations)
+        # if !convergered(gmres_iterable) @warn
 
         uv_mat[:,1] .= gmres_iterable.x
     end
 
 
-    N_gmres_iterations /= prob.nsteps
+    avg_N_gmres_iterations /= prob.nsteps
     if verbose
-        println("Average # of gmres iterations: ", N_gmres_iterations)
+        println("Average # of gmres iterations: ", avg_N_gmres_iterations)
+        println("Maximum # of gmres iterations: ", max_N_gmres_iterations)
+        println("Minimum # of gmres iterations: ", min_N_gmres_iterations)
     end
 
     # Compute the derivatives of uv at the final time and store them
@@ -641,4 +661,29 @@ function (self::LHSHolderAdjoint)(out_vec, in_vec)
     build_LHS!(out_vec, self.uv_mat, self.dt, self.N_derivatives)
 
     return nothing
+end
+
+"""
+A is assumed to be the identity along the diagonal.
+
+This only takes O(n) operations
+"""
+function ldiv_P(A, b)
+
+    x = copy(b)
+    N = size(A, 1)
+    Nhalf = div(N, 2)
+    D = LinearAlgebra.diag(A)
+    subD = LinearAlgebra.diag(A, -Nhalf)
+    # Should be able to do this very broadcasted
+    # Clear lower-left block, get lower-right block to ones on
+    for i in eachindex(subD)
+        x[Nhalf+i] -= subD[i] * x[i]
+        x[Nhalf+i] /= 1 + subD[i]*subD[i]
+    end
+    for i in eachindex(subD)
+        x[i] += subD[i] * x[Nhalf+i]
+    end
+      
+    return x
 end
