@@ -28,12 +28,8 @@ asym_operators = [random_asym_matrix(complex_system_size) for i in 1:N_operators
 u0 = rand(complex_system_size, complex_system_size)
 v0 = rand(complex_system_size, complex_system_size)
 
-tf = 0.1
-#nsteps = 1000 # Should change this to resolve shortest wavelength or something.
-nsteps = 1 # Should change this to resolve shortest wavelength or something.
-# Should test this at large and small scales. Right now for small scales the
-# higher order methods start to disagree. Possibly this speeks to inaccuracies in
-# the higher order methods. I need to test the convergence as well
+tf = 100.0
+nsteps = 1000 # Should change this to resolve shortest wavelength or something.
 
 N_ess_levels = complex_system_size
 N_guard_levels = 0
