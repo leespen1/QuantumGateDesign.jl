@@ -30,6 +30,5 @@ function convert_juqbox(juqbox_params)
         tf,
         nsteps,
         N_ess_levels,
-        N_guard_levels
     )
 end
