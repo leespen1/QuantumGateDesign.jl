@@ -114,12 +114,12 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         ismutating=true
     )
 
-    #A = [prob.system_asym prob.system_sym; -prob.system_sym prob.system_asym]
-    #preconditioner_mat = LinearAlgebra.I - dt .* A 
-    #for n in 2:N_derivatives
-    #    @. preconditioner_mat += (-1)^n * (dt^n) * A^n
-    #end
-    preconditioner = IterativeSolvers.Identity()
+
+    #preconditioner = IterativeSolvers.Identity()
+    # Need to add test that evolution is still the same with preconditioner
+    # Does a 1e-7 error make sense for 1e-10 tolerance?
+    # Also check how our preconditioner compares against diagonal preconditioner
+    preconditioner = MyPreconditioner(prob, order)
 
 
     gmres_iterable = IterativeSolvers.gmres_iterable!(
@@ -667,6 +667,9 @@ end
 A is assumed to be the identity along the diagonal.
 
 This only takes O(n) operations
+
+Will the shape hold for kronecker products? Apparently not.
+But I can still work out a good gaussian elim procedure.
 """
 function ldiv_P(A, b)
 
@@ -683,6 +686,64 @@ function ldiv_P(A, b)
     end
     for i in eachindex(subD)
         x[i] += subD[i] * x[Nhalf+i]
+    end
+      
+    return x
+end
+
+struct MyPreconditioner{T}
+    LHS_subdiagonal::T # The real diagonal of the Hamiltonian, diagonal of lower-left block
+    real_system_size::Int64
+    complex_system_size::Int64
+end
+
+function MyPreconditioner(prob::SchrodingerProb, order::Int)
+    A = [prob.system_asym prob.system_sym; -prob.system_sym prob.system_asym]
+    dt = prob.tf/prob.nsteps
+
+    real_system_size = size(A, 1)
+    complex_system_size = div(real_system_size, 2)
+    N_derivatives = div(order, 2)
+
+    LHS = zeros(size(A)) 
+
+    for i in 1:size(LHS, 2)
+        LHS[i,i] = 1
+    end
+    for j in 1:N_derivatives
+        coeff = (-dt)^j * coefficient(j, N_derivatives, N_derivatives)
+        axpy!(coeff, A^j, LHS)
+    end
+
+    LHS_diagonal = LinearAlgebra.diag(LHS)
+    LHS_subdiagonal = LinearAlgebra.diag(LHS, -complex_system_size)
+    LHS_upper_diagonal = LinearAlgebra.diag(LHS, complex_system_size)
+    @assert all(LHS_diagonal .== 1) # Actually this isn't true as we get bigger. But the s
+    @assert LHS_upper_diagonal == -LHS_subdiagonal
+        
+    return MyPreconditioner(LHS_subdiagonal, real_system_size, complex_system_size)
+end
+
+function Base.:\(P::MyPreconditioner, b::AbstractVector)
+    x = similar(b)
+    ldiv!(x, P, b)
+end
+
+function LinearAlgebra.ldiv!(y::AbstractVector, P::MyPreconditioner, x::AbstractVector)
+    y .= x
+    ldiv!(P, y)
+end
+
+function LinearAlgebra.ldiv!(P::MyPreconditioner, x::AbstractVector)
+    # Should be able to do this very broadcasted
+    # Clear lower-left block, get lower-right block to ones on
+    for i in eachindex(P.LHS_subdiagonal)
+        # Need to add a division here by diagonal entry or something for higher order
+        x[P.complex_system_size+i] -= P.LHS_subdiagonal[i] * x[i]
+        x[P.complex_system_size+i] /= 1 + P.LHS_subdiagonal[i]*P.LHS_subdiagonal[i]
+    end
+    for i in eachindex(P.LHS_subdiagonal)
+        x[i] += P.LHS_subdiagonal[i] * x[P.complex_system_size+i]
     end
       
     return x
