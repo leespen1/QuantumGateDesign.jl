@@ -2,6 +2,12 @@
 Struct containing all the necessary information needed (except the value of the
 control vector and target gate) to evolve a state vector according to
 Schrodinger's equation and compute gradients.
+
+TODO: if I add more types, i.e. one for system sym, one for system_asym, allow
+sym_ops to be a tuple of vectors, then I think we may be able to do some great
+things with Diagonal, TriDiagonal, etc types. It would be especially good to have
+the system_sym be Diagonal type (probably better than sparse), and system_asym
+be some 'empty' type.
 """
 mutable struct SchrodingerProb{M, VM} 
     system_sym::M
@@ -13,8 +19,8 @@ mutable struct SchrodingerProb{M, VM}
     guard_subspace_projector::M
     tf::Float64
     nsteps::Int64
+    N_initial_conditions::Int64
     N_ess_levels::Int64
-    N_guard_levels::Int64
     N_tot_levels::Int64
     N_operators::Int64 # Number of "control Hamiltonians"
     real_system_size::Int64
@@ -33,10 +39,12 @@ mutable struct SchrodingerProb{M, VM}
             tf::Float64,
             nsteps::Int64,
             N_ess_levels::Int64,
-            N_guard_levels::Int64,
-            essential_subspace_projector::Union{M, Missing}=missing
+            guard_subspace_projector::Union{M, Missing}=missing
         ) where {M<:AbstractMatrix{Float64}, VM<:AbstractVecOrMat{Float64}}
-        N_tot_levels = N_ess_levels + N_guard_levels
+
+        N_tot_levels = size(u0, 1)
+        N_initial_conditions = size(u0, 2)
+
         # Check dimensions of all matrices and vectors
         @assert size(u0) == size(v0)
         @assert size(u0,1) == size(v0,1) == N_tot_levels
@@ -55,19 +63,18 @@ mutable struct SchrodingerProb{M, VM}
         # Currently hardcoded for a single qubit. I should make a default here,
         # and an assertion that the projector is symmetric (which is really the
         # only requirement we have)
-        # Wait, do I want to project onto essential or forbidden subspace?
-        if ismissing(essential_subspace_projector)
-            essential_subspace_projector = create_essential_subspace_projector(N_ess_levels, N_tot_levels)
+        if ismissing(guard_subspace_projector)
+            guard_subspace_projector = create_guard_subspace_projector(N_ess_levels, N_tot_levels)
         end
 
         # Copy arrays when creating a Schrodinger problem
         new{M, VM}(
-            copy(system_sym), copy(system_asym),
-            deepcopy(sym_operators), deepcopy(asym_operators),
-            copy(u0), copy(v0),
-            essential_subspace_projector,
+            system_sym, system_asym,
+            sym_operators, asym_operators,
+            u0, v0,
+            guard_subspace_projector,
             tf, nsteps,
-            N_ess_levels, N_guard_levels, N_tot_levels,
+            N_initial_conditions, N_ess_levels, N_tot_levels,
             N_operators, real_system_size
         )
     end
@@ -78,16 +85,20 @@ end
 function Base.copy(prob::SchrodingerProb{T}) where T
     # Mutable parameters are copied in the constructor, don't need to copy them again
     return SchrodingerProb(
-        prob.system_sym, prob.system_asym,
-        prob.sym_operators, prob.asym_operators,
-        prob.u0, prob.v0,
+        copy(prob.system_sym), copy(prob.system_asym),
+        deepcopy(prob.sym_operators), deepcopy(prob.asym_operators),
+        copy(prob.u0), copy(prob.v0),
         prob.tf, prob.nsteps,
-        prob.N_ess_levels, prob.N_guard_levels
+        prob.N_ess_levels,
+        copy(prob.guard_subspace_projector)
     )
 end
 
 
 
+"""
+Given a Schrodinger problem whose states are matrices (e.g. multiple initial conditions)
+"""
 function VectorSchrodingerProb(
         prob::SchrodingerProb{M1, M2}, initial_condition_index::Int64
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
@@ -97,20 +108,11 @@ function VectorSchrodingerProb(
         prob.sym_operators, prob.asym_operators,
         prob.u0[:,initial_condition_index], prob.v0[:,initial_condition_index],
         prob.tf, prob.nsteps,
-        prob.N_ess_levels, prob.N_guard_levels
+        prob.N_ess_levels,
+        prob.guard_subspace_projector
     )
 end
 
-
-"""
-For compatibility in eval_grad_forced (should refactor code)
-"""
-function VectorSchrodingerProb(
-        prob::SchrodingerProb{M, V}, initial_condition_index::Int64
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
-    @assert initial_condition_index == 1
-    return copy(prob)
-end
 
 """
 Show/display problem parameters in a human readable format.
@@ -126,8 +128,8 @@ function Base.show(io::IO, ::MIME"text/plain", prob::SchrodingerProb{M, VM}) whe
     end
     print(io, "\n")
 
-    println(io, "System symmetric operator: ", prob.system_sym)
-    println(io, "System asymmetric operator: ", prob.system_asym)
+    println(io, "System symmetric operator: \n", prob.system_sym)
+    println(io, "System asymmetric operator: \n", prob.system_asym)
 
     println(io, "Control symmetric operators:")
     for op in prob.sym_operators
@@ -139,13 +141,15 @@ function Base.show(io::IO, ::MIME"text/plain", prob::SchrodingerProb{M, VM}) whe
         println(io, "\t", op)
     end
 
+    println(io, "Guard supspace projector: \n", prob.guard_subspace_projector)
+
     println(io, "Real part of initial state(s): ", prob.u0)
     println(io, "Imaginary part of initial state(s): ", prob.v0)
 
     println(io, "Final time: ", prob.tf)
     println(io, "Number of timesteps: ", prob.nsteps)
+    println(io, "Number of initial condtions: ", prob.N_initial_conditions)
     println(io, "Number of essential levels: ", prob.N_ess_levels)
-    println(io, "Number of guard levels: ", prob.N_guard_levels)
     println(io, "Total number of levels: ", prob.N_tot_levels)
     println(io, "Number of control Hamiltonians: ", prob.N_operators)
     print(io, "Size of real-valued system: ", prob.real_system_size)
@@ -153,24 +157,6 @@ function Base.show(io::IO, ::MIME"text/plain", prob::SchrodingerProb{M, VM}) whe
     return nothing
 end
 
-"""
-Create the matrix that projects a state vector onto the guarded subspace.
-
-Currently hardcoded for a single qubit. Shouldn't be a challenge to do it for
-multiple qubits using kronecker products.
-"""
-function create_essential_subspace_projector(N_ess_levels::Int64, N_tot_levels::Int64)
-    W = zeros(N_tot_levels, N_tot_levels)
-    for i in (N_ess_levels+1):N_tot_levels
-        W[i,i] = 1
-    end
-
-    # Take kronecker product with 2x2 identity to get real-valued system version
-    identity_2by2 = [1 0; 0 1]
-    W_realsystem = LinearAlgebra.kron(identity_2by2, W)
-
-    return W_realsystem
-end
 
 """
 Given a SchrodingerProb, return version where all the arrays are dense.
@@ -186,7 +172,26 @@ function DenseSchrodingerProb(prob::SchrodingerProb)
         prob.tf,
         prob.nsteps,
         prob.N_ess_levels,
-        prob.N_guard_levels,
     )
     return dense_prob
+end
+
+"""
+Create the matrix that projects a state vector onto the guarded subspace.
+
+Currently hardcoded for a single qubit. Shouldn't be a challenge to do it for
+multiple qubits using kronecker products.
+"""
+function create_guard_subspace_projector(N_ess_levels, N_tot_levels)
+    @assert length(N_ess_levels) == length(N_tot_levels)
+    W = zeros(N_tot_levels, N_tot_levels)
+    for i in (N_ess_levels+1):N_tot_levels
+        W[i,i] = 1
+    end
+
+    # Take kronecker product with 2x2 identity to get real-valued system version
+    identity_2by2 = [1 0; 0 1]
+    W_realsystem = LinearAlgebra.kron(identity_2by2, W)
+
+    return W_realsystem
 end
