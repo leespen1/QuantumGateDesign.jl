@@ -246,9 +246,6 @@ params.save_pcof_hist = true
 # Allocate all working arrays
 wa = Juqbox.Working_Arrays(params, nCoeff)
 
-# Uncomment if I want to do the actual optimization
-#prob = Juqbox.setup_ipopt_problem(params, wa, nCoeff, minCoeff, maxCoeff, maxIter=maxIter, lbfgsMax=lbfgsMax, startFromScratch=startFromScratch)
-
 #uncomment to run the gradient checker for the initial pcof
 #=
 if @isdefined addOption
@@ -271,6 +268,12 @@ println("Initial coefficient vector stored in 'pcof0'")
 
 ret = traceobjgrad(pcof0, params, wa, true, false)
 history_juqbox = ret[2]
+
+juqbox_ipopt_prob = Juqbox.setup_ipopt_problem(params, wa, nCoeff, minCoeff, maxCoeff, maxIter=maxIter, lbfgsMax=lbfgsMax, startFromScratch=startFromScratch)
+# Uncomment if I want to do the actual optimization
+#pcof = Juqbox.run_optimizer(juqbox_ipopt_prob, pcof0)
+#pl = Juqbox.plot_results(params, pcof)
+
 
 prob = convert_juqbox(params)
 controls = QuantumGateDesign.bspline_controls(prob.tf, D1, om)
