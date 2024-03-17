@@ -225,3 +225,21 @@ function eval_q_derivative_untyped(control::AbstractControl, t::Real,
 
     return q_val
 end
+
+"""
+Given a time interval [0,tf], divided into `N_regions` regions, and a time `t`.
+Return the index of the region to which `t` belongs.
+"""
+@inline function find_region_index(t, tf, N_regions)
+    # Check that t is in the interval
+    if (t < 0) || (t > tf)
+        throw(DomainError(t, "Value is outside the interval [0,tf]"))
+    end
+    # Calculate the width of each region
+    region_width = tf / N_regions
+
+    # Find the index of the region to which t belongs
+    region_index = min(floor(Int, t / region_width) + 1, N_regions)
+
+    return region_index
+end
