@@ -8,6 +8,8 @@ Note: I can use a high-order hermite control for a low order method, and pcof st
 works the same way.
 
 And for pcof, it is convenient to just reshape a matrix whose columns are the derivatives
+
+
 """
 mutable struct HermiteControl <: AbstractControl
     N_coeff::Int64
@@ -89,6 +91,8 @@ function eval_q_derivative(control::HermiteControl, t::Real, pcof::AbstractVecto
 end
 
 
+#TODO huge risk of incorrect results when using a vector of these controls. Will
+#not update fn_vals/fnp1_vals when calling the same control for different pcofs
 """
 New, non-allocating version. Currently bugged (not giving pcof[1] at t=0.0)
 """
@@ -190,4 +194,26 @@ function construct_pcof_from_sample(control_orig, pcof_orig, hermite_control)
 
     pcof_vec = reshape(pcof_mat, length(pcof_mat))
     return pcof_vec
+end
+
+"""
+Same as above, but for multiple controls, and creates hermite controls
+"""
+function sample_from_controls(controls_orig, pcof_orig, N_samples, N_derivatives)
+    controls_new = Vector{HermiteControl}()
+    full_pcof_new = Vector{Float64}()
+    for (i, control_orig) in enumerate(controls_orig)
+        # Create control
+        local_hermite_control = HermiteControl(N_samples, control_orig.tf, N_derivatives) 
+        push!(controls_new, local_hermite_control)
+
+        # Sample original control for values and derivatives at sample points
+        local_pcof_orig = get_control_vector_slice(pcof_orig, controls_orig, i)
+        local_pcof_new = construct_pcof_from_sample(control_orig, local_pcof_orig, local_hermite_control)
+
+        # Append local control vector to global control vector
+        full_pcof_new = vcat(full_pcof_new, local_pcof_new)
+    end
+
+    return controls_new, full_pcof_new
 end
