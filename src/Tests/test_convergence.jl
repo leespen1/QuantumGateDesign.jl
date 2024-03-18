@@ -154,6 +154,7 @@ function plot_history_convergence(step_sizes, errors_all, timing_all, timing_std
     stepsize_xlims = collect(Plots.xlims(pl_stepsize))
     timing_xlims   = collect(Plots.xlims(pl_timing))
     Plots.plot!(pl_stepsize, stepsize_xlims, [-7, -7], linecolor=:red, label="Target Error")
+    Plots.plot!(pl_timing, timing_xlims, [-7, -7], linecolor=:red, label="Target Error")
 
     return pl_stepsize, pl_timing
 end
@@ -161,8 +162,8 @@ end
 
 
 function plot_history_convergence!(pl_stepsize, pl_timing, step_sizes, errors_all, timing_all, timing_stddev_all;
-        orders=(2, 4, 6, 8, 10), include_orderlines=true, fontsize=16, orderline_offset=0,
-        labels=missing
+        orders=(2, 4, 6, 8, 10), include_orderlines=false, fontsize=16, orderline_offset=0,
+        labels=missing, marker=:circle, colors=missing
     )
 
     N_orders = size(errors_all, 2)
@@ -172,8 +173,16 @@ function plot_history_convergence!(pl_stepsize, pl_timing, step_sizes, errors_al
         labels = reshape(labels, 1, :) # Labels must be row matrix
     end
 
-    Plots.plot!(pl_timing, log10.(timing_all), log10.(errors_all), marker=:circle, markersize=5, labels=labels, linealpha=0.5)
-    Plots.plot!(pl_stepsize, log10.(step_sizes), log10.(errors_all), marker=:circle, markersize=5, labels=labels)
+    if ismissing(colors)
+        colors = collect(Plots.theme_palette(:default))
+        colors = colors[1:N_orders]
+        colors = reshape(colors, 1, :)
+    end
+
+    Plots.plot!(pl_timing, log10.(timing_all), log10.(errors_all), marker=marker,
+                markersize=5, labels=labels, linealpha=0.5, color=colors)
+    Plots.plot!(pl_stepsize, log10.(step_sizes), log10.(errors_all), marker=marker,
+                markersize=5, labels=labels, color=colors)
 
 
     # Add order lines
@@ -231,8 +240,64 @@ function richardson_extrap_sol(Aₕ, A₂ₕ, order)
 end
 
 """
-Given CPU times and relative errors, estimate the stepsize which would give a
+Given CPU times and relative errors, estimate the CPU time which would give a
 relative error of 1e-7
 """
-function get_error_limits()
+function get_runtime_ratios(errors_all, timing_all, errors_juqbox, timing_juqbox,
+                            target_error=1e-7)
+
+    errors_log = log10.(errors_all)
+    timing_log = log10.(timing_all)
+
+    errors_juqbox_log = log10.(errors_juqbox)
+    timing_juqbox_log = log10.(timing_juqbox)
+
+    juqbox_time = 10.0 ^ find_target_y(
+        timing_juqbox_log[:,1], errors_juqbox_log[:,1], log10(target_error)
+    )
+
+
+    N = size(errors_all, 2)
+    runtime_ratios = zeros(N)
+
+    for n in 1:N
+        runtime_ratios[n] = 10.0 ^ find_target_y(
+            timing_log[:,n], errors_log[:,n], log10(target_error)
+        )
+        runtime_ratios[n] /= juqbox_time
+    end
+
+    return runtime_ratios 
 end
+
+
+"""
+Assuming a linear interpolation between subsequent points, find the value of x
+which is expected to yield the target_y. (also generally assumes that the ys are
+monotonically decreasing, or at least aroudn the area of target_y)
+"""
+function find_target_y(xs, ys, target_y)
+    @assert length(xs) == length(ys)
+    N = length(xs)
+
+    upper_index = -1
+    for n in 1:N
+        y = ys[n]
+        if y > target_y
+            upper_index = n
+        end
+    end
+    lower_index = upper_index-1
+
+    x1 = xs[upper_index]
+    x2 = xs[lower_index]
+    y1 = ys[upper_index]
+    y2 = ys[lower_index]
+
+    m = (y2-y1)/(x1-x2)
+
+    target_x = x1 + ((target_y - y1)/m)
+
+    return target_x
+end
+
