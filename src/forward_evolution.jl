@@ -704,12 +704,21 @@ function ldiv_P(A, b)
     return x
 end
 
-struct MyPreconditioner{T}
-    LHS_subdiagonal::T # The real diagonal of the Hamiltonian, diagonal of lower-left block
+
+
+struct MyPreconditioner
+    LHS_diagonal::Vector{Float64} 
+    LHS_upper_diagonal::Vector{Float64}
+    LHS_lower_diagonal::Vector{Float64}
     real_system_size::Int64
     complex_system_size::Int64
 end
 
+
+
+"""
+Construct preconditioner based on schrodinger prob.
+"""
 function MyPreconditioner(prob::SchrodingerProb, order::Int)
     A = [prob.system_asym prob.system_sym; -prob.system_sym prob.system_asym]
     dt = prob.tf/prob.nsteps
@@ -728,35 +737,66 @@ function MyPreconditioner(prob::SchrodingerProb, order::Int)
         axpy!(coeff, A^j, LHS)
     end
 
-    LHS_diagonal = LinearAlgebra.diag(LHS)
-    LHS_subdiagonal = LinearAlgebra.diag(LHS, -complex_system_size)
-    #LHS_upper_diagonal = LinearAlgebra.diag(LHS, complex_system_size)
-    #@assert LHS_upper_diagonal == -LHS_subdiagonal
-        
-    return MyPreconditioner(LHS_subdiagonal, real_system_size, complex_system_size)
+    return MyPreconditioner(LHS)
 end
 
-function Base.:\(P::MyPreconditioner, b::AbstractVector)
-    x = similar(b)
-    ldiv!(x, P, b)
+
+
+"""
+Construct preconditioner based on arbitrary LHS matrix.
+E.g. preconditioner for LHS*x = b
+"""
+function MyPreconditioner(LHS)
+    @assert size(LHS, 1) == size(LHS, 2)
+    @assert iseven(size(LHS, 1))
+    real_system_size = size(LHS, 1)
+    complex_system_size = div(real_system_size, 2)
+
+    LHS_diagonal = LinearAlgebra.diag(LHS)
+    @assert all(LHS_diagonal .!= 0) # Make sure no diagonal entries are zero
+
+    LHS_upper_diagonal = LinearAlgebra.diag(LHS, complex_system_size)
+    LHS_lower_diagonal = LinearAlgebra.diag(LHS, -complex_system_size)
+
+    ## Technically we won't get an error if this is not the case, but still good to check
+    #@assert LHS_upper_diagonal == -LHS_lower_diagonal
+        
+    return MyPreconditioner(LHS_diagonal, LHS_upper_diagonal, LHS_lower_diagonal,
+                            real_system_size, complex_system_size)
 end
+
+
 
 function LinearAlgebra.ldiv!(y::AbstractVector, P::MyPreconditioner, x::AbstractVector)
     y .= x
     ldiv!(P, y)
 end
 
+
+
 function LinearAlgebra.ldiv!(P::MyPreconditioner, x::AbstractVector)
+    N = P.complex_system_size
     # Should be able to do this very broadcasted
-    # Clear lower-left block, get lower-right block to ones on
-    for i in eachindex(P.LHS_subdiagonal)
-        # Need to add a division here by diagonal entry or something for higher order
-        x[P.complex_system_size+i] -= P.LHS_subdiagonal[i] * x[i]
-        x[P.complex_system_size+i] /= 1 + P.LHS_subdiagonal[i]*P.LHS_subdiagonal[i]
+    for i in eachindex(P.LHS_lower_diagonal)
+        # Clear lower-left block diagonal
+        ratio = P.LHS_lower_diagonal[i] / P.LHS_diagonal[i]
+        x[N+i] -= x[i]*ratio
+        # Get bottom-right block diagonal to ones
+        x[N+i] /= (P.LHS_diagonal[N+i] - P.LHS_upper_diagonal[i]*ratio)
     end
-    for i in eachindex(P.LHS_subdiagonal)
-        x[i] += P.LHS_subdiagonal[i] * x[P.complex_system_size+i]
+    for i in eachindex(P.LHS_lower_diagonal)
+        # Clear diagonal of of upper-right block
+        x[i] -= P.LHS_upper_diagonal[i] * x[N+i]
+        # Get upper-left block diagonal to ones
+        x[i] /= P.LHS_diagonal[i]
     end
       
     return x
+end
+
+
+
+function Base.:\(P::MyPreconditioner, b::AbstractVector)
+    x = similar(b)
+    ldiv!(x, P, b)
 end
