@@ -32,6 +32,7 @@ mutable struct HermiteControl <: AbstractControl
     uint_intermediate_p::Vector{Float64}
     uint_intermediate_q::Vector{Float64}
     ploc::Vector{Float64} # Just used for storage/working array. Values not important
+    pcof_temp::Vector{Float64}
     function HermiteControl(N_points::Int64, tf::Float64, N_derivatives::Int64)
         @assert N_points > 1
 
@@ -63,12 +64,15 @@ mutable struct HermiteControl <: AbstractControl
         uint_intermediate_p = zeros(2*N_derivatives + 2)
         uint_intermediate_q = zeros(2*N_derivatives + 2)
         ploc = zeros(2*N_derivatives + 2) # Just used for storage/working array. Values not important
+        
+        pcof_temp = zeros(N_coeff)
 
 
         new(N_coeff, tf, N_points, N_derivatives, dt, Hmat, tn, tnp1, t_current,
             fn_vals_p, fnp1_vals_p, fvals_collected_p, 
             fn_vals_q, fnp1_vals_q, fvals_collected_q, 
-            uint_p, uint_q, uint_intermediate_p, uint_intermediate_q, ploc)
+            uint_p, uint_q, uint_intermediate_p, uint_intermediate_q, ploc,
+            pcof_temp)
     end
 end
 
@@ -88,6 +92,70 @@ end
 
 function eval_q_derivative(control::HermiteControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     return eval_derivative(control, t, pcof, order, :q)
+end
+
+"""
+Should actually be very easy to get just the partial derivative w.r.t a single
+coefficient for this kind of control.
+
+I could make this more efficient by only doing this for the pcof entries which
+affect p/q and this value of t
+"""
+function eval_grad_p_derivative(control::HermiteControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
+    println("Evaluating p gardient, t=", t)
+    grad = zeros(length(pcof))
+    pcof_temp = zeros(length(pcof))
+
+    i = find_region_index(t, control.tf, control.N_points-1)
+
+    offset = 1 + (i-1)*(control.N_derivatives+1)
+
+    for k in 0:control.N_derivatives
+        pcof_temp .= 0
+        pcof_temp[offset+k] = 1
+        grad[offset+k] = eval_p_derivative(control, t, pcof_temp, order)
+    end
+
+    return grad
+end
+
+function eval_grad_q_derivative(control::HermiteControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
+    grad = zeros(length(pcof))
+    pcof_temp = zeros(length(pcof))
+
+    i = find_region_index(t, control.tf, control.N_points-1)
+
+    offset = 1 + (i-1)*(control.N_derivatives+1) + div(control.N_coeff, 2)
+
+    for k in 0:control.N_derivatives
+        pcof_temp .= 0
+        pcof_temp[offset+k] = 1
+        grad[offset+k] = eval_q_derivative(control, t, pcof_temp, order)
+    end
+
+    return grad
+end
+
+"""
+Should actually be very easy to get just the partial derivative w.r.t a single
+coefficient for this kind of control.
+
+I could make this more efficient by only doing this for the pcof entries which
+affect p/q and this value of t
+"""
+function eval_grad_p_derivative(control::HermiteControl, t::Real,
+        pcof::AbstractVector{<: Real}, order::Int64, pcof_index::Int)
+    control.pcof_temp .= 0
+    control.pcof_temp[pcof_index] = 1
+    return eval_p_derivative(control, t, control.pcof_temp, order)
+end
+
+function eval_grad_q_derivative(control::HermiteControl, t::Real,
+        pcof::AbstractVector{<: Real}, order::Int64, pcof_index::Int)
+
+    control.pcof_temp .= 0
+    control.pcof_temp[pcof_index] = 1
+    return eval_q_derivative(control, t, control.pcof_temp, order)
 end
 
 
