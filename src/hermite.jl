@@ -182,8 +182,11 @@ function compute_partial_derivative!(
             sym_op = prob.sym_operators[control_index]
             asym_op = prob.asym_operators[control_index]
 
-            p_val = eval_grad_p_derivative(local_control, t, local_pcof, derivative_order)[local_index] / factorial(derivative_order)
-            q_val = eval_grad_q_derivative(local_control, t, local_pcof, derivative_order)[local_index] / factorial(derivative_order)
+            #p_val = eval_grad_p_derivative(local_control, t, local_pcof, derivative_order)[local_index] / factorial(derivative_order)
+            #q_val = eval_grad_q_derivative(local_control, t, local_pcof, derivative_order)[local_index] / factorial(derivative_order)
+            # Changing to non-allocating version, handle on a per-control-parameter basis
+            p_val = eval_grad_p_derivative(local_control, t, local_pcof, derivative_order, local_index) / factorial(derivative_order)
+            q_val = eval_grad_q_derivative(local_control, t, local_pcof, derivative_order, local_index) / factorial(derivative_order)
 
             mul!(u_partial_derivative, asym_op, u_derivative_prev, q_val, 1)
             mul!(u_partial_derivative, sym_op,  v_derivative_prev, p_val, 1)
