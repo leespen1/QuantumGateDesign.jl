@@ -73,14 +73,26 @@ Should make a version that takes a Schrodinger problem as an input, so I can
 get the number of subsystems, etc.
 
 """
-function plot_populations(history::AbstractMatrix{Float64})
+function plot_populations(ts, history::AbstractArray{Float64, 4}, level_indices, labels)
     populations = get_populations(history)
     N_levels = size(populations, 1)
 
-    labels = ["|$i⟩" for i in 1:N_levels]
-    labels = reshape(labels, 1, length(labels)) # Labels must be a row matrix
+    labels = reshape(labels, 1, :) # Labels must be a row matrix
 
-    pl = Plots.plot(transpose(populations), labels=labels, ylabel="Population")
+    ret = []
+    # Iterate over initial conditions
+    for initial_condition in 1:size(populations, 3)
+        title = labels[initial_condition]
+        pl = Plots.plot(xlabel="Time (ns)", ylabel="Population", 
+                        title=title, legend=false)
+        # Iterate over essential states
+        for (i, level_index) in enumerate(level_indices)
+            Plots.plot!(pl, ts, populations[level_index, :, initial_condition],
+                  label=labels[i])
+        end
+        push!(ret, pl)
+    end
+    return ret
 end
 
 """
