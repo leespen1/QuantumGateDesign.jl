@@ -122,10 +122,9 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
     )
 
 
-    #preconditioner = IterativeSolvers.Identity()
     # Need to add test that evolution is still the same with preconditioner
-    # Does a 1e-7 error make sense for 1e-10 tolerance?
     # Also check how our preconditioner compares against diagonal preconditioner
+    #preconditioner = IterativeSolvers.Identity()
     preconditioner = MyPreconditioner(prob, order)
 
 
@@ -140,11 +139,6 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
     uv_mat[prob.N_tot_levels+1:prob.real_system_size, 1] .= prob.v0
     uv_history[:, :, 1] .= uv_mat
 
-
-    # For some reason, using a Matrix as the preconditioner results in an error.
-    #H_no_timing = [prob.system_asym prob.system_sym; -prob.system_sym prob.system_asym]
-    #LHS_no_timing = Array(LinearAlgebra.diagm(ones(prob.real_system_size)) .- (dt .* H_no_timing))
-    #LHS_no_timing = LinearAlgebra.diagm(ones(prob.real_system_size))
     max_N_gmres_iterations = 0
     min_N_gmres_iterations = 100000
     avg_N_gmres_iterations = 0
@@ -279,7 +273,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         pcof::AbstractVector{<: Real}, terminal_condition::AbstractVector{Float64}
         ; order::Int=2,
         forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
-        use_taylor_guess=true
+        use_taylor_guess=true, verbose=false
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     
@@ -323,12 +317,13 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         ismutating=true
     )
 
-    N_gmres_iterations = 0
+    #preconditioner = IterativeSolvers.Identity()
+    preconditioner = MyPreconditioner(prob, order, adjoint=true)
 
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
         abstol=1e-10, reltol=1e-10, restart=prob.real_system_size,
-        initially_zero=false
+        initially_zero=false, Pl=preconditioner
     )
 
     # Important to do this after setting up the linear map and gmres_iterable. One of those seems to be overwriting uv_mat
@@ -337,6 +332,9 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
 
     uv_history[:, :, 1+prob.nsteps] .= uv_mat
 
+    max_N_gmres_iterations = 0
+    min_N_gmres_iterations = 100000
+    avg_N_gmres_iterations = 0
 
     # Perform the timesteps
     for n in prob.nsteps:-1:2
@@ -352,12 +350,12 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
             RHS .+= view(forcing, :, 1+n-1) 
         end
 
-        ## Not sure how valid the taylor guess is here, since the ODE is not the same
-        #if use_taylor_guess
-        #    taylor_expand!(uv_vec, uv_mat, -dt, N_derivatives) # Use taylor expansion as guess
-        #else
-        #    uv_vec .= view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
-        #end
+        # Not sure how valid the taylor guess is here, since the ODE is not the same
+        if use_taylor_guess
+            taylor_expand!(uv_vec, uv_mat, -dt, N_derivatives) # Use (backward) taylor expansion as guess
+        else
+            uv_vec .= view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
+        end
 
         # Use GMRES to perform the timestep (implicit part)
         lhs_holder.tnext = t # Should rename tnext to t_imp, since it's not necessarily 'next'
@@ -369,8 +367,18 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         for iter in gmres_iterable
             N_gmres_iterations += 1
         end
+        avg_N_gmres_iterations += N_gmres_iterations
+        max_N_gmres_iterations = max(N_gmres_iterations, max_N_gmres_iterations)
+        min_N_gmres_iterations = min(N_gmres_iterations, min_N_gmres_iterations)
 
         uv_mat[:,1] .= gmres_iterable.x
+    end
+
+    avg_N_gmres_iterations /= prob.nsteps
+    if verbose
+        println("Average # of gmres iterations: ", avg_N_gmres_iterations)
+        println("Maximum # of gmres iterations: ", max_N_gmres_iterations)
+        println("Minimum # of gmres iterations: ", min_N_gmres_iterations)
     end
 
     # Compute the derivatives of uv at n=1 and store them
@@ -719,8 +727,14 @@ end
 """
 Construct preconditioner based on schrodinger prob.
 """
-function MyPreconditioner(prob::SchrodingerProb, order::Int)
+function MyPreconditioner(prob::SchrodingerProb, order::Int; adjoint=false)
     A = [prob.system_asym prob.system_sym; -prob.system_sym prob.system_asym]
+
+    if adjoint
+        # Without time dependence, all the matrices are A, A², A³, etc, so it's
+        # okay to just take transpose directly
+        A = A'
+    end
     dt = prob.tf/prob.nsteps
 
     real_system_size = size(A, 1)
