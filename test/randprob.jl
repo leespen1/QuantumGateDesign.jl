@@ -36,7 +36,7 @@ N_guard_levels = 0
 
 prob = SchrodingerProb(
     system_sym, system_asym, sym_operators, asym_operators, u0, v0,
-    tf, nsteps, N_ess_levels, N_guard_levels
+    tf, nsteps, N_ess_levels
 )
 
 prob.guard_subspace_projector .= 0
