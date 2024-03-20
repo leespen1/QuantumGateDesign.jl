@@ -118,6 +118,13 @@ function get_history_convergence(prob, control, pcof, N_iterations;
             if error < error_limit 
                 break
             end
+            # If we are reasonably precise, break if the error increases twice
+            # (numerical saturation)
+            if k > 2
+                if (error < 1e-4) && (error > errors[k-1]) && (errors[k-1] > errors[k-2])
+                    break
+                end
+            end
         end
 
         push!(histories, histories_this_order)
@@ -163,15 +170,15 @@ end
 
 function plot_history_convergence!(pl_stepsize, pl_timing, step_sizes, errors_all, timing_all, timing_stddev_all;
         orders=(2, 4, 6, 8, 10), include_orderlines=false, fontsize=16, orderline_offset=0,
-        labels=missing, marker=:circle, colors=missing
+        labels=missing, marker=:circle, colors=missing, lw=2, markersize=5
     )
 
     N_orders = size(errors_all, 2)
 
     if ismissing(labels)
         labels = ["Order=$order" for order in orders]
-        labels = reshape(labels, 1, :) # Labels must be row matrix
     end
+    labels = reshape(labels, 1, :) # Labels must be row matrix
 
     if ismissing(colors)
         colors = collect(Plots.theme_palette(:default))
@@ -180,9 +187,9 @@ function plot_history_convergence!(pl_stepsize, pl_timing, step_sizes, errors_al
     end
 
     Plots.plot!(pl_timing, log10.(timing_all), log10.(errors_all), marker=marker,
-                markersize=5, labels=labels, linealpha=0.5, color=colors)
+                markersize=markersize, labels=labels, linealpha=0.5, color=colors, lw=lw)
     Plots.plot!(pl_stepsize, log10.(step_sizes), log10.(errors_all), marker=marker,
-                markersize=5, labels=labels, color=colors)
+                markersize=markersize, labels=labels, color=colors, lw=lw)
 
 
     # Add order lines
