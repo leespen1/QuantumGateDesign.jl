@@ -1,8 +1,12 @@
 function convert_juqbox(juqbox_params)
     system_sym     = copy(juqbox_params.Hconst)
-    system_asym    = similar(system_sym)
-    system_asym .= 0 # Juqbox assumes no antisymmetric (imaginary) part in system hamiltonian
-    # I used `similar` because the operators may be stored as sparse matrices.
+    if isa(system_sym, SparseArrays.SparseMatrixCSC)
+        system_asym = SparseArrays.spzeros(size(system_sym))
+    else 
+        system_asym = similar(system_sym)
+        system_asym .= 0
+    end
+
 
     sym_operators  = [copy(op) for op in juqbox_params.Hsym_ops]
     asym_operators = [copy(op) for op in juqbox_params.Hanti_ops]
