@@ -127,10 +127,15 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
     #preconditioner = IterativeSolvers.Identity()
     preconditioner = MyPreconditioner(prob, order)
 
+    if (order == 2)
+        reltol = min(1e-10, 1e-8/prob.nsteps)
+    else
+        reltol=1e-10
+    end
 
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
-        abstol=1e-10, reltol=1e-10, restart=prob.real_system_size,
+        abstol=1e-10, reltol=reltol, restart=prob.real_system_size,
         initially_zero=false, Pl=preconditioner
     )
 
