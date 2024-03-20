@@ -1,7 +1,7 @@
 module QuantumGateDesign
 
 
-import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra, BenchmarkTools
+import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra, BenchmarkTools, SparseArrays
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 
 # Export derivative computation functions
