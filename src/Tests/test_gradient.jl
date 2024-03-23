@@ -64,7 +64,7 @@ end
 
 function plot_gradient_agreement(prob, controls, target; 
         orders=(2,4,6,8,10), cost_type=:Infidelity,
-        n_runs=10
+        n_runs=10, amax=5e-2
     )
 
     N_orders = length(orders)
@@ -76,7 +76,7 @@ function plot_gradient_agreement(prob, controls, target;
 
 
     for i in 1:n_runs
-        pcof = rand(N_coeffs)
+        pcof = rand(N_coeffs) .* amax
         for (k, order) in enumerate(orders)
             # Check that gradients calculated using discrete adjoint and finite difference
             # methods agree to reasonable precision
