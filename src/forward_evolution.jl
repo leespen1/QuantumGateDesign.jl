@@ -35,7 +35,8 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
 
 
     # Handle i-th initial condition (THREADS HERE)
-    for initial_condition_index=1:prob.N_ess_levels
+    avg_N_gmres_iterations = 0
+    for initial_condition_index=1:prob.N_initial_conditions
         vector_prob = VectorSchrodingerProb(prob, initial_condition_index)
         this_uv_history = @view uv_history[:, :, :, initial_condition_index]
 
@@ -45,11 +46,16 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
             this_forcing = @view forcing[:, :, :, initial_condition_index]
         end
 
-        eval_forward!(
+        avg_N_gmres_iterations += eval_forward!(
             this_uv_history, vector_prob, controls, pcof, order=order, forcing=this_forcing,
             use_taylor_guess=use_taylor_guess, verbose=verbose, saveEveryNsteps=saveEveryNsteps
         )
     end
+
+    avg_N_gmres_iterations /= prob.N_initial_conditions
+    println("#"^80, "\nAvg # Gmres Iterations $avg_N_gmres_iterations\n", "#"^80)
+
+    return nothing
 end
 
 """
@@ -217,7 +223,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         uv_history[:, :, 1+div(prob.nsteps, saveEveryNsteps)] .= uv_mat
     end
 
-    return nothing
+    return avg_N_gmres_iterations
 end
 
 
