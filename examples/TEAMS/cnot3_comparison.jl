@@ -274,7 +274,7 @@ target = vcat(params.Utarget_r, params.Utarget_i)
 
 use_opt_pcof = true
 if use_opt_pcof
-    pcof = jldopen("cnot3_save1.jld2")["pcofs"][end]
+    pcof = jldopen("cnot3_save_good_pcof.jld2")["pcof"]
 else
     pcof = copy(pcof0)
 end
