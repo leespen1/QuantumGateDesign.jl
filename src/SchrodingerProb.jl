@@ -113,6 +113,20 @@ function VectorSchrodingerProb(
     )
 end
 
+function VectorSchrodingerProb2(
+        prob::SchrodingerProb{M1, M2}, initial_condition_index::Int64
+    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
+
+    return SchrodingerProb(
+        prob.system_sym, prob.system_asym,
+        prob.sym_operators, prob.asym_operators,
+        reshape(prob.u0[:,initial_condition_index], :, 1), 
+        reshape(prob.v0[:,initial_condition_index], :, 1),
+        prob.tf, prob.nsteps,
+        prob.N_ess_levels,
+        prob.guard_subspace_projector
+    )
+end
 
 """
 Show/display problem parameters in a human readable format.
