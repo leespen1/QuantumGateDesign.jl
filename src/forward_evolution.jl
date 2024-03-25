@@ -8,7 +8,7 @@ function eval_forward(
 
     N_derivatives = div(order, 2)
     nsteps_save = div(prob.nsteps, saveEveryNsteps)
-    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_save, prob.N_ess_levels)
+    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_save, prob.N_initial_conditions)
 
     eval_forward!(uv_history, prob, controls, pcof, order=order, forcing=forcing,
                   use_taylor_guess=use_taylor_guess, verbose=verbose,
@@ -31,7 +31,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
 
     # Check size of uv_history storage
     nsteps_save = div(prob.nsteps, saveEveryNsteps)
-    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+nsteps_save, prob.N_ess_levels)
+    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+nsteps_save, prob.N_initial_conditions)
 
 
     # Handle i-th initial condition (THREADS HERE)
@@ -53,7 +53,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
     end
 
     avg_N_gmres_iterations /= prob.N_initial_conditions
-    println("#"^80, "\nAvg # Gmres Iterations $avg_N_gmres_iterations\n", "#"^80)
+    #println("#"^80, "\nAvg # Gmres Iterations $avg_N_gmres_iterations\n", "#"^80)
 
     return nothing
 end
@@ -409,7 +409,7 @@ function eval_adjoint(
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_derivatives = div(order, 2)
-    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_ess_levels)
+    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
 
     eval_adjoint!(uv_history, prob, controls, pcof, terminal_condition,
         order=order, forcing=forcing
@@ -429,11 +429,11 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
     N_derivatives = div(order, 2)
 
     # Check size of uv_history storage
-    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_ess_levels)
+    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
 
 
     # Handle i-th initial condition (THREADS HERE)
-    for initial_condition_index=1:prob.N_ess_levels
+    for initial_condition_index=1:prob.N_initial_conditions
         vector_prob = VectorSchrodingerProb(prob, initial_condition_index)
         terminal_condition_vec = @view terminal_condition[:, initial_condition_index]
         this_uv_history = @view uv_history[:, :, :, initial_condition_index]
