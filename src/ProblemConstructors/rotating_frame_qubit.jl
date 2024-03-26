@@ -35,7 +35,7 @@ function rotating_frame_qubit(N_ess_levels::Int, N_guard_levels::Int;
         [sym_operator], [asym_operator],
         u0, v0, 
         tf, nsteps,
-        N_ess_levels, N_guard_levels
+        N_ess_levels
     )
 end
 

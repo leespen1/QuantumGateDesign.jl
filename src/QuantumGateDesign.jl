@@ -104,4 +104,6 @@ export visualize_control
 export construct_ODEProb
 export convert_to_numpy, Qobj, unpack_Qobj, simulate_prob_no_control
 
+export get_number_of_control_parameters
+
 end # module QuantumGateDesign
