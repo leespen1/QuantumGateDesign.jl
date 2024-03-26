@@ -77,6 +77,7 @@ include("ipopt_optimal_control.jl")
 include("state_vector_helpers.jl")
 
 include("ProblemConstructors/common_operators.jl")
+include("ProblemConstructors/multi_qudit_systems.jl")
 include("ProblemConstructors/rotating_frame_qubit.jl")
 include("ProblemConstructors/dahlquist_problem.jl")
 include("ProblemConstructors/juqbox_converter.jl")
@@ -105,5 +106,7 @@ export construct_ODEProb
 export convert_to_numpy, Qobj, unpack_Qobj, simulate_prob_no_control
 
 export get_number_of_control_parameters
+export multi_qudit_hamiltonian
+export control_ops
 
 end # module QuantumGateDesign
