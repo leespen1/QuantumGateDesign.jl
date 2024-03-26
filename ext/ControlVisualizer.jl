@@ -67,7 +67,6 @@ function QuantumGateDesign.visualize_control(control; n_points=101, prob=missing
     # Set up function value observables
     p_vals_whole_obsv = [Observable([Point2(t_range_control[k], eval_p(this_control, t_range_control[k], startvalues)*1e3/(2pi)) for k in 1:n_points]) for this_control in control]
     q_vals_whole_obsv = [Observable([Point2(t_range_control[k], eval_q(this_control, t_range_control[k], startvalues)*1e3/(2pi)) for k in 1:n_points]) for this_control in control]
-    println("length p_vals = $(length(p_vals_whole_obsv))")
 
     p_vals_obsv = Observable([Point2(t_range_control[k], eval_p(control[1], t_range_control[k], startvalues)*1e3/(2pi)) for k in 1:n_points])
     q_vals_obsv = Observable([Point2(t_range_control[k], eval_q(control[1], t_range_control[k], startvalues)*1e3/(2pi)) for k in 1:n_points])
