@@ -117,7 +117,7 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
             max_q = maximum(getindex.(q_vals_whole_obsv[i][], 2))
             min_p = minimum(getindex.(p_vals_whole_obsv[i][], 2))
             min_q = minimum(getindex.(q_vals_whole_obsv[i][], 2))
-            max_control_amp = max(max_control_amp, max_p, max_q)
+            max_control_amp = max(max_control_amp, 1.25*max_p, 1.25*max_q)
             min_control_amp = min(min_control_amp, min_p, min_q)
         end
 
