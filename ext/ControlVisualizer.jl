@@ -12,7 +12,7 @@ Visualize a Control Using Makie
 This is really old. From back when I was using functions as parameters for the
 object instead of methods for the type. Needs to be updated to work.
 """
-function QuantumGateDesign.visualize_control(control; n_points=101, prob=missing, 
+function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missing, 
         pcof_init=missing, use_tboxes=true, target=missing)
 
     if !ismissing(prob)
@@ -27,7 +27,7 @@ function QuantumGateDesign.visualize_control(control; n_points=101, prob=missing
     end
 
 
-    tf = control[1].tf
+    tf = controls[1].tf
 
     t_range_control = LinRange(0, tf, n_points)
 
@@ -41,10 +41,10 @@ function QuantumGateDesign.visualize_control(control; n_points=101, prob=missing
     ==================================#
 
     # Set up control vector pcof, and slidergrid for manipulating control vector
-    pcof_obsv = Vector{Observable{Float64}}(undef, get_number_of_control_parameters(control))
+    pcof_obsv = Vector{Observable{Float64}}(undef, get_number_of_control_parameters(controls))
 
     # Set initial values for control vector. Initialize to user-specified values, if given
-    startvalues = zeros(get_number_of_control_parameters(control))
+    startvalues = zeros(get_number_of_control_parameters(controls))
     if !ismissing(pcof_init)
         startvalues .= pcof_init
     end
@@ -54,22 +54,22 @@ function QuantumGateDesign.visualize_control(control; n_points=101, prob=missing
 
     pcof_slider_parameters = [
         (label="pcof[$i]", range=pcof_range, startvalue=startvalues[i])
-        for i in 1:get_number_of_control_parameters(control)
+        for i in 1:get_number_of_control_parameters(controls)
     ]
 
     pcof_slidergrid = SliderGrid(fig[2,1], pcof_slider_parameters...)
 
     # Set up link between slider values and pcof observable values
-    for i in 1:get_number_of_control_parameters(control)
+    for i in 1:get_number_of_control_parameters(controls)
         pcof_obsv[i] = lift(x -> x, pcof_slidergrid.sliders[i].value)
     end
 
     # Set up function value observables
-    p_vals_whole_obsv = [Observable([Point2(t_range_control[k], eval_p(this_control, t_range_control[k], startvalues)*1e3/(2pi)) for k in 1:n_points]) for this_control in control]
-    q_vals_whole_obsv = [Observable([Point2(t_range_control[k], eval_q(this_control, t_range_control[k], startvalues)*1e3/(2pi)) for k in 1:n_points]) for this_control in control]
+    p_vals_whole_obsv = [Observable([Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], startvalues, i)*1e3/(2pi)) for k in 1:n_points]) for i in 1:length(controls)]
+    q_vals_whole_obsv = [Observable([Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], startvalues, i)*1e3/(2pi)) for k in 1:n_points]) for i in 1:length(controls)]
 
-    p_vals_obsv = Observable([Point2(t_range_control[k], eval_p(control[1], t_range_control[k], startvalues)*1e3/(2pi)) for k in 1:n_points])
-    q_vals_obsv = Observable([Point2(t_range_control[k], eval_q(control[1], t_range_control[k], startvalues)*1e3/(2pi)) for k in 1:n_points])
+    p_vals_obsv = Observable([Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], startvalues, 1)*1e3/(2pi)) for k in 1:n_points])
+    q_vals_obsv = Observable([Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], startvalues, 1)*1e3/(2pi)) for k in 1:n_points])
 
     # If prob is provided, also plot population evolution
     if !ismissing(prob)
@@ -96,37 +96,42 @@ function QuantumGateDesign.visualize_control(control; n_points=101, prob=missing
         #fig[4,1] = Label("Hello World")
     end
 
+    max_control_amp = 1.0
+    min_control_amp = -1.0
     #=================================================
     # Function for updating graph if parameters change
     =================================================#
     function update_graph()
         pcof = to_value.(pcof_obsv)
         # (in units of MHz, non angular)
-        for i in 1:length(control)
-            this_control = control[i]
-            p_vals_whole_obsv[i][] = [Point2(t_range_control[k], eval_p(this_control, t_range_control[k], startvalues)*1e3/(2pi)) for k in 1:n_points]
-            q_vals_whole_obsv[i][] = [Point2(t_range_control[k], eval_q(this_control, t_range_control[k], startvalues)*1e3/(2pi)) for k in 1:n_points]
+        for i in 1:length(controls)
+            p_vals_whole_obsv[i][] = [Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], pcof, i)*1e3/(2pi)) for k in 1:n_points]
+            q_vals_whole_obsv[i][] = [Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], pcof, i)*1e3/(2pi)) for k in 1:n_points]
         end
 
-        p_vals_obsv[] = [Point2(t_range_control[k], eval_p(control[1], t_range_control[k], pcof) * 1e3/(2pi)) for k in 1:n_points]
-        q_vals_obsv[] = [Point2(t_range_control[k], eval_q(control[1], t_range_control[k], pcof) * 1e3/(2pi)) for k in 1:n_points]
+        p_vals_obsv[] = [Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], pcof, 1) * 1e3/(2pi)) for k in 1:n_points]
+        q_vals_obsv[] = [Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], pcof, 1) * 1e3/(2pi)) for k in 1:n_points]
 
-        max_p = maximum(getindex.(p_vals_obsv[], 2))
-        max_q = maximum(getindex.(q_vals_obsv[], 2))
-        min_p = minimum(getindex.(p_vals_obsv[], 2))
-        min_q = minimum(getindex.(q_vals_obsv[], 2))
+        for i in 1:length(controls)
+            max_p = maximum(getindex.(p_vals_whole_obsv[i][], 2))
+            max_q = maximum(getindex.(q_vals_whole_obsv[i][], 2))
+            min_p = minimum(getindex.(p_vals_whole_obsv[i][], 2))
+            min_q = minimum(getindex.(q_vals_whole_obsv[i][], 2))
+            max_control_amp = max(max_control_amp, max_p, max_q)
+            min_control_amp = min(min_control_amp, min_p, min_q)
+        end
 
         # Update ylims to capture entire control; const args ensure ylims != (0,0)
-        ylims!(ax, min(min_p, min_q)-1, max(max_p, max_q)+1)
+        ylims!(ax, min_control_amp, max_control_amp)
 
         if !ismissing(prob)
-            history = eval_forward(prob, control, pcof, order=4)
+            history = eval_forward(prob, controls, pcof, order=4)
             populations = get_populations(history)
             for i in 1:size(prob.u0, 2)
                 populations_obsv_list[i][] = populations[:,:,i]
             end
 
-            infidelity_obsv[] = infidelity(prob, control, pcof, target, order=4)
+            infidelity_obsv[] = infidelity(prob, controls, pcof, target, order=4)
             infidelity_str_obsv[] = "Fidelity: $(1 - infidelity_obsv[])"
         end
     end
@@ -136,19 +141,19 @@ function QuantumGateDesign.visualize_control(control; n_points=101, prob=missing
 
 
     # Set up link so that graph updates when any control parameter changes
-    for i in 1:get_number_of_control_parameters(control)
+    for i in 1:get_number_of_control_parameters(controls)
         on(pcof_obsv[i]) do coeff
             update_graph()
         end
     end
 
-    # Draw the control functions
-    GLMakie.lines!(ax, p_vals_obsv, linewidth=2)
-    GLMakie.lines!(ax, q_vals_obsv, linewidth=2)
-    #for i in 1:length(p_vals_whole_obsv)
-    #    GLMakie.lines!(ax, p_vals_whole_obsv[i], linewidth=2)
-    #    GLMakie.lines!(ax, q_vals_whole_obsv[i], linewidth=2)
-    #end
+    ## Draw the control functions
+    #GLMakie.lines!(ax, p_vals_obsv, linewidth=2)
+    #GLMakie.lines!(ax, q_vals_obsv, linewidth=2)
+    for i in 1:length(p_vals_whole_obsv)
+        GLMakie.lines!(ax, p_vals_whole_obsv[i], linewidth=2)
+        GLMakie.lines!(ax, q_vals_whole_obsv[i], linewidth=2)
+    end
 
     # Draw the populations
     if !ismissing(prob)
