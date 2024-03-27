@@ -108,5 +108,6 @@ export convert_to_numpy, Qobj, unpack_Qobj, simulate_prob_no_control
 export get_number_of_control_parameters
 export multi_qudit_hamiltonian
 export control_ops
+export eval_p_single, eval_q_single
 
 end # module QuantumGateDesign

@@ -243,3 +243,19 @@ Return the index of the region to which `t` belongs.
 
     return region_index
 end
+
+"""
+Given a set of controls and the control vector for all of them, evaluate a 
+single control on its portion of the control_vector
+"""
+function eval_p_single(controls, t, pcof, control_index)
+    local_control = controls[control_index]
+    local_pcof = get_control_vector_slice(pcof, controls, control_index)
+    return eval_p(local_control, t, local_pcof)
+end
+
+function eval_q_single(controls, t, pcof, control_index)
+    local_control = controls[control_index]
+    local_pcof = get_control_vector_slice(pcof, controls, control_index)
+    return eval_q(local_control, t, local_pcof)
+end
