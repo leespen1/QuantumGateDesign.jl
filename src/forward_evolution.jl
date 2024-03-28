@@ -1,18 +1,19 @@
+"""
+kwargs should be propogated all the way down to the vector version of eval_forward.
+"""
 function eval_forward(
-        prob::SchrodingerProb{M1, M2}, controls,
-        pcof::AbstractVector{<: Real}; order::Int=2,
+        prob::SchrodingerProb{M1, M2}, controls, pcof::AbstractVector{<: Real};
+        order::Int=2, saveEveryNsteps::Int=1,
         forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
-        use_taylor_guess::Bool=true, verbose::Bool=false,
-        saveEveryNsteps::Int=1
+        kwargs...
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_derivatives = div(order, 2)
     nsteps_save = div(prob.nsteps, saveEveryNsteps)
     uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_save, prob.N_initial_conditions)
 
-    eval_forward!(uv_history, prob, controls, pcof, order=order, forcing=forcing,
-                  use_taylor_guess=use_taylor_guess, verbose=verbose,
-                  saveEveryNsteps=saveEveryNsteps)
+    eval_forward!(uv_history, prob, controls, pcof, order=order,
+                  saveEveryNsteps=saveEveryNsteps; forcing=forcing, kwargs...)
 
     return uv_history
 end
@@ -20,11 +21,10 @@ end
 
 
 function eval_forward!(uv_history::AbstractArray{Float64, 4},
-        prob::SchrodingerProb{M1, M2}, controls,
-        pcof::AbstractVector{<: Real}; order::Int=2,
+        prob::SchrodingerProb{M1, M2}, controls, pcof::AbstractVector{<: Real};
+        order::Int=2, saveEveryNsteps::Int=1,
         forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
-        use_taylor_guess::Bool = true, verbose::Bool=false,
-        saveEveryNsteps::Int=1
+        kwargs...
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_derivatives = div(order, 2)
@@ -47,8 +47,8 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
         end
 
         avg_N_gmres_iterations += eval_forward!(
-            this_uv_history, vector_prob, controls, pcof, order=order, forcing=this_forcing,
-            use_taylor_guess=use_taylor_guess, verbose=verbose, saveEveryNsteps=saveEveryNsteps
+            this_uv_history, vector_prob, controls, pcof; order=order, 
+            saveEveryNsteps=saveEveryNsteps, forcing=this_forcing, kwargs...
         )
     end
 
@@ -75,11 +75,11 @@ like most entries differed by less than 1e-14.
 I plan to make an adjoint version of this.
 """
 function eval_forward!(uv_history::AbstractArray{Float64, 3},
-        prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{<: Real}; order::Int=2,
+        prob::SchrodingerProb{M, V}, controls, pcof::AbstractVector{<: Real};
+        order::Int=2, saveEveryNsteps::Int=1, 
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
         use_taylor_guess=true, verbose=false,
-        saveEveryNsteps::Int=1
+        abstol=1e-10, reltol=1e-10
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     if verbose
@@ -133,15 +133,9 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
     #preconditioner = IterativeSolvers.Identity()
     preconditioner = MyPreconditioner(prob, order)
 
-    if (order == 2)
-        reltol = min(1e-10, 1e-8/prob.nsteps)
-    else
-        reltol=1e-10
-    end
-
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
-        abstol=1e-10, reltol=reltol, restart=prob.real_system_size,
+        abstol=abstol, reltol=reltol, restart=prob.real_system_size,
         initially_zero=false, Pl=preconditioner
     )
 
@@ -234,10 +228,10 @@ corresponds to the vector component, the second index corresponds to the
 derivative to be taken, and the third index corresponds to the timestep number.
 """
 function eval_forward(
-        prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{<: Real}; order::Int=2,
+        prob::SchrodingerProb{M, V}, controls, pcof::AbstractVector{<: Real};
+        order::Int=2, saveEveryNsteps::Int=1,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
-        use_taylor_guess::Bool=true, verbose::Bool=false
+        kwargs...
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     N_derivatives = div(order, 2)
@@ -245,10 +239,8 @@ function eval_forward(
     # Allocate memory for storing u,v, and their derivatives over all points in time
     uv_history = Array{Float64, 3}(undef, prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
 
-    eval_forward!(
-        uv_history, prob, controls, pcof, order=order, forcing=forcing,
-        use_taylor_guess=use_taylor_guess, verbose=verbose
-    )
+    eval_forward!(uv_history, prob, controls, pcof, order=order;
+                  saveEveryNsteps=saveEveryNsteps, forcing=forcing, kwargs...)
 
     return uv_history
 end
