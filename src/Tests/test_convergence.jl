@@ -17,8 +17,8 @@ way more computation than necessary to get the 'true' solution.
 Richardson extrapolation seems like a good idea for that.
 """
 function get_history_convergence(prob, control, pcof, N_iterations;
-        orders=(2, 4, 6, 8),
-        true_history=missing, error_limit=1e-15, n_runs=1
+        orders=(2, 4, 6, 8), true_history=missing, error_limit=-Inf, n_runs=1,
+        kwargs...
     )
     base_nsteps = prob.nsteps
     nsteps_change_factor = 2
@@ -62,8 +62,9 @@ function get_history_convergence(prob, control, pcof, N_iterations;
             println("----------------------------------------")
             prob_copy.nsteps = base_nsteps
             base_history = eval_forward(
-                prob_copy, control, pcof, order=order,
-                saveEveryNsteps=div(prob_copy.nsteps, base_nsteps)
+                prob_copy, control, pcof, order=order;
+                saveEveryNsteps=div(prob_copy.nsteps, base_nsteps),
+                kwargs...
             )
             # Only include state, not derivatives
             base_history = base_history[:,1,:,:]
@@ -78,13 +79,16 @@ function get_history_convergence(prob, control, pcof, N_iterations;
             elapsed_times = zeros(n_runs)
 
             elapsed_times[1] = @elapsed history = eval_forward(
-                prob_copy, control, pcof, order=order,
-                saveEveryNsteps=div(prob_copy.nsteps, base_nsteps)
+                prob_copy, control, pcof, order=order;
+                saveEveryNsteps=div(prob_copy.nsteps, base_nsteps),
+                kwargs...
+
             )
             for rerun_i in 2:n_runs
                 elapsed_times[rerun_i] = @elapsed history = eval_forward(
-                    prob_copy, control, pcof, order=order,
-                    saveEveryNsteps=div(prob_copy.nsteps, base_nsteps)
+                    prob_copy, control, pcof, order=order;
+                    saveEveryNsteps=div(prob_copy.nsteps, base_nsteps),
+                    kwargs...
                 )
             end
             mean_elapsed_time = sum(elapsed_times)/length(elapsed_times)
@@ -135,8 +139,8 @@ function get_history_convergence(prob, control, pcof, N_iterations;
         #errors_all[:,length(orders)+j] .= order_line
     end
 
-    return step_sizes, errors_all, timing_all, timing_stddev_all
-    #return step_sizes, errors_all, timing_all, timing_stddev_all, histories
+    #return step_sizes, errors_all, timing_all, timing_stddev_all
+    return step_sizes, errors_all, timing_all, timing_stddev_all, histories
 end
 
 
