@@ -252,11 +252,11 @@ state vector (u/v) in a 3-index array, where the first index of
 corresponds to the vector component, the second index corresponds to the
 derivative to be taken, and the third index corresponds to the timestep number.
 """
-function eval_adjoint(
-        prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{<: Real}, terminal_condition::AbstractVector{Float64}
-        ; order::Int=2,
-        forcing::Union{AbstractArray{Float64, 2}, Missing}=missing
+function eval_adjoint(prob::SchrodingerProb{M, V}, controls,
+        pcof::AbstractVector{<: Real},
+        terminal_condition::AbstractVector{Float64}; 
+        forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
+        order::Int=2, kwargs...
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     N_derivatives = div(order, 2)
@@ -265,18 +265,72 @@ function eval_adjoint(
     #uv_history = Array{Float64, 3}(undef, prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
     uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
 
-    eval_adjoint!(uv_history, prob, controls, pcof, terminal_condition, order=order, forcing=forcing)
+    eval_adjoint!(uv_history, prob, controls, pcof, terminal_condition;
+                  order=order, forcing=forcing, kwargs...)
 
     return uv_history
 end
 
 
-function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
-        prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{<: Real}, terminal_condition::AbstractVector{Float64}
+
+
+function eval_adjoint(
+        prob::SchrodingerProb{M1, M2}, controls,
+        pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64};
+        forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
+        order::Int=2, kwargs...
+    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
+
+    N_derivatives = div(order, 2)
+    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
+
+    eval_adjoint!(uv_history, prob, controls, pcof, terminal_condition;
+        order=order, forcing=forcing, kwargs...
+    )
+
+    return uv_history
+end
+
+
+function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
+        prob::SchrodingerProb{M1, M2}, controls,
+        pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64}
         ; order::Int=2,
+        forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
+        kwargs...
+    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
+
+    N_derivatives = div(order, 2)
+
+    # Check size of uv_history storage
+    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
+
+
+    # Handle i-th initial condition (THREADS HERE)
+    for initial_condition_index=1:prob.N_initial_conditions
+        vector_prob = VectorSchrodingerProb(prob, initial_condition_index)
+        terminal_condition_vec = @view terminal_condition[:, initial_condition_index]
+        this_uv_history = @view uv_history[:, :, :, initial_condition_index]
+
+        if ismissing(forcing)
+            this_forcing = missing
+        else
+            this_forcing = @view forcing[:, :, initial_condition_index]
+        end
+
+        eval_adjoint!(
+            this_uv_history, vector_prob, controls, pcof, terminal_condition_vec;
+            order=order, forcing=this_forcing, kwargs...
+        )
+    end
+end
+
+function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
+        prob::SchrodingerProb{M, V}, controls, pcof::AbstractVector{<: Real},
+        terminal_condition::AbstractVector{Float64};
         forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
-        use_taylor_guess=true, verbose=false
+        order::Int=2,
+        use_taylor_guess=true, verbose=false, abstol=1e-10, reltol=1e-10
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     
@@ -325,7 +379,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
 
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
-        abstol=1e-10, reltol=1e-10, restart=prob.real_system_size,
+        abstol=abstol, reltol=reltol, restart=prob.real_system_size,
         initially_zero=false, Pl=preconditioner
     )
 
@@ -390,57 +444,6 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
     uv_history[:, :, 2] .= uv_mat
 
     return nothing
-end
-
-
-function eval_adjoint(
-        prob::SchrodingerProb{M1, M2}, controls,
-        pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64}
-        ; order::Int=2,
-        forcing::Union{AbstractArray{Float64, 3}, Missing}=missing
-    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
-
-    N_derivatives = div(order, 2)
-    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
-
-    eval_adjoint!(uv_history, prob, controls, pcof, terminal_condition,
-        order=order, forcing=forcing
-    )
-
-    return uv_history
-end
-
-
-function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
-        prob::SchrodingerProb{M1, M2}, controls,
-        pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64}
-        ; order::Int=2,
-        forcing::Union{AbstractArray{Float64, 3}, Missing}=missing
-    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
-
-    N_derivatives = div(order, 2)
-
-    # Check size of uv_history storage
-    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
-
-
-    # Handle i-th initial condition (THREADS HERE)
-    for initial_condition_index=1:prob.N_initial_conditions
-        vector_prob = VectorSchrodingerProb(prob, initial_condition_index)
-        terminal_condition_vec = @view terminal_condition[:, initial_condition_index]
-        this_uv_history = @view uv_history[:, :, :, initial_condition_index]
-
-        if ismissing(forcing)
-            this_forcing = missing
-        else
-            this_forcing = @view forcing[:, :, initial_condition_index]
-        end
-
-        eval_adjoint!(
-            this_uv_history, vector_prob, controls, pcof, terminal_condition_vec,
-            order=order, forcing=this_forcing
-        )
-    end
 end
 
 
