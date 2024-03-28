@@ -66,10 +66,11 @@ function discrete_adjoint(
         prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}},
         controls, pcof::AbstractVector{Float64},
         target::AbstractMatrix{Float64}; 
-        order=2, cost_type=:Infidelity, return_lambda_history=false
+        order=2, cost_type=:Infidelity, return_lambda_history=false,
+        kwargs...
     )
 
-    history = eval_forward(prob, controls, pcof; order=order)
+    history = eval_forward(prob, controls, pcof; order=order, kwargs...)
 
     forcing = compute_guard_forcing(prob, history)
 
@@ -83,8 +84,8 @@ function discrete_adjoint(
         forcing=forcing[:,end,:]
     )
 
-    lambda_history = eval_adjoint(
-        prob, controls, pcof, terminal_condition, order=order, forcing=forcing)
+    lambda_history = eval_adjoint(prob, controls, pcof, terminal_condition;
+                                  order=order, forcing=forcing, kwargs...)
 
     grad = zeros(length(pcof))
 
@@ -114,6 +115,14 @@ function accumulate_gradient!(gradient::AbstractVector{Float64},
         order=2
     )
 
+    #=
+    if (order == 2)
+        accumulate_gradient_order2!(gradient, prob, controls, pcof, history, lambda_history)
+        return gradient
+    end
+    =#
+
+
     dt = prob.tf / prob.nsteps
     N_derivatives = div(order, 2)
 
@@ -122,7 +131,6 @@ function accumulate_gradient!(gradient::AbstractVector{Float64},
 
     RHS = zeros(prob.real_system_size)
     LHS = zeros(prob.real_system_size)
-
 
     # If this is really all it takes, that's pretty easy.
     for n in 0:prob.nsteps-1
@@ -159,6 +167,75 @@ function accumulate_gradient!(gradient::AbstractVector{Float64},
 end
 
 """
+Hard-coded version for order 2
+"""
+function accumulate_gradient_order2!(gradient::AbstractVector{Float64},
+        prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
+        history::AbstractArray{Float64, 3}, lambda_history::AbstractArray{Float64, 3}
+    )
+
+    dt = prob.tf / prob.nsteps
+
+    u = zeros(prob.N_tot_levels)
+    v = zeros(prob.N_tot_levels)
+    lambda_u = zeros(prob.N_tot_levels)
+    lambda_v = zeros(prob.N_tot_levels)
+
+    asym_op_lambda_u = zeros(prob.N_tot_levels)
+    asym_op_lambda_v = zeros(prob.N_tot_levels)
+    sym_op_lambda_u = zeros(prob.N_tot_levels)
+    sym_op_lambda_v = zeros(prob.N_tot_levels)
+
+    for i in 1:prob.N_operators
+        control = controls[i]
+        asym_op = prob.asym_operators[i]
+        sym_op = prob.sym_operators[i]
+        local_pcof = get_control_vector_slice(pcof, controls, i)
+
+        grad_contrib = zeros(control.N_coeff)
+        grad_p = zeros(control.N_coeff)
+        grad_q = zeros(control.N_coeff)
+
+        for n in 0:prob.nsteps-1
+            lambda_u .= @view lambda_history[1:prob.N_tot_levels,     1, 1+n+1]
+            lambda_v .= @view lambda_history[1+prob.N_tot_levels:end, 1, 1+n+1]
+
+            t = n*dt
+            u .= @view history[1:prob.N_tot_levels,     1, 1+n]
+            v .= @view history[1+prob.N_tot_levels:end, 1, 1+n]
+
+            eval_grad_p_derivative!(grad_p, control, t, local_pcof, 0)
+            eval_grad_q_derivative!(grad_q, control, t, local_pcof, 0)
+
+            mul!(asym_op_lambda_u, asym_op, lambda_u)
+            mul!(asym_op_lambda_v, asym_op, lambda_v)
+            mul!(sym_op_lambda_u,  sym_op,  lambda_u)
+            mul!(sym_op_lambda_v,  sym_op,  lambda_v)
+
+            grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
+            grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
+
+            t = (n+1)*dt
+            u .= @view history[1:prob.N_tot_levels,     1, 1+n+1]
+            v .= @view history[1+prob.N_tot_levels:end, 1, 1+n+1]
+
+            eval_grad_p_derivative!(grad_p, control, t, local_pcof, 0)
+            eval_grad_q_derivative!(grad_q, control, t, local_pcof, 0)
+
+            grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
+            grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
+        end
+
+        grad_contrib .*= -0.5*dt
+
+        grad_slice = get_control_vector_slice(gradient, controls, i)
+        grad_slice .+= grad_contrib
+    end
+
+    return nothing
+end
+
+"""
 History should be 4D array
 """
 function compute_guard_forcing(prob, history)
@@ -173,3 +250,4 @@ function compute_guard_forcing(prob, history)
 
     return forcing
 end
+

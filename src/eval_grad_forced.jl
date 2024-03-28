@@ -1,6 +1,6 @@
 function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
         pcof::AbstractVector{Float64}, target::VM; order=2, 
-        cost_type=:Infidelity, return_forcing=false
+        cost_type=:Infidelity, return_forcing=false, kwargs...
     ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
 
     # Allocate space for gradient
@@ -19,7 +19,7 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
     T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
 
     # Get state vector history
-    history = eval_forward(prob, controls, pcof, order=order)
+    history = eval_forward(prob, controls, pcof; order=order, kwargs...)
     final_state = history[:, 1, end, :]
 
 
@@ -97,8 +97,8 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
 
             # Compute the state history of ∂ψ/∂θₖ
             history_partial_derivative = eval_forward(
-                diff_prob, controls, pcof, forcing=forcing_ary,
-                order=order
+                diff_prob, controls, pcof; forcing=forcing_ary,
+                order=order, kwargs...
             )
 
             #=
