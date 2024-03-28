@@ -174,15 +174,47 @@ Evaluate gradient of p (or a derivative of p) with respect to the control parame
 """
 function eval_grad_p_derivative(control::AbstractControl, t::Real,
         pcof::AbstractVector{<: Real},  order::Int64)
-
     return ForwardDiff.gradient(pcof_dummy -> eval_p_derivative_untyped(control, t, pcof_dummy, order), pcof)
 end
 
 
 function eval_grad_q_derivative(control::AbstractControl, t::Real,
         pcof::AbstractVector{<: Real},  order::Int64)
-
     return ForwardDiff.gradient(pcof_dummy -> eval_q_derivative_untyped(control, t, pcof_dummy, order), pcof)
+end
+
+"""
+Mutating version. The default is to call the allocating version and copy that.
+(which makes mutation not very useful, but for an efficient implementation the
+mutating version would be specified directly)
+"""
+function eval_grad_p_derivative!(grad::AbstractVector{Float64},
+        control::AbstractControl, t::Real, pcof::AbstractVector{<: Real},
+        order::Int64)
+
+    copy!(grad, eval_grad_p_derivative(control, t, pcof, order))
+end
+
+function eval_grad_q_derivative!(grad::AbstractVector{Float64},
+        control::AbstractControl, t::Real, pcof::AbstractVector{<: Real},
+        order::Int64)
+
+    copy!(grad, eval_grad_q_derivative(control, t, pcof, order))
+end
+
+
+"""
+Version for just getting a single index
+"""
+function eval_grad_p_derivative(control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real},  order::Int64, pcof_index::Int)
+    return eval_grad_p_derivative(control, t, pcof, order)[pcof_index]
+end
+
+
+function eval_grad_q_derivative(control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real},  order::Int64, pcof_index::Int)
+    return eval_grad_q_derivative(control, t, pcof, order)[pcof_index]
 end
 
 """

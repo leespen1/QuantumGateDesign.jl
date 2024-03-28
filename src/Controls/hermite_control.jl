@@ -101,38 +101,58 @@ coefficient for this kind of control.
 I could make this more efficient by only doing this for the pcof entries which
 affect p/q and this value of t
 """
-function eval_grad_p_derivative(control::HermiteControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
-    println("Evaluating p gardient, t=", t)
-    grad = zeros(length(pcof))
-    pcof_temp = zeros(length(pcof))
+function eval_grad_p_derivative!(grad::AbstractVector{Float64},
+        control::HermiteControl, t::Real, pcof::AbstractVector{<: Real},
+        order::Int64
+    )
+
+    grad .= 0
 
     i = find_region_index(t, control.tf, control.N_points-1)
 
     offset = 1 + (i-1)*(control.N_derivatives+1)
 
     for k in 0:control.N_derivatives
-        pcof_temp .= 0
-        pcof_temp[offset+k] = 1
-        grad[offset+k] = eval_p_derivative(control, t, pcof_temp, order)
+        control.pcof_temp .= 0
+        control.pcof_temp[offset+k] = 1
+        grad[offset+k] = eval_p_derivative(control, t, control.pcof_temp, order)
     end
 
     return grad
 end
 
-function eval_grad_q_derivative(control::HermiteControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
-    grad = zeros(length(pcof))
-    pcof_temp = zeros(length(pcof))
+function eval_grad_q_derivative!(grad::AbstractVector{Float64},
+        control::HermiteControl, t::Real, pcof::AbstractVector{<: Real},
+        order::Int64)
+
+    grad .= 0
 
     i = find_region_index(t, control.tf, control.N_points-1)
 
     offset = 1 + (i-1)*(control.N_derivatives+1) + div(control.N_coeff, 2)
 
     for k in 0:control.N_derivatives
-        pcof_temp .= 0
-        pcof_temp[offset+k] = 1
-        grad[offset+k] = eval_q_derivative(control, t, pcof_temp, order)
+        control.pcof_temp .= 0
+        control.pcof_temp[offset+k] = 1
+        grad[offset+k] = eval_q_derivative(control, t, control.pcof_temp, order)
     end
 
+    return grad
+end
+
+function eval_grad_p_derivative( control::HermiteControl, t::Real,
+        pcof::AbstractVector{<: Real}, order::Int64
+    )
+    grad = Vector{Float64}(undef, length(pcof))
+    eval_grad_p_derivative!(grad, control, t, pcof, order)
+    return grad
+end
+
+function eval_grad_q_derivative( control::HermiteControl, t::Real,
+        pcof::AbstractVector{<: Real}, order::Int64)
+
+    grad = Vector{Float64}(undef, length(pcof))
+    eval_grad_q_derivative!(grad, control, t, pcof, order)
     return grad
 end
 
