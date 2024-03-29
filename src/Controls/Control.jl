@@ -291,3 +291,18 @@ function eval_q_single(controls, t, pcof, control_index)
     local_pcof = get_control_vector_slice(pcof, controls, control_index)
     return eval_q(local_control, t, local_pcof)
 end
+
+function eval_grad_p_derivative_fin_diff(control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real},  order::Int64)
+    pcof_copy = copy(pcof)
+    grad = zeros(length(pcof))
+    for i in 1:length(pcof)
+        pcof_copy .= pcof
+        pcof_copy[i] += 1e-5
+        pval_r = eval_p_derivative(control, t, pcof_copy, order)
+        pcof_copy[i] -= 2e-5
+        pval_l = eval_p_derivative(control, t, pcof_copy, order)
+        grad[i] = (pval_r - pval_l)/2e-5
+    end
+    return grad
+end
