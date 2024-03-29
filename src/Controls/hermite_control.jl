@@ -112,7 +112,7 @@ function eval_grad_p_derivative!(grad::AbstractVector{Float64},
 
     offset = 1 + (i-1)*(control.N_derivatives+1)
 
-    for k in 0:control.N_derivatives
+    for k in 0:1+2*control.N_derivatives
         control.pcof_temp .= 0
         control.pcof_temp[offset+k] = 1
         grad[offset+k] = eval_p_derivative(control, t, control.pcof_temp, order)
@@ -185,7 +185,9 @@ end
 New, non-allocating version. Currently bugged (not giving pcof[1] at t=0.0)
 """
 function eval_derivative(control::AbstractControl, t::Real,
-        pcof::AbstractVector{<: Real},  order::Int64, p_or_q)
+        pcof::AbstractVector{<: Real},  order::Int64, p_or_q::Symbol;
+        force_refresh::Bool=true
+    )
 
     # Maybe remove this warning for speed.
     if (order > (2+2*control.N_derivatives)-1)
@@ -205,7 +207,7 @@ function eval_derivative(control::AbstractControl, t::Real,
     tnp1 = dt*i
 
     # Check if we need to update the interval
-    if (control.tn != tn || control.tnp1 != tnp1)
+    if (control.tn != tn || control.tnp1 != tnp1 || force_refresh)
         
         control.tn = tn
         control.tnp1 = tnp1
@@ -238,7 +240,7 @@ function eval_derivative(control::AbstractControl, t::Real,
 
     # Check if we need to update the time within the interval 
     # This allows us to reuse computation when computing different derivatives at same time
-    if (t != control.t_current)
+    if (t != control.t_current || force_refresh)
         control.t_current = t
 
         t_normalized = (t - t_center)/dt
