@@ -115,9 +115,13 @@ function accumulate_gradient!(gradient::AbstractVector{Float64},
         order=2
     )
 
-    #=
     if (order == 2)
         accumulate_gradient_order2!(gradient, prob, controls, pcof, history, lambda_history)
+        return gradient
+    end
+    #=
+    if (order == 4)
+        accumulate_gradient_order4!(gradient, prob, controls, pcof, history, lambda_history)
         return gradient
     end
     =#
@@ -234,6 +238,274 @@ function accumulate_gradient_order2!(gradient::AbstractVector{Float64},
 
     return nothing
 end
+
+
+
+function accumulate_gradient_order4!(gradient::AbstractVector{Float64},
+        prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
+        history::AbstractArray{Float64, 3},
+        lambda_history::AbstractArray{Float64, 3}
+    )
+
+    dt = prob.tf / prob.nsteps
+
+    u = zeros(prob.N_tot_levels)
+    v = zeros(prob.N_tot_levels)
+    ut = zeros(prob.N_tot_levels)
+    vt = zeros(prob.N_tot_levels)
+
+    lambda_u = zeros(prob.N_tot_levels)
+    lambda_v = zeros(prob.N_tot_levels)
+
+    sym_op_u = zeros(prob.N_tot_levels)
+    sym_op_v = zeros(prob.N_tot_levels)
+    asym_op_u = zeros(prob.N_tot_levels)
+    asym_op_v = zeros(prob.N_tot_levels)
+
+    sym_op_ut = zeros(prob.N_tot_levels)
+    sym_op_vt = zeros(prob.N_tot_levels)
+    asym_op_ut = zeros(prob.N_tot_levels)
+    asym_op_vt = zeros(prob.N_tot_levels)
+
+    sym_op_lambda_u = zeros(prob.N_tot_levels)
+    sym_op_lambda_v = zeros(prob.N_tot_levels)
+    asym_op_lambda_u = zeros(prob.N_tot_levels)
+    asym_op_lambda_v = zeros(prob.N_tot_levels)
+
+
+    A = zeros(prob.N_tot_levels)
+    B = zeros(prob.N_tot_levels)
+    C = zeros(prob.N_tot_levels)
+
+    Hq = zeros(prob.N_tot_levels, prob.N_tot_levels)
+    Hp = zeros(prob.N_tot_levels, prob.N_tot_levels)
+
+    len_pcof = length(pcof)
+
+    # NOTE: Revising this for multiple controls will require some thought
+    for i in 1:prob.N_operators
+        control = controls[i]
+        asym_op = prob.asym_operators[i]
+        sym_op = prob.sym_operators[i]
+
+        this_pcof = get_control_vector_slice(pcof, controls, i)
+
+        grad_contrib = zeros(control.N_coeff)
+        grad_p = zeros(control.N_coeff)
+        grad_q = zeros(control.N_coeff)
+        grad_pt = zeros(control.N_coeff)
+        grad_qt = zeros(control.N_coeff)
+
+        # Accumulate Gradient
+        # Efficient way, possibly incorrect
+        weights_n   = (1, dt/6) 
+        weights_np1 = (1, -dt/6)
+        for n in 0:prob.nsteps-1
+            lambda_u .= @view lambda_history[1:prob.N_tot_levels,     1, 1+n+1]
+            lambda_v .= @view lambda_history[1+prob.N_tot_levels:end, 1, 1+n+1]
+
+            mul!(asym_op_lambda_u, asym_op, lambda_u)
+            mul!(asym_op_lambda_v, asym_op, lambda_v)
+            mul!(sym_op_lambda_u,  sym_op,  lambda_u)
+            mul!(sym_op_lambda_v,  sym_op,  lambda_v)
+
+            # Qₙ "Explicit Part" contribution
+            u .= view(history, 1:prob.N_tot_levels,                       1, 1+n)
+            v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1, 1+n)
+            t = n*dt
+
+            #FIXME THIS IS THE PROBLEM!!! I was write to use product rule, but
+            #the hamiltonians which do not have partial derivatives taken
+            #should use ALL controls.
+
+            eval_grad_p_derivative!(grad_p, control, t, this_pcof, 0)
+            eval_grad_q_derivative!(grad_q, control, t, this_pcof, 0)
+            eval_grad_p_derivative!(grad_pt, control, t, this_pcof, 1)
+            eval_grad_q_derivative!(grad_qt, control, t, this_pcof, 1)
+
+            # Do contribution of ⟨w,∂H/∂θₖᵀλ⟩
+            # Part involving asym op (q)
+            grad_contrib .+= grad_q .* weights_n[1] .* (
+                -dot(u, asym_op_lambda_u) - dot(v, asym_op_lambda_v)
+            )
+            # Part involving sym op (p)
+            grad_contrib .+= grad_p .* weights_n[1] .* (
+                -dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u)
+            )
+
+            # Do contribution of ⟨w,∂Hₜ/∂θₖᵀλ⟩
+            # Part involving asym op (q)
+            grad_contrib .+= grad_qt .* weights_n[2] .* (
+                -dot(u, asym_op_lambda_u) - dot(v, asym_op_lambda_v)
+            )
+            # Part involving sym op (p)
+            grad_contrib .+= grad_pt .* weights_n[2] .* (
+                -dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u)
+            )
+            
+
+            ## Do contribution of ⟨∂H/∂θₖ Hw,λ⟩
+            ## Apply Hamiltonian
+            #utvt!(
+            #    ut, vt, u, v, 
+            #    prob, controls, t, pcof
+            #)
+            ut .= 0
+            vt .= 0
+            apply_hamiltonian!(ut, vt, u, v, prob, controls, t, pcof)
+
+            # Do matrix part of ∂H/∂θₖ, so I can "factor out" the scalar function
+            mul!(sym_op_ut, sym_op, ut)
+            mul!(asym_op_ut, asym_op, ut)
+            mul!(sym_op_vt, sym_op, vt)
+            mul!(asym_op_vt, asym_op, vt)
+
+            grad_contrib .+= grad_q .* weights_n[2] .* dot(asym_op_ut, lambda_u)
+            grad_contrib .+= grad_p .* weights_n[2] .* dot(sym_op_vt, lambda_u)
+            grad_contrib .-= grad_p .* weights_n[2] .* dot(sym_op_ut, lambda_v)
+            grad_contrib .+= grad_q .* weights_n[2] .* dot(asym_op_vt, lambda_v)
+
+
+            # Do contribution of ⟨H ∂H/∂θₖw,λ⟩
+            mul!(asym_op_u, asym_op, u)
+            mul!(asym_op_v, asym_op, v)
+
+            ## ut and vt are not actually holding ut and vt.
+            #utvt!(
+            #    ut, vt, asym_op_u, asym_op_v, 
+            #    prob, controls, t, pcof
+            #)
+            ut .= 0
+            vt .= 0
+            apply_hamiltonian!(ut, vt, asym_op_u, asym_op_v, prob, controls, t, pcof)
+
+            grad_contrib .+= grad_q .* weights_n[2] .* dot(ut, lambda_u)
+            grad_contrib .+= grad_q .* weights_n[2] .* dot(vt, lambda_v)
+
+            mul!(sym_op_v, sym_op, v)
+            mul!(sym_op_u, sym_op, u) 
+            sym_op_u .*= -1
+
+            ## ut and vt gets confusing here. But they are just the output of
+            ## applying the hamiltonian
+            ##
+            ## Possibly these should be minuses. I think this is correct, but I
+            ## may have misfactored
+            #utvt!(
+            #    ut, vt, sym_op_v, sym_op_u, 
+            #    prob, controls, t, pcof
+            #)
+            ut .= 0
+            vt .= 0
+            apply_hamiltonian!(ut, vt, sym_op_v, sym_op_u, prob, controls, t, pcof)
+
+            grad_contrib .+= grad_p .* weights_n[2] .* dot(ut, lambda_u)
+            grad_contrib .+= grad_p .* weights_n[2] .* dot(vt, lambda_v)
+            
+
+            #####################
+            # Qₙ₊₁ "Implicit Part" contribution
+            #####################
+
+            u .= view(history, 1:prob.N_tot_levels,                       1, 1+n+1)
+            v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1, 1+n+1)
+            t = (n+1)*dt
+
+            eval_grad_p_derivative!(grad_p, control, t, this_pcof, 0)
+            eval_grad_q_derivative!(grad_q, control, t, this_pcof, 0)
+            eval_grad_p_derivative!(grad_pt, control, t, this_pcof, 1)
+            eval_grad_q_derivative!(grad_qt, control, t, this_pcof, 1)
+
+            # Do contribution of ⟨w,∂H/∂θₖᵀλ⟩
+            # Part involving asym op (q)
+            grad_contrib .+= grad_q .* weights_np1[1] .* (
+                -dot(u, asym_op_lambda_u) - dot(v, asym_op_lambda_v)
+            )
+            # Part involving sym op (p)
+            grad_contrib .+= grad_p .* weights_np1[1] .* (
+                -dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u)
+            )
+
+            # Do contribution of ⟨w,∂Hₜ/∂θₖᵀλ⟩
+            # Part involving asym op (q)
+            grad_contrib .+= grad_qt .* weights_np1[2] .* (
+                -dot(u, asym_op_lambda_u) - dot(v, asym_op_lambda_v)
+            )
+            # Part involving sym op (p)
+            grad_contrib .+= grad_pt .* weights_np1[2] .* (
+                -dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u)
+            )
+            
+
+            ## Do contribution of ⟨∂H/∂θₖ Hw,λ⟩
+            ## Apply Hamiltonian
+            #utvt!(
+            #    ut, vt, u, v, 
+            #    prob, controls, t, pcof
+            #)
+            ut .= 0
+            vt .= 0
+            apply_hamiltonian!(ut, vt, u, v, prob, controls, t, pcof)
+
+            # Do matrix part of ∂H/∂θₖ, so I can "factor out" the scalar function
+            mul!(sym_op_ut, sym_op, ut)
+            mul!(asym_op_ut, asym_op, ut)
+            mul!(sym_op_vt, sym_op, vt)
+            mul!(asym_op_vt, asym_op, vt)
+
+            grad_contrib .+= grad_q .* weights_np1[2] .* dot(asym_op_ut, lambda_u)
+            grad_contrib .+= grad_p .* weights_np1[2] .* dot(sym_op_vt, lambda_u)
+            grad_contrib .-= grad_p .* weights_np1[2] .* dot(sym_op_ut, lambda_v)
+            grad_contrib .+= grad_q .* weights_np1[2] .* dot(asym_op_vt, lambda_v)
+
+
+            # Do contribution of ⟨H ∂H/∂θₖw,λ⟩
+            mul!(asym_op_u, asym_op, u)
+            mul!(asym_op_v, asym_op, v)
+
+            ## ut and vt are not actuall holding ut and vt.
+            #utvt!(
+            #    ut, vt, asym_op_u, asym_op_v, 
+            #    prob, controls, t, pcof
+            #)
+            ut .= 0
+            vt .= 0
+            apply_hamiltonian!(ut, vt, asym_op_u, asym_op_v, prob, controls, t, pcof)
+
+            grad_contrib .+= grad_q .* weights_np1[2] .* dot(ut, lambda_u)
+            grad_contrib .+= grad_q .* weights_np1[2] .* dot(vt, lambda_v)
+
+            mul!(sym_op_v, sym_op, v)
+            mul!(sym_op_u, sym_op, u) 
+            sym_op_u .*= -1
+
+            ## ut and vt gets confusing here. But they are just the output of
+            ## applying the hamiltonian
+            ##
+            ## Possibly these should be minuses. I think this is correct, but I
+            ## may have misfactored
+            #utvt!(
+            #    ut, vt, sym_op_v, sym_op_u, 
+            #    prob, controls, t, pcof
+            #)
+            ut .= 0
+            vt .= 0
+            apply_hamiltonian!(ut, vt, asym_op_v, asym_op_u, prob, controls, t, pcof)
+
+            grad_contrib .+= grad_p .* weights_np1[2] .* dot(ut, lambda_u)
+            grad_contrib .+= grad_p .* weights_np1[2] .* dot(vt, lambda_v)
+
+        end
+
+        grad_slice = get_control_vector_slice(gradient, controls, i)
+        grad_slice .+= (-0.5*dt) .* grad_contrib
+    end
+
+    return nothing
+end
+
+
+
 
 """
 History should be 4D array
