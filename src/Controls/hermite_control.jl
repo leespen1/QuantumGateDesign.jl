@@ -112,6 +112,7 @@ function eval_grad_p_derivative!(grad::AbstractVector{Float64},
 
     offset = 1 + (i-1)*(control.N_derivatives+1)
 
+    # Get effect of control points and derivatives for both ends of the interval
     for k in 0:1+2*control.N_derivatives
         control.pcof_temp .= 0
         control.pcof_temp[offset+k] = 1
@@ -131,6 +132,7 @@ function eval_grad_q_derivative!(grad::AbstractVector{Float64},
 
     offset = 1 + (i-1)*(control.N_derivatives+1) + div(control.N_coeff, 2)
 
+    # Get effect of control points and derivatives for both ends of the interval
     for k in 0:1+2*control.N_derivatives
         control.pcof_temp .= 0
         control.pcof_temp[offset+k] = 1
