@@ -1,4 +1,3 @@
-
 #==========================================================
 This routine initializes an optimization problem to recover 
 a CNOT gate on a coupled 3-qubit system. In particular,
@@ -224,6 +223,10 @@ end
 
 # min and max B-spline coefficient values
 minCoeff, maxCoeff = Juqbox.assign_thresholds(params,D1,maxpar)
+
+# for ipopt
+maxIter = 150 # 0 # use the parameters on file # 100 # needs more than 100 iter to converge properly
+lbfgsMax = 250 # optional argument
 
 # output run information
 println("*** Settings ***")
