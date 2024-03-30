@@ -118,13 +118,10 @@ function accumulate_gradient!(gradient::AbstractVector{Float64},
     if (order == 2)
         accumulate_gradient_order2!(gradient, prob, controls, pcof, history, lambda_history)
         return gradient
-    end
-    #=
-    if (order == 4)
+    elseif (order == 4)
         accumulate_gradient_order4!(gradient, prob, controls, pcof, history, lambda_history)
         return gradient
     end
-    =#
 
 
     dt = prob.tf / prob.nsteps
@@ -241,6 +238,76 @@ end
 
 
 
+"""
+New version which is a bit more informative, but less efficient.
+"""
+function accumulate_gradient_order2_new!(gradient::AbstractVector{Float64},
+        prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
+        history::AbstractArray{Float64, 3}, lambda_history::AbstractArray{Float64, 3}
+    )
+
+    dt = prob.tf / prob.nsteps
+    working_vector = zeros(prob.real_system_size)
+
+    for i in 1:prob.N_operators
+        control = controls[i]
+        asym_op = prob.asym_operators[i]
+        sym_op = prob.sym_operators[i]
+        local_pcof = get_control_vector_slice(pcof, controls, i)
+
+        grad_contrib = zeros(control.N_coeff)
+        grad_p = zeros(control.N_coeff)
+        grad_q = zeros(control.N_coeff)
+
+        for n in 0:prob.nsteps-1
+            # Explicit Part
+            t = n*dt
+            eval_grad_p_derivative!(grad_p, control, t, local_pcof, 0)
+            eval_grad_q_derivative!(grad_q, control, t, local_pcof, 0)
+
+            right_inner = @view lambda_history[:,1,1+n+1]
+            left_inner  = @view history[:,1,1+n]
+
+            inner_prod_S = compute_inner_prod_S!(
+                left_inner, right_inner, asym_op, working_vector, prob.real_system_size
+            )
+            inner_prod_K = compute_inner_prod_K!(
+                left_inner, right_inner, sym_op, working_vector, prob.real_system_size
+            )
+
+            grad_contrib .+= grad_q .* inner_prod_S .* dt .* coefficient(1,1,1)
+            grad_contrib .+= grad_p .* inner_prod_K .* dt .* coefficient(1,1,1)
+
+            #Implicit Part
+            t = (n+1)*dt
+            eval_grad_p_derivative!(grad_p, control, t, local_pcof, 0)
+            eval_grad_q_derivative!(grad_q, control, t, local_pcof, 0)
+
+            right_inner = @view lambda_history[:,1,1+n+1]
+            left_inner  = @view history[:,1,1+n+1]
+
+            inner_prod_S = compute_inner_prod_S!(
+                left_inner, right_inner, asym_op, working_vector, prob.real_system_size
+            )
+            inner_prod_K = compute_inner_prod_K!(
+                left_inner, right_inner, sym_op, working_vector, prob.real_system_size
+            )
+
+            grad_contrib .+= grad_q .* inner_prod_S .* dt .* coefficient(1,1,1)
+            grad_contrib .+= grad_p .* inner_prod_K .* dt .* coefficient(1,1,1)
+
+        end
+
+        grad_slice = get_control_vector_slice(gradient, controls, i)
+        grad_slice .-= grad_contrib
+    end
+
+    return nothing
+end
+
+
+
+
 function accumulate_gradient_order4!(gradient::AbstractVector{Float64},
         prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
         history::AbstractArray{Float64, 3},
@@ -248,47 +315,23 @@ function accumulate_gradient_order4!(gradient::AbstractVector{Float64},
     )
 
     dt = prob.tf / prob.nsteps
+    working_vector = zeros(prob.real_system_size)
+    working_vector_re = view(working_vector, 1:prob.N_tot_levels)
+    working_vector_im = view(working_vector, 1+prob.N_tot_levels:prob.real_system_size)
 
-    u = zeros(prob.N_tot_levels)
-    v = zeros(prob.N_tot_levels)
-    ut = zeros(prob.N_tot_levels)
-    vt = zeros(prob.N_tot_levels)
+    left_inner = zeros(prob.real_system_size)
+    left_inner_re = view(left_inner, 1:prob.N_tot_levels)
+    left_inner_im = view(left_inner, 1+prob.N_tot_levels:prob.real_system_size)
 
-    lambda_u = zeros(prob.N_tot_levels)
-    lambda_v = zeros(prob.N_tot_levels)
+    right_inner = zeros(prob.real_system_size)
+    right_inner_re = view(right_inner, 1:prob.N_tot_levels)
+    right_inner_im = view(right_inner, 1+prob.N_tot_levels:prob.real_system_size)
 
-    sym_op_u = zeros(prob.N_tot_levels)
-    sym_op_v = zeros(prob.N_tot_levels)
-    asym_op_u = zeros(prob.N_tot_levels)
-    asym_op_v = zeros(prob.N_tot_levels)
-
-    sym_op_ut = zeros(prob.N_tot_levels)
-    sym_op_vt = zeros(prob.N_tot_levels)
-    asym_op_ut = zeros(prob.N_tot_levels)
-    asym_op_vt = zeros(prob.N_tot_levels)
-
-    sym_op_lambda_u = zeros(prob.N_tot_levels)
-    sym_op_lambda_v = zeros(prob.N_tot_levels)
-    asym_op_lambda_u = zeros(prob.N_tot_levels)
-    asym_op_lambda_v = zeros(prob.N_tot_levels)
-
-
-    A = zeros(prob.N_tot_levels)
-    B = zeros(prob.N_tot_levels)
-    C = zeros(prob.N_tot_levels)
-
-    Hq = zeros(prob.N_tot_levels, prob.N_tot_levels)
-    Hp = zeros(prob.N_tot_levels, prob.N_tot_levels)
-
-    len_pcof = length(pcof)
-
-    # NOTE: Revising this for multiple controls will require some thought
     for i in 1:prob.N_operators
         control = controls[i]
         asym_op = prob.asym_operators[i]
         sym_op = prob.sym_operators[i]
-
-        this_pcof = get_control_vector_slice(pcof, controls, i)
+        local_pcof = get_control_vector_slice(pcof, controls, i)
 
         grad_contrib = zeros(control.N_coeff)
         grad_p = zeros(control.N_coeff)
@@ -296,213 +339,157 @@ function accumulate_gradient_order4!(gradient::AbstractVector{Float64},
         grad_pt = zeros(control.N_coeff)
         grad_qt = zeros(control.N_coeff)
 
-        # Accumulate Gradient
-        # Efficient way, possibly incorrect
-        weights_n   = (1, dt/6) 
-        weights_np1 = (1, -dt/6)
         for n in 0:prob.nsteps-1
-            lambda_u .= @view lambda_history[1:prob.N_tot_levels,     1, 1+n+1]
-            lambda_v .= @view lambda_history[1+prob.N_tot_levels:end, 1, 1+n+1]
-
-            mul!(asym_op_lambda_u, asym_op, lambda_u)
-            mul!(asym_op_lambda_v, asym_op, lambda_v)
-            mul!(sym_op_lambda_u,  sym_op,  lambda_u)
-            mul!(sym_op_lambda_v,  sym_op,  lambda_v)
-
-            # Qₙ "Explicit Part" contribution
-            u .= view(history, 1:prob.N_tot_levels,                       1, 1+n)
-            v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1, 1+n)
+            # Explicit Part
             t = n*dt
+            eval_grad_p_derivative!(grad_p,  control, t, local_pcof, 0)
+            eval_grad_p_derivative!(grad_pt, control, t, local_pcof, 1)
+            eval_grad_q_derivative!(grad_q,  control, t, local_pcof, 0)
+            eval_grad_q_derivative!(grad_qt, control, t, local_pcof, 1)
 
-            #FIXME THIS IS THE PROBLEM!!! I was write to use product rule, but
-            #the hamiltonians which do not have partial derivatives taken
-            #should use ALL controls.
+            c1_exp = dt .* coefficient(1,2,2)
+            c2_exp = 0.5*(dt^2)*coefficient(2,2,2)
 
-            eval_grad_p_derivative!(grad_p, control, t, this_pcof, 0)
-            eval_grad_q_derivative!(grad_q, control, t, this_pcof, 0)
-            eval_grad_p_derivative!(grad_pt, control, t, this_pcof, 1)
-            eval_grad_q_derivative!(grad_qt, control, t, this_pcof, 1)
+            # First order contribution
+            left_inner .= @view history[:,1,1+n]
+            right_inner .= @view lambda_history[:,1,1+n+1]
 
-            # Do contribution of ⟨w,∂H/∂θₖᵀλ⟩
-            # Part involving asym op (q)
-            grad_contrib .+= grad_q .* weights_n[1] .* (
-                -dot(u, asym_op_lambda_u) - dot(v, asym_op_lambda_v)
+            inner_prod_S = compute_inner_prod_S!(
+                left_inner, right_inner, asym_op, working_vector, prob.real_system_size
             )
-            # Part involving sym op (p)
-            grad_contrib .+= grad_p .* weights_n[1] .* (
-                -dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u)
+            inner_prod_K = compute_inner_prod_K!(
+                left_inner, right_inner, sym_op, working_vector, prob.real_system_size
+            )
+            @. grad_contrib += grad_q * inner_prod_S * c1_exp
+            @. grad_contrib += grad_p * inner_prod_K * c1_exp
+
+
+            # Second order contribution 1 (reuses computation from first order)
+            @. grad_contrib += grad_qt * inner_prod_S * c2_exp
+            @. grad_contrib += grad_pt * inner_prod_K * c2_exp
+
+
+            # Second order contribution 2
+            left_inner .= 0
+            right_inner .= @view lambda_history[:,1,1+n+1]
+            working_vector .= @view history[:,1,1+n]
+
+            apply_hamiltonian!(
+                left_inner_re, left_inner_im, working_vector_re, working_vector_im,
+                prob, controls, t, pcof, use_adjoint=false
+            )
+            inner_prod_S = compute_inner_prod_S!(
+                left_inner, right_inner, asym_op, working_vector, prob.real_system_size
+            )
+            inner_prod_K = compute_inner_prod_K!(
+                left_inner, right_inner, sym_op, working_vector, prob.real_system_size
             )
 
-            # Do contribution of ⟨w,∂Hₜ/∂θₖᵀλ⟩
-            # Part involving asym op (q)
-            grad_contrib .+= grad_qt .* weights_n[2] .* (
-                -dot(u, asym_op_lambda_u) - dot(v, asym_op_lambda_v)
+            @. grad_contrib += grad_q * inner_prod_S * c2_exp
+            @. grad_contrib += grad_p * inner_prod_K * c2_exp
+
+
+            # Second order contribution 3
+            left_inner .= @view history[:,1,1+n]
+            right_inner .= 0
+            working_vector .= @view lambda_history[:,1,1+n+1]
+
+            apply_hamiltonian!(
+                right_inner_re, right_inner_im, working_vector_re, working_vector_im,
+                prob, controls, t, pcof, use_adjoint=true
             )
-            # Part involving sym op (p)
-            grad_contrib .+= grad_pt .* weights_n[2] .* (
-                -dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u)
+
+            inner_prod_S = compute_inner_prod_S!(
+                left_inner, right_inner, asym_op, working_vector, prob.real_system_size
             )
+            inner_prod_K = compute_inner_prod_K!(
+                left_inner, right_inner, sym_op, working_vector, prob.real_system_size
+            )
+
+            @. grad_contrib += grad_q * inner_prod_S * c2_exp
+            @. grad_contrib += grad_p * inner_prod_K * c2_exp
             
 
-            ## Do contribution of ⟨∂H/∂θₖ Hw,λ⟩
-            ## Apply Hamiltonian
-            #utvt!(
-            #    ut, vt, u, v, 
-            #    prob, controls, t, pcof
-            #)
-            ut .= 0
-            vt .= 0
-            apply_hamiltonian!(ut, vt, u, v, prob, controls, t, pcof)
 
-            # Do matrix part of ∂H/∂θₖ, so I can "factor out" the scalar function
-            mul!(sym_op_ut, sym_op, ut)
-            mul!(asym_op_ut, asym_op, ut)
-            mul!(sym_op_vt, sym_op, vt)
-            mul!(asym_op_vt, asym_op, vt)
-
-            grad_contrib .+= grad_q .* weights_n[2] .* dot(asym_op_ut, lambda_u)
-            grad_contrib .+= grad_p .* weights_n[2] .* dot(sym_op_vt, lambda_u)
-            grad_contrib .-= grad_p .* weights_n[2] .* dot(sym_op_ut, lambda_v)
-            grad_contrib .+= grad_q .* weights_n[2] .* dot(asym_op_vt, lambda_v)
-
-
-            # Do contribution of ⟨H ∂H/∂θₖw,λ⟩
-            mul!(asym_op_u, asym_op, u)
-            mul!(asym_op_v, asym_op, v)
-
-            ## ut and vt are not actually holding ut and vt.
-            #utvt!(
-            #    ut, vt, asym_op_u, asym_op_v, 
-            #    prob, controls, t, pcof
-            #)
-            ut .= 0
-            vt .= 0
-            apply_hamiltonian!(ut, vt, asym_op_u, asym_op_v, prob, controls, t, pcof)
-
-            grad_contrib .+= grad_q .* weights_n[2] .* dot(ut, lambda_u)
-            grad_contrib .+= grad_q .* weights_n[2] .* dot(vt, lambda_v)
-
-            mul!(sym_op_v, sym_op, v)
-            mul!(sym_op_u, sym_op, u) 
-            sym_op_u .*= -1
-
-            ## ut and vt gets confusing here. But they are just the output of
-            ## applying the hamiltonian
-            ##
-            ## Possibly these should be minuses. I think this is correct, but I
-            ## may have misfactored
-            #utvt!(
-            #    ut, vt, sym_op_v, sym_op_u, 
-            #    prob, controls, t, pcof
-            #)
-            ut .= 0
-            vt .= 0
-            apply_hamiltonian!(ut, vt, sym_op_v, sym_op_u, prob, controls, t, pcof)
-
-            grad_contrib .+= grad_p .* weights_n[2] .* dot(ut, lambda_u)
-            grad_contrib .+= grad_p .* weights_n[2] .* dot(vt, lambda_v)
-            
-
-            #####################
-            # Qₙ₊₁ "Implicit Part" contribution
-            #####################
-
-            u .= view(history, 1:prob.N_tot_levels,                       1, 1+n+1)
-            v .= view(history, 1+prob.N_tot_levels:prob.real_system_size, 1, 1+n+1)
+            #Implicit Part
             t = (n+1)*dt
+            eval_grad_p_derivative!(grad_p,  control, t, local_pcof, 0)
+            eval_grad_p_derivative!(grad_pt, control, t, local_pcof, 1)
+            eval_grad_q_derivative!(grad_q,  control, t, local_pcof, 0)
+            eval_grad_q_derivative!(grad_qt, control, t, local_pcof, 1)
 
-            eval_grad_p_derivative!(grad_p, control, t, this_pcof, 0)
-            eval_grad_q_derivative!(grad_q, control, t, this_pcof, 0)
-            eval_grad_p_derivative!(grad_pt, control, t, this_pcof, 1)
-            eval_grad_q_derivative!(grad_qt, control, t, this_pcof, 1)
 
-            # Do contribution of ⟨w,∂H/∂θₖᵀλ⟩
-            # Part involving asym op (q)
-            grad_contrib .+= grad_q .* weights_np1[1] .* (
-                -dot(u, asym_op_lambda_u) - dot(v, asym_op_lambda_v)
+            c1_imp = dt .* coefficient(1,2,2)
+            c2_imp = -0.5*(dt^2)*coefficient(2,2,2)
+
+            # First order contribution
+            left_inner .= @view history[:,1,1+n+1]
+            right_inner .= @view lambda_history[:,1,1+n+1]
+
+            inner_prod_S = compute_inner_prod_S!(
+                left_inner, right_inner, asym_op, working_vector, prob.real_system_size
             )
-            # Part involving sym op (p)
-            grad_contrib .+= grad_p .* weights_np1[1] .* (
-                -dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u)
+            inner_prod_K = compute_inner_prod_K!(
+                left_inner, right_inner, sym_op, working_vector, prob.real_system_size
+            )
+            @. grad_contrib += grad_q * inner_prod_S * c1_imp
+            @. grad_contrib += grad_p * inner_prod_K * c1_imp
+
+
+            # Second order contribution 1 (reuses computation from first order)
+            @. grad_contrib += grad_qt * inner_prod_S * c2_imp
+            @. grad_contrib += grad_pt * inner_prod_K * c2_imp
+
+
+            # Second order contribution 2
+            left_inner .= 0
+            right_inner .= @view lambda_history[:,1,1+n+1]
+            working_vector .= @view history[:,1,1+n+1]
+
+            apply_hamiltonian!(
+                left_inner_re, left_inner_im, working_vector_re, working_vector_im,
+                prob, controls, t, pcof, use_adjoint=false
+            )
+            inner_prod_S = compute_inner_prod_S!(
+                left_inner, right_inner, asym_op, working_vector, prob.real_system_size
+            )
+            inner_prod_K = compute_inner_prod_K!(
+                left_inner, right_inner, sym_op, working_vector, prob.real_system_size
             )
 
-            # Do contribution of ⟨w,∂Hₜ/∂θₖᵀλ⟩
-            # Part involving asym op (q)
-            grad_contrib .+= grad_qt .* weights_np1[2] .* (
-                -dot(u, asym_op_lambda_u) - dot(v, asym_op_lambda_v)
+            @. grad_contrib += grad_q * inner_prod_S * c2_imp
+            @. grad_contrib += grad_p * inner_prod_K * c2_imp
+
+
+            # Second order contribution 3
+            left_inner .= @view history[:,1,1+n+1]
+            right_inner .= 0
+            working_vector .= @view lambda_history[:,1,1+n+1]
+
+            apply_hamiltonian!(
+                right_inner_re, right_inner_im, working_vector_re, working_vector_im,
+                prob, controls, t, pcof, use_adjoint=true
             )
-            # Part involving sym op (p)
-            grad_contrib .+= grad_pt .* weights_np1[2] .* (
-                -dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u)
+
+            inner_prod_S = compute_inner_prod_S!(
+                left_inner, right_inner, asym_op, working_vector, prob.real_system_size
             )
+            inner_prod_K = compute_inner_prod_K!(
+                left_inner, right_inner, sym_op, working_vector, prob.real_system_size
+            )
+
+            @. grad_contrib += grad_q * inner_prod_S * c2_imp
+            @. grad_contrib += grad_p * inner_prod_K * c2_imp
             
-
-            ## Do contribution of ⟨∂H/∂θₖ Hw,λ⟩
-            ## Apply Hamiltonian
-            #utvt!(
-            #    ut, vt, u, v, 
-            #    prob, controls, t, pcof
-            #)
-            ut .= 0
-            vt .= 0
-            apply_hamiltonian!(ut, vt, u, v, prob, controls, t, pcof)
-
-            # Do matrix part of ∂H/∂θₖ, so I can "factor out" the scalar function
-            mul!(sym_op_ut, sym_op, ut)
-            mul!(asym_op_ut, asym_op, ut)
-            mul!(sym_op_vt, sym_op, vt)
-            mul!(asym_op_vt, asym_op, vt)
-
-            grad_contrib .+= grad_q .* weights_np1[2] .* dot(asym_op_ut, lambda_u)
-            grad_contrib .+= grad_p .* weights_np1[2] .* dot(sym_op_vt, lambda_u)
-            grad_contrib .-= grad_p .* weights_np1[2] .* dot(sym_op_ut, lambda_v)
-            grad_contrib .+= grad_q .* weights_np1[2] .* dot(asym_op_vt, lambda_v)
-
-
-            # Do contribution of ⟨H ∂H/∂θₖw,λ⟩
-            mul!(asym_op_u, asym_op, u)
-            mul!(asym_op_v, asym_op, v)
-
-            ## ut and vt are not actuall holding ut and vt.
-            #utvt!(
-            #    ut, vt, asym_op_u, asym_op_v, 
-            #    prob, controls, t, pcof
-            #)
-            ut .= 0
-            vt .= 0
-            apply_hamiltonian!(ut, vt, asym_op_u, asym_op_v, prob, controls, t, pcof)
-
-            grad_contrib .+= grad_q .* weights_np1[2] .* dot(ut, lambda_u)
-            grad_contrib .+= grad_q .* weights_np1[2] .* dot(vt, lambda_v)
-
-            mul!(sym_op_v, sym_op, v)
-            mul!(sym_op_u, sym_op, u) 
-            sym_op_u .*= -1
-
-            ## ut and vt gets confusing here. But they are just the output of
-            ## applying the hamiltonian
-            ##
-            ## Possibly these should be minuses. I think this is correct, but I
-            ## may have misfactored
-            #utvt!(
-            #    ut, vt, sym_op_v, sym_op_u, 
-            #    prob, controls, t, pcof
-            #)
-            ut .= 0
-            vt .= 0
-            apply_hamiltonian!(ut, vt, asym_op_v, asym_op_u, prob, controls, t, pcof)
-
-            grad_contrib .+= grad_p .* weights_np1[2] .* dot(ut, lambda_u)
-            grad_contrib .+= grad_p .* weights_np1[2] .* dot(vt, lambda_v)
-
         end
 
         grad_slice = get_control_vector_slice(gradient, controls, i)
-        grad_slice .+= (-0.5*dt) .* grad_contrib
+        grad_slice .-= grad_contrib
     end
 
     return nothing
 end
+
 
 
 
@@ -523,3 +510,40 @@ function compute_guard_forcing(prob, history)
     return forcing
 end
 
+function compute_inner_prod_S!(left_inner, right_inner, S, working_vector, real_system_size)
+    complex_system_size = div(real_system_size, 2)
+    left_inner_re = view(left_inner, 1:complex_system_size)
+    left_inner_im = view(left_inner, 1+complex_system_size:real_system_size)
+
+    right_inner_re = view(right_inner, 1:complex_system_size)
+    right_inner_im = view(right_inner, 1+complex_system_size:real_system_size)
+
+    working_vector_re = view(working_vector, 1:complex_system_size)
+    working_vector_im = view(working_vector, 1+complex_system_size:real_system_size)
+
+    mul!(working_vector_re, S, right_inner_re)
+    mul!(working_vector_im, S, right_inner_im)
+
+    inner_prod_K = -dot(left_inner, working_vector)
+
+    return inner_prod_K
+end
+
+function compute_inner_prod_K!(left_inner, right_inner, K, working_vector, real_system_size)
+    complex_system_size = div(real_system_size, 2)
+    left_inner_re = view(left_inner, 1:complex_system_size)
+    left_inner_im = view(left_inner, 1+complex_system_size:real_system_size)
+
+    right_inner_re = view(right_inner, 1:complex_system_size)
+    right_inner_im = view(right_inner, 1+complex_system_size:real_system_size)
+
+    working_vector_re = view(working_vector, 1:complex_system_size)
+    working_vector_neg_im = view(working_vector, 1+complex_system_size:real_system_size)
+
+    mul!(working_vector_re, K, right_inner_im)
+    mul!(working_vector_neg_im, K, right_inner_re)
+
+    inner_prod_K = -dot(left_inner_re, working_vector_re)
+    inner_prod_K += dot(left_inner_im, working_vector_neg_im)
+    return inner_prod_K
+end
