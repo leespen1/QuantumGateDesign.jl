@@ -1,5 +1,6 @@
 # I should include a manufactured solution in this
 
+
 """
 Double the step size to get more precise solutions, and compare the change in
 error with the "true" solution (solution using the most steps / smallest step
@@ -16,131 +17,89 @@ way more computation than necessary to get the 'true' solution.
 
 Richardson extrapolation seems like a good idea for that.
 """
-function get_history_convergence(prob, control, pcof, N_iterations;
-        orders=(2, 4, 6, 8), true_history=missing, error_limit=-Inf, n_runs=1,
-        kwargs...
+function get_histories(prob, controls, pcof, N_iterations; orders=(2,4,6,8),
+        min_error_limit=-Inf, max_error_limit=Inf, base_nsteps=missing, 
+        nsteps_change_factor=2, evolution_kwargs...
     )
-    base_nsteps = prob.nsteps
-    nsteps_change_factor = 2
 
-    # Copy problem so we can mutate nsteps without altering input
+    prob_original_nsteps = prob.nsteps
+
     prob_copy = copy(prob)
 
-    histories = []
+    # Default to whatever nsteps the problem original had
+    if ismissing(base_nsteps)
+        base_nsteps = prob_original_nsteps
+    end
 
-    errors_all = Matrix{Float64}(undef, N_iterations, length(orders))
-    timing_all = Matrix{Float64}(undef, N_iterations, length(orders))
-    timing_stddev_all = Matrix{Float64}(undef, N_iterations, length(orders))
-    # Fill with NaN, so that we can break the loop early and still plot, ignoring unfilled values
-    errors_all .= NaN
-    timing_all .= NaN
-    timing_stddev_all .= NaN
+    ret_vec = []
 
-    step_sizes = (prob.tf/base_nsteps) ./ [nsteps_change_factor^k for k in 0:N_iterations-1]
+    println("Beginning at ", Dates.now())
 
-    for (j, order) in enumerate(orders)
-        errors = Vector{Float64}(undef, N_iterations)
-        timing = Vector{Float64}(undef, N_iterations)
-        timing_stddev = Vector{Float64}(undef, N_iterations)
-        errors .= NaN
-        timing .= NaN
-        timing_stddev .= NaN
+    for order in orders
+        println("#"^40, "\n")
+        println("Order ", order, "\n")
+        println("#"^40)
 
-
-        N_derivatives = div(order, 2)
-
-        println("========================================")
-        println("Running Order ", order)
-        println("========================================")
-
-        histories_this_order = []
-
-        if ismissing(true_history)
-            println("----------------------------------------")
-            println("True history not given, using Richardson extrapolation\n")
-            println("Calculating solution with base_nsteps=", base_nsteps)
-            println("----------------------------------------")
-            prob_copy.nsteps = base_nsteps
-            base_history = eval_forward(
-                prob_copy, control, pcof, order=order;
-                saveEveryNsteps=div(prob_copy.nsteps, base_nsteps),
-                kwargs...
-            )
-            # Only include state, not derivatives
-            base_history = base_history[:,1,:,:]
-            push!(histories_this_order, base_history)
-        end
-
+        nsteps_vec = Int64[]
+        step_sizes = Float64[]
+        elapsed_times = Float64[]
+        histories = Array{Float64, 3}[]
+        richardson_errors = Float64[]
 
         for k in 1:N_iterations
-            nsteps_multiplier = nsteps_change_factor^k
+            println("Starting iteration ", k, " at ", Dates.now())
+            nsteps_multiplier = nsteps_change_factor^(k-1)
             prob_copy.nsteps = base_nsteps*nsteps_multiplier
 
-            elapsed_times = zeros(n_runs)
-
-            elapsed_times[1] = @elapsed history = eval_forward(
-                prob_copy, control, pcof, order=order;
-                saveEveryNsteps=div(prob_copy.nsteps, base_nsteps),
-                kwargs...
-
+            # Run forward evolution
+            elapsed_time = @elapsed history = eval_forward(
+                prob_copy, controls, pcof, order=order;
+                saveEveryNsteps=nsteps_multiplier,
+                evolution_kwargs...
             )
-            for rerun_i in 2:n_runs
-                elapsed_times[rerun_i] = @elapsed history = eval_forward(
-                    prob_copy, control, pcof, order=order;
-                    saveEveryNsteps=div(prob_copy.nsteps, base_nsteps),
-                    kwargs...
-                )
-            end
-            mean_elapsed_time = sum(elapsed_times)/length(elapsed_times)
-            stddev_elapsed_time = sum((elapsed_times .- mean_elapsed_time) .^ 2)
-            stddev_elapsed_time /= length(elapsed_times)-1
-            stddev_elapsed_time = sqrt(stddev_elapsed_time)
-
 
             # Only compare state, not derivatives
             history = history[:,1,:,:]
-            push!(histories_this_order, history)
 
-            if ismissing(true_history)
-                history_prev = histories_this_order[k]
-                error = richardson_extrap_rel_err(history, history_prev, order)
-            else
-                error = norm(history - true_history)/norm(true_history)
+            # Compute Richardson Error
+            richardson_err = NaN
+            if (k > 1)
+                history_prev = histories[k-1]
+                richardson_err = richardson_extrap_rel_err(history, history_prev, order)
             end
 
-            errors[k] = error
-            timing[k] = mean_elapsed_time
-            timing_stddev[k] = stddev_elapsed_time
+            push!(nsteps_vec, prob_copy.nsteps)
+            push!(step_sizes, prob_copy.tf / prob_copy.nsteps)
+            push!(elapsed_times, elapsed_time)
+            push!(histories, history)
+            push!(richardson_errors, richardson_err)
 
-            println("Nsteps = ", prob_copy.nsteps)
-            println("Error = ", error)
-            println("Mean Elapsed Time = ", mean_elapsed_time)
-            println("StdDev Elapsed Time = ", stddev_elapsed_time)
+            println("Finished iteration ", k, " at ", Dates.now())
+            println("Nsteps = \t", prob_copy.nsteps)
+            println("Richardson Error = \t", richardson_err)
+            println("Elapsed Time = \t", elapsed_time)
             println("----------------------------------------")
 
             # Break once we reach high enough precision
-            if error < error_limit 
+            if richardson_err < min_error_limit 
                 break
             end
+
             # If we are reasonably precise, break if the error increases twice
             # (numerical saturation)
             if k > 2
-                if (error < 1e-4) && (error > errors[k-1]) && (errors[k-1] > errors[k-2])
+                if (error < max_error_limit) && (error > errors[k-1]) && (errors[k-1] > errors[k-2])
                     break
                 end
             end
         end
-
-        push!(histories, histories_this_order)
-
-        errors_all[:,j] .= errors
-        timing_all[:,j] .= timing
-        timing_stddev_all[:,j] .= timing_stddev
-        #errors_all[:,length(orders)+j] .= order_line
+        push!(ret_vec, (order, nsteps_vec, step_sizes, elapsed_times, histories, richardson_errors))
     end
+    
+    println("Finished at ", Dates.now())
+    println("Returning (order, nsteps_vec, step_sizes, elapsed_times, histories, richardson_errors) for each order.")
 
-    #return step_sizes, errors_all, timing_all, timing_stddev_all
-    return step_sizes, errors_all, timing_all, timing_stddev_all, histories
+    return ret_vec
 end
 
 
