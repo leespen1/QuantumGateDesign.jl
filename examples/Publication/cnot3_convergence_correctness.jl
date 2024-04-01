@@ -247,8 +247,8 @@ controls_autodiff = QuantumGateDesign.bspline_controls_autodiff(prob.tf, D1, om)
 target = vcat(params.Utarget_r, params.Utarget_i)
 
 # Set up convergence test
-pcof = ones(nCoeff)
-N_iterations = 3
+pcof = ones(nCoeff) .* 1e-2
+N_iterations = 10
 gmres_abstol = 1e-15 # Since we're not going for timing, use very low tolerance
 gmres_reltol = 1e-15
 
