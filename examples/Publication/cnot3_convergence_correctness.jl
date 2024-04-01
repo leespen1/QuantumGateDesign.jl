@@ -34,22 +34,16 @@ oscillator:
     Oscillator S: 0, ξ_{as}, ξ_{bs}.
 ==========================================================# 
 using LinearAlgebra
-#using Ipopt
-#using Base.Threads
 using Random
-#using DelimitedFiles
 using Printf
-#using FFTW
-using Plots
 using SparseArrays
-using FileIO
 using JLD2
 
-#include("Juqbox.jl") # using the consolidated Juqbox module
 using Juqbox
 using QuantumGateDesign
+using Dates
 
-Base.show(io::IO, f::Float64) = @printf(io, "%20.13e", f)
+#Base.show(io::IO, f::Float64) = @printf(io, "%20.13e", f)
 
 Ne1 = 2 # essential energy levels per oscillator # AP: want Ne1=Ne2=2, but Ne3 = 1
 Ne2 = 2
@@ -270,4 +264,7 @@ ret_qgd = QuantumGateDesign.get_histories(
 )
 ret_juq = QuantumGateDesign.get_histories(params, wa, pcof, N_iterations)
 
-@save "cnot3_convergence_correctness.jld2"
+current_date_time = Dates.now()
+formatted_date_time = Dates.format(current_date_time, "yyyy-mm-dd_HH:MM:SS")
+
+@save "cnot3_convergence_correctness_$formatted_date_time.jld2"
