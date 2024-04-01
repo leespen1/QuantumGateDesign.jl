@@ -80,13 +80,11 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
                 break
             end
 
-            # If we are reasonably precise, break if the error increases twice
-            # (numerical saturation)
-            if k > 2
-                if ((richardson_err < max_error_limit) 
-                    && (error > richardson_errors[k-1]) 
-                    && (richardson_errors[k-1] > richardson_errors[k-2])
-                   )
+            # If we are reasonably precise (error under max_error_limit), break
+            # if the error increases twice (numerical saturation)
+            if length(richardson_errors) > 2
+                if ((richardson_err[end] < max_error_limit) 
+                    && (richardson_errors[end] > richardson_errors[end-1] > richardson_errors[end-1]))
                     break
                 end
             end
