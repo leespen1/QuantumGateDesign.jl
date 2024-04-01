@@ -17,7 +17,7 @@ way more computation than necessary to get the 'true' solution.
 
 Richardson extrapolation seems like a good idea for that.
 """
-function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations; orders=(2,),
+function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations; orders=(2,4,6,8,10),
         min_error_limit=-Inf, max_error_limit=Inf, base_nsteps=missing, 
         nsteps_change_factor=2, evolution_kwargs...
     )
