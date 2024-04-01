@@ -264,10 +264,10 @@ params.nsteps = base_nsteps
 prob.nsteps = base_nsteps
 
 
-ret_qgd = get_history_convergence(
+ret_qgd = QuantumGateDesign.get_histories(
     prob, controls_autodiff, pcof, N_iterations, 
     abstol=gmres_abstol, reltol=gmres_abstol
 )
-ret_juq = get_history_convergence(params, pcof, wa, N_iterations)
+ret_juq = QuantumGateDesign.get_histories(params, wa, pcof, N_iterations)
 
 @save "cnot3_convergence_correctness.jld2"
