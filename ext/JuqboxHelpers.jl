@@ -4,6 +4,8 @@ println("Loading JuqboxHelpers")
 
 using QuantumGateDesign
 using LinearAlgebra
+using OrderedCollections
+using Dates
 using Juqbox
 
 
@@ -24,7 +26,7 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
         base_nsteps = original_nsteps
     end
 
-    ret_vec = []
+    ret_dict = OrderedCollections.OrderedDict()
 
     println("Beginning at ", QuantumGateDesign.Dates.now())
 
@@ -89,16 +91,24 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
                 end
             end
         end
-        push!(ret_vec, (order, nsteps_vec, step_sizes, elapsed_times, histories, richardson_errors))
+        summary_dict = Dict(
+            "order" => order,
+            "nsteps" => nsteps_vec,
+            "step_sizes" => step_sizes,
+            "elapsed_times" => elapsed_times,
+            "histories" => histories,
+            "richardson_errors" => richardson_errors
+        )
+        ret_dict["Order $order (Juqbox)"] = summary_dict
     end
     
-    println("Finished at ", QuantumGateDesign.Dates.now())
-    println("Returning (order, nsteps_vec, step_sizes, elapsed_times, histories, richardson_errors) for each order.")
+    println("Finished at ", Dates.now())
+    println("Returning Results")
 
     # Make sure to return nsteps to original value
     params.nsteps = original_nsteps
 
-    return ret_vec
+    return ret_dict
 end
 
 end # module JuqboxHelpers

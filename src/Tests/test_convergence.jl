@@ -31,7 +31,7 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations; orde
         base_nsteps = prob_original_nsteps
     end
 
-    ret_vec = []
+    ret_dict = OrderedCollections.OrderedDict()
 
     println("Beginning at ", Dates.now())
 
@@ -96,103 +96,102 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations; orde
                 end
             end
         end
-        push!(ret_vec, (order, nsteps_vec, step_sizes, elapsed_times, histories, richardson_errors))
+
+        summary_dict = Dict(
+            "order" => order,
+            "nsteps" => nsteps_vec,
+            "step_sizes" => step_sizes,
+            "elapsed_times" => elapsed_times,
+            "histories" => histories,
+            "richardson_errors" => richardson_errors
+        )
+        ret_dict["Order $order (QGD)"] = summary_dict
     end
     
     println("Finished at ", Dates.now())
-    println("Returning (order, nsteps_vec, step_sizes, elapsed_times, histories, richardson_errors) for each order.")
+    println("Returning Results")
 
-    return ret_vec
+    return ret_dict
 end
 
 
 
-function plot_history_convergence(step_sizes, errors_all, timing_all, timing_stddev_all; fontsize=16, kwargs...) 
-    
-    pl_stepsize = Plots.plot(ylabel="Log₁₀(Rel Err)", fontsize=fontsize)
-    pl_timing = Plots.plot(ylabel="Log₁₀(Rel Err)", fontsize=fontsize)
-    Plots.plot!(pl_stepsize, xlabel="Log₁₀(Step Size Δt)")
-    Plots.plot!(pl_timing, xlabel="Log₁₀(Elapsed Time) (s)")
-
+function plot_stepsize_convergence(dict_of_summary_dicts=Dict(), fontsize=16, true_history=missing)
+    xlabel = "Log₁₀(Step Size Δt)"
+    ylabel = "Log₁₀(Rel Err)"
     yticks = -15:15 
-    Plots.plot!(pl_stepsize, yticks=yticks, legend=:outerright)
-    Plots.plot!(pl_timing, yticks=yticks, legend=:outerright)
+    pl = Plots.plot(xlabel=xlabel, ylabel=ylabel, fontsize=fontsize,
+                    yticks=yticks, legend=:outerright)
 
-    plot_history_convergence!(pl_stepsize, pl_timing,
-        step_sizes, errors_all, timing_all, timing_stddev_all;
-        kwargs...
-    )
-    # Add the lines here
+    for (key, item) in dict_of_summary_dicts
+        plot_stepsize_convergence!(pl, item, label=key, true_history=true_history)
+    end
 
-    stepsize_xlims = collect(Plots.xlims(pl_stepsize))
-    timing_xlims   = collect(Plots.xlims(pl_timing))
-    Plots.plot!(pl_stepsize, stepsize_xlims, [-7, -7], linecolor=:red, label="Target Error")
-    Plots.plot!(pl_timing, timing_xlims, [-7, -7], linecolor=:red, label="Target Error")
-
-    return pl_stepsize, pl_timing
+    plot_xlims = collect(Plots.xlims(pl))
+    Plots.plot!(pl, plot_xlims, [-7, -7], linecolor=:red, label="Target Error")
+    return pl
 end
 
 
 
-function plot_history_convergence!(pl_stepsize, pl_timing, step_sizes, errors_all, timing_all, timing_stddev_all;
-        orders=(2, 4, 6, 8, 10), include_orderlines=false, fontsize=16, orderline_offset=0,
-        labels=missing, marker=:circle, colors=missing, lw=2, markersize=5
-    )
+function plot_timing_convergence(dict_of_summary_dicts=Dict(), fontsize=16, true_history=missing)
+    xlabel = "Log₁₀(Elapsed Time (s))"
+    ylabel = "Log₁₀(Rel Err)"
+    yticks = -15:15 
+    pl = Plots.plot(xlabel=xlabel, ylabel=ylabel, fontsize=fontsize,
+                    yticks=yticks, legend=:outerright)
 
-    N_orders = size(errors_all, 2)
-
-    if ismissing(labels)
-        labels = ["Order=$order" for order in orders]
-    end
-    labels = reshape(labels, 1, :) # Labels must be row matrix
-
-    if ismissing(colors)
-        colors = collect(Plots.theme_palette(:default))
-        colors = colors[1:N_orders]
-        colors = reshape(colors, 1, :)
+    for (key, item) in dict_of_summary_dicts
+        plot_timing_convergence!(pl, item, label=key, true_history=true_history)
     end
 
-    Plots.plot!(pl_timing, log10.(timing_all), log10.(errors_all), marker=marker,
-                markersize=markersize, labels=labels, linealpha=0.5, color=colors, lw=lw)
-    Plots.plot!(pl_stepsize, log10.(step_sizes), log10.(errors_all), marker=marker,
-                markersize=markersize, labels=labels, color=colors, lw=lw)
-
-
-    # Add order lines
-    if include_orderlines
-        # If a single number is given, fill vector with that number
-        if length(orderline_offset) == 1
-            orderline_offset = ones(length(orders)) .* orderline_offset
-        end
-        @assert length(orderline_offset) == length(orders)
-
-        # Order lines may extend too far down. Save the old limits so I can fix the window size back.
-        old_ylims = Plots.ylims(pl_stepsize)
-
-        linestyle_list = (:solid, :dash, :dot, :dashdot)
-        for n in 1:N_orders
-            order = orders[n]
-            order_line = step_sizes .^ order
-            order_line .*= 2 * errors_all[1,n]/order_line[1] # Adjust vertical position to match data, with small offset for visibility
-
-            linestyle_index = n % length(linestyle_list)
-            if linestyle_index > 0
-                linestyle = linestyle_list[linestyle_index]
-            else 
-                linestyle = linestyle_list[end]
-            end
-
-            Plots.plot!(
-                pl_stepsize, log10.(step_sizes), log10.(order_line) .+ orderline_offset[n],
-                label="Δt^$order", linecolor=:black, linestyle=linestyle
-            )
-        end
-
-        Plots.ylims!(pl_stepsize, old_ylims...)
-        Plots.plot!(pl_stepsize, legend=:outerright)
-    end
-    return pl_stepsize, pl_timing
+    plot_xlims = collect(Plots.xlims(pl))
+    Plots.plot!(pl, plot_xlims, [-7, -7], linecolor=:red, label="Target Error")
+    return pl
 end
+
+
+
+
+function plot_stepsize_convergence!(pl, summary_dict; label=missing, true_history=missing)
+
+    step_sizes = summary_dict["step_sizes"]
+
+    rel_err(x_approx, x_true) = norm(x_approx - x_true)/norm(x_true)
+
+    if ismissing(true_history)
+        errors = summary_dict["richardson_errors"]
+    else
+        errors = [rel_err(history, true_history) for history in summary_dict["histories"]]
+    end
+
+    # Convert to Log scale
+    step_sizes = log10.(step_sizes)
+    errors = log10.(errors)
+
+    Plots.plot!(pl, step_sizes, errors, label=label)
+end
+
+
+function plot_timing_convergence!(pl, summary_dict; label=missing, true_history=missing)
+
+    elapsed_times = summary_dict["elapsed_times"]
+
+    rel_err(x_approx, x_true) = norm(x_approx - x_true)/norm(x_true)
+
+    if ismissing(true_history)
+        errors = summary_dict["richardson_errors"]
+    else
+        errors = [rel_err(history, true_history) for history in summary_dict["histories"]]
+    end
+
+    # Convert to Log scale
+    elapsed_times = log10.(elapsed_times)
+    errors = log10.(errors)
+
+    Plots.plot!(pl, elapsed_times, errors, label=label)
+end
+
 
 """
 Given solutions with stepsize h and 2h, which have error of order 'order', compute
@@ -272,5 +271,69 @@ function find_target_y(xs, ys, target_y)
     target_x = x1 + ((target_y - y1)/m)
 
     return target_x
+end
+
+
+"""
+Keeping this around just to see how I did the order lines and color pallette
+"""
+function old_plot_history_convergence!(pl_stepsize, pl_timing, step_sizes, errors_all, timing_all, timing_stddev_all;
+        orders=(2, 4, 6, 8, 10), include_orderlines=false, fontsize=16, orderline_offset=0,
+        labels=missing, marker=:circle, colors=missing, lw=2, markersize=5
+    )
+
+    N_orders = size(errors_all, 2)
+
+    if ismissing(labels)
+        labels = ["Order=$order" for order in orders]
+    end
+    labels = reshape(labels, 1, :) # Labels must be row matrix
+
+    if ismissing(colors)
+        colors = collect(Plots.theme_palette(:default))
+        colors = colors[1:N_orders]
+        colors = reshape(colors, 1, :)
+    end
+
+    Plots.plot!(pl_timing, log10.(timing_all), log10.(errors_all), marker=marker,
+                markersize=markersize, labels=labels, linealpha=0.5, color=colors, lw=lw)
+    Plots.plot!(pl_stepsize, log10.(step_sizes), log10.(errors_all), marker=marker,
+                markersize=markersize, labels=labels, color=colors, lw=lw)
+
+
+    # Add order lines
+    if include_orderlines
+        # If a single number is given, fill vector with that number
+        if length(orderline_offset) == 1
+            orderline_offset = ones(length(orders)) .* orderline_offset
+        end
+        @assert length(orderline_offset) == length(orders)
+
+        # Order lines may extend too far down. Save the old limits so I can fix the window size back.
+        old_ylims = Plots.ylims(pl_stepsize)
+
+        linestyle_list = (:solid, :dash, :dot, :dashdot)
+        for n in 1:N_orders
+            order = orders[n]
+            order_line = step_sizes .^ order
+            order_line .*= 2 * errors_all[1,n]/order_line[1] # Adjust vertical position to match data, with small offset for visibility
+
+            linestyle_index = n % length(linestyle_list)
+            if linestyle_index > 0
+                linestyle = linestyle_list[linestyle_index]
+            else 
+                linestyle = linestyle_list[end]
+            end
+
+            Plots.plot!(
+                pl_stepsize, log10.(step_sizes), log10.(order_line) .+ orderline_offset[n],
+                label="Δt^$order", linecolor=:black, linestyle=linestyle
+            )
+        end
+
+        Plots.ylims!(pl_stepsize, old_ylims...)
+        Plots.plot!(pl_stepsize, legend=:outerright)
+    end
+    return pl_stepsize, pl_timing
 end
 
