@@ -17,9 +17,10 @@ way more computation than necessary to get the 'true' solution.
 
 Richardson extrapolation seems like a good idea for that.
 """
-function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations; orders=(2,4,6,8,10),
-        min_error_limit=-Inf, max_error_limit=Inf, base_nsteps=missing, 
-        nsteps_change_factor=2, evolution_kwargs...
+function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
+        orders=(2,4,6,8,10),  min_error_limit=-Inf, max_error_limit=-Inf,
+        base_nsteps=missing, nsteps_change_factor=2, start_iteration=1,
+        evolution_kwargs...
     )
 
     prob_original_nsteps = prob.nsteps
@@ -46,7 +47,7 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations; orde
         histories = Array{Float64, 3}[]
         richardson_errors = Float64[]
 
-        for k in 1:N_iterations
+        for k in start_iteration:N_iterations
             println("Starting iteration ", k, " at ", Dates.now())
             nsteps_multiplier = nsteps_change_factor^(k-1)
             prob_copy.nsteps = base_nsteps*nsteps_multiplier

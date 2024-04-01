@@ -16,6 +16,7 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
         wa::Juqbox.Working_Arrays, pcof, N_iterations;
         min_error_limit=-Inf, max_error_limit=Inf,
         base_nsteps=missing, nsteps_change_factor=2,
+        start_iteration=1
     )
 
     original_nsteps = params.nsteps
@@ -42,7 +43,7 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
         histories = Array{Float64, 3}[]
         richardson_errors = Float64[]
 
-        for k in 1:N_iterations
+        for k in start_iteration:N_iterations
             println("Starting iteration ", k, " at ", QuantumGateDesign.Dates.now())
             nsteps_multiplier = nsteps_change_factor^(k-1)
             params.nsteps = base_nsteps*nsteps_multiplier
