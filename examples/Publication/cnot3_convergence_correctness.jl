@@ -42,6 +42,7 @@ using JLD2
 using Juqbox
 using QuantumGateDesign
 using Dates
+using OrderedCollections
 
 #Base.show(io::IO, f::Float64) = @printf(io, "%20.13e", f)
 
@@ -257,14 +258,57 @@ base_nsteps = 100
 params.nsteps = base_nsteps
 prob.nsteps = base_nsteps
 
-
-ret_qgd = QuantumGateDesign.get_histories(
-    prob, controls_autodiff, pcof, N_iterations, 
-    abstol=gmres_abstol, reltol=gmres_abstol
-)
-ret_juq = QuantumGateDesign.get_histories(params, wa, pcof, N_iterations)
-
+# Get test start time
 current_date_time = Dates.now()
 formatted_date_time = Dates.format(current_date_time, "yyyy-mm-dd_HH:MM:SS")
+jld2_savename = "cnot3_convergence_correctness_$formatted_date_time.jld2"
+@save jld2_savename
 
-@save "cnot3_convergence_correctness_$formatted_date_time.jld2"
+ret_all = OrderedDict()
+
+# Do the high order ones first, use fewer iterations
+N_iterations = 10
+ret_qgd_order8 = QuantumGateDesign.get_histories(
+    prob, controls_autodiff, pcof, N_iterations, 
+    abstol=gmres_abstol, reltol=gmres_abstol, orders=[8]
+)
+@save jld2_savename
+
+ret_all = merge(ret_all, ret_qgd_order8)
+
+N_iterations = 13
+ret_qgd_order6 = QuantumGateDesign.get_histories(
+    prob, controls_autodiff, pcof, N_iterations, 
+    abstol=gmres_abstol, reltol=gmres_abstol, orders=[6]
+)
+
+ret_all = merge(ret_all, ret_qgd_order6)
+
+@save jld2_savename
+N_iterations = 17
+ret_qgd_order4 = QuantumGateDesign.get_histories(
+    prob, controls_autodiff, pcof, N_iterations, 
+    abstol=gmres_abstol, reltol=gmres_abstol, orders=[4]
+)
+@save jld2_savename
+
+ret_all = merge(ret_all, ret_qgd_order4)
+
+# Do the low order ones
+N_iterations = 32
+ret_qgd_order2 = QuantumGateDesign.get_histories(
+    prob, controls_autodiff, pcof, N_iterations, 
+    abstol=gmres_abstol, reltol=gmres_abstol, orders=[2]
+)
+@save jld2_savename
+
+ret_all = merge(ret_all, ret_qgd_order2)
+
+ret_juq = QuantumGateDesign.get_histories(params, wa, pcof, N_iterations)
+
+ret_all = merge(ret_all, ret_juq)
+
+@save jld2_savename
+
+
+println("Finished entire script")
