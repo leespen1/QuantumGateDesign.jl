@@ -10,117 +10,97 @@ using Juqbox
 """
 Juqbox Version
 """
-function QuantumGateDesign.get_history_convergence(params::Juqbox.objparams, pcof,
-        wa::Juqbox.Working_Arrays, N_iterations;
-        nsteps_change_factor=2,
-        true_history=missing,
-        error_limit=1e-15, n_runs=1
+function QuantumGateDesign.get_histories(params::Juqbox.objparams,
+        wa::Juqbox.Working_Arrays, pcof, N_iterations;
+        min_error_limit=-Inf, max_error_limit=Inf,
+        base_nsteps=missing, nsteps_change_factor=2,
     )
 
-    base_nsteps = params.nsteps
-    nsteps_change_factor = 2
-    order = 2
+    original_nsteps = params.nsteps
+    orders = (2,)
 
-    histories = []
-
-    # Keeping these as matrices even though they only have one column to be
-    # consistent with the main version of this function
-    errors_all = Matrix{Float64}(undef, N_iterations, 1)
-    timing_all = Matrix{Float64}(undef, N_iterations, 1)
-    timing_stddev_all = Matrix{Float64}(undef, N_iterations, 1)
-    # Fill with NaN, so that we can break the loop early and still plot, ignoring unfilled values
-    errors_all .= NaN
-    timing_all .= NaN
-    timing_stddev_all .= NaN
-
-    step_sizes = (params.T/base_nsteps) ./ [nsteps_change_factor^k for k in 0:N_iterations-1]
-
-    errors = Vector{Float64}(undef, N_iterations)
-    timing = Vector{Float64}(undef, N_iterations)
-    timing_stddev = Vector{Float64}(undef, N_iterations)
-    errors .= NaN
-    timing .= NaN
-    timing_stddev .= NaN
-
-
-    N_derivatives = div(order, 2)
-
-    println("========================================")
-    println("Running Order 2 (Juqbox)")
-    println("========================================")
-
-    histories_this_order = []
-
-    if ismissing(true_history)
-        println("----------------------------------------")
-        println("True history not given, using Richardson extrapolation\n")
-        println("Calculating solution with base_nsteps=", base_nsteps)
-        println("----------------------------------------")
-        params.nsteps = base_nsteps
-
-        ret = traceobjgrad(pcof, params, wa, true, false,
-                           saveEveryNsteps=div(params.nsteps, base_nsteps))
-        base_history = ret[2]
-
-        push!(histories_this_order, base_history)
+    # Default to whatever nsteps the problem original had
+    if ismissing(base_nsteps)
+        base_nsteps = original_nsteps
     end
 
+    ret_vec = []
 
-    for k in 1:N_iterations
-        nsteps_multiplier = nsteps_change_factor^k
-        params.nsteps = base_nsteps*nsteps_multiplier
+    println("Beginning at ", QuantumGateDesign.Dates.now())
 
-        elapsed_times = zeros(n_runs)
+    for order in orders
+        println("#"^40, "\n")
+        println("Juqbox")
+        println("Order ", order, "\n")
+        println("#"^40)
 
-        elapsed_times[1] = @elapsed ret = traceobjgrad(
-            pcof, params, wa, true, false, saveEveryNsteps=div(params.nsteps, base_nsteps)
-        )
-        history = ret[2]
-        for rerun_i in 2:n_runs
-            elapsed_times[rerun_i] = @elapsed ret = traceobjgrad(
-                pcof, params, wa, true, false, saveEveryNsteps=div(params.nsteps, base_nsteps)
+        nsteps_vec = Int64[]
+        step_sizes = Float64[]
+        elapsed_times = Float64[]
+        histories = Array{Float64, 3}[]
+        richardson_errors = Float64[]
+
+        for k in 1:N_iterations
+            println("Starting iteration ", k, " at ", QuantumGateDesign.Dates.now())
+            nsteps_multiplier = nsteps_change_factor^(k-1)
+            params.nsteps = base_nsteps*nsteps_multiplier
+
+            # Run forward evolution
+            elapsed_time = @elapsed ret = traceobjgrad(
+                pcof, params, wa, true, false,
+                saveEveryNsteps=nsteps_multiplier
             )
+            history = ret[2]
+            # Reorder Juqbox indices to match QuantumGateDesign
+            history = permutedims(history, (1,3,2))
+            # Convert from complex to real valued
+            history = QuantumGateDesign.complex_to_real(history)
+
+            # Compute Richardson Error
+            richardson_err = NaN
+            if (k > 1)
+                history_prev = histories[k-1]
+                richardson_err = QuantumGateDesign.richardson_extrap_rel_err(history, history_prev, order)
+            end
+
+            push!(nsteps_vec, params.nsteps)
+            push!(step_sizes, params.T / params.nsteps)
+            push!(elapsed_times, elapsed_time)
+            push!(histories, history)
+            push!(richardson_errors, richardson_err)
+
+            println("Finished iteration ", k, " at ", QuantumGateDesign.Dates.now())
+            println("Nsteps = \t", params.nsteps)
+            println("Richardson Error = \t", richardson_err)
+            println("Elapsed Time = \t", elapsed_time)
+            println("----------------------------------------")
+
+            # Break once we reach high enough precision
+            if richardson_err < min_error_limit 
+                break
+            end
+
+            # If we are reasonably precise, break if the error increases twice
+            # (numerical saturation)
+            if k > 2
+                if ((richardson_err < max_error_limit) 
+                    && (error > richardson_errors[k-1]) 
+                    && (richardson_errors[k-1] > richardson_errors[k-2])
+                   )
+                    break
+                end
+            end
         end
-        mean_elapsed_time = sum(elapsed_times)/length(elapsed_times)
-        stddev_elapsed_time = sum((elapsed_times .- mean_elapsed_time) .^ 2)
-        stddev_elapsed_time /= length(elapsed_times)-1
-        stddev_elapsed_time = sqrt(stddev_elapsed_time)
-
-        push!(histories_this_order, history)
-
-        if ismissing(true_history)
-            history_prev = histories_this_order[k]
-            error = QuantumGateDesign.richardson_extrap_rel_err(history, history_prev, order)
-        else
-            error = norm(history - true_history)/norm(true_history)
-        end
-
-        errors[k] = error
-        timing[k] = mean_elapsed_time
-        timing_stddev[k] = stddev_elapsed_time
-
-        println("Nsteps = ", params.nsteps)
-        println("Error = ", error)
-        println("Mean Elapsed Time = ", mean_elapsed_time)
-        println("StdDev Elapsed Time = ", stddev_elapsed_time)
-        println("----------------------------------------")
-
-        # Break once we reach high enough precision
-        if error < error_limit 
-            break
-        end
+        push!(ret_vec, (order, nsteps_vec, step_sizes, elapsed_times, histories, richardson_errors))
     end
+    
+    println("Finished at ", QuantumGateDesign.Dates.now())
+    println("Returning (order, nsteps_vec, step_sizes, elapsed_times, histories, richardson_errors) for each order.")
 
-    push!(histories, histories_this_order)
+    # Make sure to return nsteps to original value
+    params.nsteps = original_nsteps
 
-    errors_all[:,1] .= errors
-    timing_all[:,1] .= timing
-    timing_stddev_all[:,1] .= timing_stddev
-
-    params.nsteps = base_nsteps
-
-    return step_sizes, errors_all, timing_all, timing_stddev_all
-    #return step_sizes, errors_all, timing_all, timing_stddev_all, histories
+    return ret_vec
 end
 
 end # module JuqboxHelpers

@@ -17,7 +17,7 @@ way more computation than necessary to get the 'true' solution.
 
 Richardson extrapolation seems like a good idea for that.
 """
-function get_histories(prob, controls, pcof, N_iterations; orders=(2,4,6,8),
+function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations; orders=(2,),
         min_error_limit=-Inf, max_error_limit=Inf, base_nsteps=missing, 
         nsteps_change_factor=2, evolution_kwargs...
     )
@@ -88,7 +88,10 @@ function get_histories(prob, controls, pcof, N_iterations; orders=(2,4,6,8),
             # If we are reasonably precise, break if the error increases twice
             # (numerical saturation)
             if k > 2
-                if (error < max_error_limit) && (error > errors[k-1]) && (errors[k-1] > errors[k-2])
+                if ((richardson_err < max_error_limit) 
+                    && (richardson_err > richardson_errors[k-1]) 
+                    && (richardson_errors[k-1] > richardson_errors[k-2])
+                   )
                     break
                 end
             end
