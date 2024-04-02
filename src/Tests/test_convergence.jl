@@ -66,6 +66,7 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
         ret_dict[summary_dict_name] = summary_dict
 
         if !ismissing(jld2_filename)
+            JLD2.jldopen(jld2_filename, "a") do f end
             jld2_dict = JLD2.load(jld2_filename)
             jld2_dict[summary_dict_name] = summary_dict
             JLD2.save(jld2_filename, jld2_dict)
@@ -107,6 +108,7 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
 
             # Save intermediate results
             if !ismissing(jld2_filename)
+                JLD2.jldopen(jld2_filename, "a") do f end
                 jld2_dict = JLD2.load(jld2_filename)
                 jld2_dict[summary_dict_name] = summary_dict
                 JLD2.save(jld2_filename, jld2_dict)

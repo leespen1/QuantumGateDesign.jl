@@ -61,6 +61,7 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
         ret_dict[summary_dict_name] = summary_dict
 
         if !ismissing(jld2_filename)
+            JLD2.jldopen(jld2_filename, "a") do f end
             jld2_dict = JLD2.load(jld2_filename)
             jld2_dict[summary_dict_name] = summary_dict
             JLD2.save(jld2_filename, jld2_dict)
@@ -103,6 +104,7 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
 
             # Save intermediate results
             if !ismissing(jld2_filename)
+                JLD2.jldopen(jld2_filename, "a") do f end
                 jld2_dict = JLD2.load(jld2_filename)
                 jld2_dict[summary_dict_name] = summary_dict
                 JLD2.save(jld2_filename, jld2_dict)
