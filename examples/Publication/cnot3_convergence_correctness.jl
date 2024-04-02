@@ -262,12 +262,16 @@ prob.nsteps = base_nsteps
 current_date_time = Dates.now()
 formatted_date_time = Dates.format(current_date_time, "yyyy-mm-dd_HH:MM:SS")
 jld2_savename = "cnot3_convergence_correctness_$formatted_date_time.jld2"
+
+println("Saving results in file ", jld2_savename)
+
 @save jld2_savename
 
 ret_all = OrderedDict()
 
+N_iterations = 4
 # Do the high order ones first, use fewer iterations
-N_iterations = 10
+#N_iterations = 10
 ret_qgd_order8 = QuantumGateDesign.get_histories(
     prob, controls_autodiff, pcof, N_iterations, 
     abstol=gmres_abstol, reltol=gmres_abstol, orders=[8]
@@ -276,7 +280,7 @@ ret_qgd_order8 = QuantumGateDesign.get_histories(
 
 ret_all = merge(ret_all, ret_qgd_order8)
 
-N_iterations = 13
+#N_iterations = 13
 ret_qgd_order6 = QuantumGateDesign.get_histories(
     prob, controls_autodiff, pcof, N_iterations, 
     abstol=gmres_abstol, reltol=gmres_abstol, orders=[6]
@@ -285,7 +289,7 @@ ret_qgd_order6 = QuantumGateDesign.get_histories(
 ret_all = merge(ret_all, ret_qgd_order6)
 
 @save jld2_savename
-N_iterations = 17
+#N_iterations = 17
 ret_qgd_order4 = QuantumGateDesign.get_histories(
     prob, controls_autodiff, pcof, N_iterations, 
     abstol=gmres_abstol, reltol=gmres_abstol, orders=[4]
@@ -295,7 +299,7 @@ ret_qgd_order4 = QuantumGateDesign.get_histories(
 ret_all = merge(ret_all, ret_qgd_order4)
 
 # Do the low order ones
-N_iterations = 32
+#N_iterations = 32
 ret_qgd_order2 = QuantumGateDesign.get_histories(
     prob, controls_autodiff, pcof, N_iterations, 
     abstol=gmres_abstol, reltol=gmres_abstol, orders=[2]
