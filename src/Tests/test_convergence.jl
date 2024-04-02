@@ -141,7 +141,9 @@ end
 
 
 
-function plot_stepsize_convergence(dict_of_summary_dicts=Dict(), fontsize=16, true_history=missing)
+function plot_stepsize_convergence(dict_of_summary_dicts=Dict(); fontsize=16,
+        true_history=missing)
+
     xlabel = "Log₁₀(Step Size Δt)"
     ylabel = "Log₁₀(Rel Err)"
     yticks = -15:15 
@@ -159,7 +161,8 @@ end
 
 
 
-function plot_timing_convergence(dict_of_summary_dicts=Dict(), fontsize=16, true_history=missing)
+function plot_timing_convergence(dict_of_summary_dicts=Dict(); fontsize=16,
+        true_history=missing)
     xlabel = "Log₁₀(Elapsed Time (s))"
     ylabel = "Log₁₀(Rel Err)"
     yticks = -15:15 
