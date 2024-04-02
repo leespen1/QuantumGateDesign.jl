@@ -277,7 +277,7 @@ ret_qgd_order8 = QuantumGateDesign.get_histories(
 )
 @save jld2_savename
 
-ret_all = merge(ret_all, ret_qgd_order8)
+ret_all = merge(ret_qgd_order8, ret_all)
 
 N_iterations = 13
 ret_qgd_order6 = QuantumGateDesign.get_histories(
@@ -285,7 +285,7 @@ ret_qgd_order6 = QuantumGateDesign.get_histories(
     abstol=gmres_abstol, reltol=gmres_abstol, orders=[6]
 )
 
-ret_all = merge(ret_all, ret_qgd_order6)
+ret_all = merge(ret_qgd_order6, ret_all)
 
 @save jld2_savename
 N_iterations = 17
@@ -295,7 +295,7 @@ ret_qgd_order4 = QuantumGateDesign.get_histories(
 )
 @save jld2_savename
 
-ret_all = merge(ret_all, ret_qgd_order4)
+ret_all = merge(ret_qgd_order4, ret_all)
 
 # Do the low order ones
 N_iterations = 32
@@ -305,11 +305,11 @@ ret_qgd_order2 = QuantumGateDesign.get_histories(
 )
 @save jld2_savename
 
-ret_all = merge(ret_all, ret_qgd_order2)
+ret_all = merge(ret_qgd_order2, ret_all)
 
 ret_juq = QuantumGateDesign.get_histories(params, wa, pcof, N_iterations)
 
-ret_all = merge(ret_all, ret_juq)
+ret_all = merge(ret_juq, ret_all)
 
 @save jld2_savename
 
