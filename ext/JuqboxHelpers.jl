@@ -7,6 +7,7 @@ using LinearAlgebra
 using OrderedCollections
 using Dates
 using Juqbox
+using JLD2
 
 
 """
@@ -14,10 +15,14 @@ Juqbox Version
 """
 function QuantumGateDesign.get_histories(params::Juqbox.objparams,
         wa::Juqbox.Working_Arrays, pcof, N_iterations;
-        min_error_limit=-Inf, max_error_limit=Inf,
-        base_nsteps=missing, nsteps_change_factor=2,
-        start_iteration=1
+        min_error_limit=-Inf, max_error_limit=Inf, base_nsteps=missing, 
+        nsteps_change_factor=2, start_iteration=1, jld2_filename=missing
     )
+
+    # Touch file, create if needed (append mode, so existing file isn't wiped)
+    if !ismissing(jld2_filename)
+        JLD2.jldopen(jld2_filename, "a") do f end
+    end
 
     original_nsteps = params.nsteps
     orders = (2,)
@@ -42,6 +47,24 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
         elapsed_times = Float64[]
         histories = Array{Float64, 3}[]
         richardson_errors = Float64[]
+
+        summary_dict = Dict(
+            "order" => order,
+            "nsteps" => nsteps_vec,
+            "step_sizes" => step_sizes,
+            "elapsed_times" => elapsed_times,
+            "histories" => histories,
+            "richardson_errors" => richardson_errors
+        )
+
+        summary_dict_name = "Order $order (Juqbox)"
+        ret_dict[summary_dict_name] = summary_dict
+
+        if !ismissing(jld2_filename)
+            jld2_dict = JLD2.load(jld2_filename)
+            jld2_dict[summary_dict_name] = summary_dict
+            JLD2.save(jld2_filename, jld2_dict)
+        end
 
         for k in start_iteration:N_iterations
             println("Starting iteration ", k, " at ", QuantumGateDesign.Dates.now())
@@ -78,6 +101,13 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
             println("Elapsed Time = \t", elapsed_time)
             println("----------------------------------------")
 
+            # Save intermediate results
+            if !ismissing(jld2_filename)
+                jld2_dict = JLD2.load(jld2_filename)
+                jld2_dict[summary_dict_name] = summary_dict
+                JLD2.save(jld2_filename, jld2_dict)
+            end
+
             # Break once we reach high enough precision
             if richardson_errors[end] < min_error_limit 
                 println("Breaking early due to precision reached")
@@ -94,15 +124,6 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
                 end
             end
         end
-        summary_dict = Dict(
-            "order" => order,
-            "nsteps" => nsteps_vec,
-            "step_sizes" => step_sizes,
-            "elapsed_times" => elapsed_times,
-            "histories" => histories,
-            "richardson_errors" => richardson_errors
-        )
-        ret_dict["Order $order (Juqbox)"] = summary_dict
     end
     
     println("Finished at ", Dates.now())

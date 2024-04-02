@@ -19,9 +19,15 @@ Richardson extrapolation seems like a good idea for that.
 """
 function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
         orders=(2,4,6,8,10),  min_error_limit=-Inf, max_error_limit=-Inf,
-        base_nsteps=missing, nsteps_change_factor=2, start_iteration=1,
+        base_nsteps=missing, nsteps_change_factor=2, start_iteration=1, 
+        jld2_filename=missing,
         evolution_kwargs...
     )
+
+    # Touch file, create if needed (append mode, so existing file isn't wiped)
+    if !ismissing(jld2_filename)
+        JLD2.jldopen(jld2_filename, "a") do f end
+    end
 
     prob_original_nsteps = prob.nsteps
 
@@ -46,6 +52,24 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
         elapsed_times = Float64[]
         histories = Array{Float64, 3}[]
         richardson_errors = Float64[]
+
+        summary_dict = Dict(
+            "order" => order,
+            "nsteps" => nsteps_vec,
+            "step_sizes" => step_sizes,
+            "elapsed_times" => elapsed_times,
+            "histories" => histories,
+            "richardson_errors" => richardson_errors
+        )
+
+        summary_dict_name = "Order $order (QGD)"
+        ret_dict[summary_dict_name] = summary_dict
+
+        if !ismissing(jld2_filename)
+            jld2_dict = JLD2.load(jld2_filename)
+            jld2_dict[summary_dict_name] = summary_dict
+            JLD2.save(jld2_filename, jld2_dict)
+        end
 
         for k in start_iteration:N_iterations
             println("Starting iteration ", k, " at ", Dates.now())
@@ -81,6 +105,13 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
             println("Elapsed Time = \t", elapsed_time)
             println("----------------------------------------")
 
+            # Save intermediate results
+            if !ismissing(jld2_filename)
+                jld2_dict = JLD2.load(jld2_filename)
+                jld2_dict[summary_dict_name] = summary_dict
+                JLD2.save(jld2_filename, jld2_dict)
+            end
+
             # Break once we reach high enough precision
             if richardson_errors[end] < min_error_limit 
                 println("Breaking early due to precision reached")
@@ -98,15 +129,6 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
             end
         end
 
-        summary_dict = Dict(
-            "order" => order,
-            "nsteps" => nsteps_vec,
-            "step_sizes" => step_sizes,
-            "elapsed_times" => elapsed_times,
-            "histories" => histories,
-            "richardson_errors" => richardson_errors
-        )
-        ret_dict["Order $order (QGD)"] = summary_dict
     end
     
     println("Finished at ", Dates.now())
