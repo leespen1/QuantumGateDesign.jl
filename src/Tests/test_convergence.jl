@@ -62,6 +62,13 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
             "richardson_errors" => richardson_errors
         )
 
+        if haskey(evolution_kwargs, :abstol)
+            summary_dict["abstol"] = evolution_kwargs[:abstol]
+        end
+        if haskey(evolution_kwargs, :reltol)
+            summary_dict["reltol"] = evolution_kwargs[:reltol]
+        end
+
         summary_dict_name = "Order $order (QGD)"
         ret_dict[summary_dict_name] = summary_dict
 
