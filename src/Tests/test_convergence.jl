@@ -62,6 +62,13 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
             "richardson_errors" => richardson_errors
         )
 
+        if haskey(evolution_kwargs, :abstol)
+            summary_dict["abstol"] = evolution_kwargs[:abstol]
+        end
+        if haskey(evolution_kwargs, :reltol)
+            summary_dict["reltol"] = evolution_kwargs[:reltol]
+        end
+
         summary_dict_name = "Order $order (QGD)"
         ret_dict[summary_dict_name] = summary_dict
 
@@ -141,7 +148,9 @@ end
 
 
 
-function plot_stepsize_convergence(dict_of_summary_dicts=Dict(), fontsize=16, true_history=missing)
+function plot_stepsize_convergence(dict_of_summary_dicts=Dict(); fontsize=16,
+        true_history=missing)
+
     xlabel = "Log₁₀(Step Size Δt)"
     ylabel = "Log₁₀(Rel Err)"
     yticks = -15:15 
@@ -159,7 +168,8 @@ end
 
 
 
-function plot_timing_convergence(dict_of_summary_dicts=Dict(), fontsize=16, true_history=missing)
+function plot_timing_convergence(dict_of_summary_dicts=Dict(); fontsize=16,
+        true_history=missing)
     xlabel = "Log₁₀(Elapsed Time (s))"
     ylabel = "Log₁₀(Rel Err)"
     yticks = -15:15 

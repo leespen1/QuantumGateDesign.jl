@@ -20,9 +20,7 @@ function convert_juqbox(juqbox_params)
     tf = juqbox_params.T
     nsteps = juqbox_params.nsteps
 
-    # Assume every level is essential for now.
     N_ess_levels = juqbox_params.N
-    N_guard_levels = 0
 
     prob = SchrodingerProb(
         system_sym,

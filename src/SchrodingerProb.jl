@@ -64,7 +64,8 @@ mutable struct SchrodingerProb{M, VM}
         # and an assertion that the projector is symmetric (which is really the
         # only requirement we have)
         if ismissing(guard_subspace_projector)
-            guard_subspace_projector = create_guard_subspace_projector(N_ess_levels, N_tot_levels)
+            real_system_size = N_tot_levels
+            guard_subspace_projector = SparseArrays.spzeros(real_system_size, real_system_size)
         end
 
         # Copy arrays when creating a Schrodinger problem
@@ -190,6 +191,7 @@ function DenseSchrodingerProb(prob::SchrodingerProb)
     return dense_prob
 end
 
+#=
 """
 Create the matrix that projects a state vector onto the guarded subspace.
 
@@ -209,3 +211,20 @@ function create_guard_subspace_projector(N_ess_levels, N_tot_levels)
 
     return W_realsystem
 end
+=#
+
+function create_guard_subspace_projector(N_tot_levels, essential_levels=[])
+    real_system_size = 2*N_tot_levels
+
+    guard_subspace_projector = SparseArrays.spzeros(real_system_size, real_system_size)
+    for level in 1:N_tot_levels
+        if !(level in essential_levels)
+            guard_subspace_projector[level, level] = 1
+            guard_subspace_projector[N_tot_levels + level, N_tot_levels + level] = 1
+        end
+    end
+
+    return guard_subspace_projector
+end
+
+

@@ -7,7 +7,7 @@ jld2_filename = "order2_cnot3_convergence_correctness_$formatted_date_time.jld2"
 N_iterations = 19 #32
 ret_qgd_order2 = QuantumGateDesign.get_histories(
     prob, controls_autodiff, pcof, N_iterations, 
-    abstol=gmres_abstol, reltol=gmres_abstol, orders=[2],
+    abstol=gmres_abstol, reltol=gmres_reltol, orders=[2],
     jld2_filename=jld2_filename
 )
 
