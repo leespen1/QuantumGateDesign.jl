@@ -46,8 +46,8 @@ function compute_derivatives!(uv_matrix::AbstractMatrix{Float64},
         end
 
         # Complete the 1/(j+1)! factor
-        mul!(u_derivative, u_derivative, 1/(j+1))
-        mul!(v_derivative, v_derivative, 1/(j+1))
+        u_derivative ./= j+1
+        v_derivative ./= j+1
     end
     
     return nothing
@@ -196,8 +196,8 @@ function compute_partial_derivative!(
             mul!(v_partial_derivative, sym_op,  u_derivative_prev, -p_val, 1)
         end
 
-        mul!(u_partial_derivative, u_partial_derivative, 1/(j+1))
-        mul!(v_partial_derivative, v_partial_derivative, 1/(j+1))
+        u_partial_derivative ./= j+1
+        v_partial_derivative ./= j+1
     end
     
     return nothing
