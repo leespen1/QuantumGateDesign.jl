@@ -61,6 +61,7 @@ include("Controls/hermite_control.jl")
 include("Controls/sincos_control.jl")
 include("Controls/zero_control.jl")
 include("Controls/generalized_grape_control.jl")
+include("Controls/hermite_carrier.jl")
 
 
 include("hermite.jl")
@@ -82,6 +83,7 @@ include("ProblemConstructors/multi_qudit_systems.jl")
 include("ProblemConstructors/rotating_frame_qubit.jl")
 include("ProblemConstructors/dahlquist_problem.jl")
 include("ProblemConstructors/juqbox_converter.jl")
+
 
 include("Tests/test_gradient.jl")
 include("Tests/test_convergence.jl")
