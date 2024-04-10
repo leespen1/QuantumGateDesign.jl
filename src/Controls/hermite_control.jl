@@ -186,7 +186,7 @@ end
 """
 New, non-allocating version. Currently bugged (not giving pcof[1] at t=0.0)
 """
-function eval_derivative(control::AbstractControl, t::Real,
+function eval_derivative(control::HermiteControl, t::Real,
         pcof::AbstractVector{<: Real},  order::Int64, p_or_q::Symbol;
         force_refresh::Bool=true
     )
