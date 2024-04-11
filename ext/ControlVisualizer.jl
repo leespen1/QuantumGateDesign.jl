@@ -13,7 +13,7 @@ This is really old. From back when I was using functions as parameters for the
 object instead of methods for the type. Needs to be updated to work.
 """
 function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missing, 
-        pcof_init=missing, use_tboxes=true, target=missing)
+        pcof_init=missing, use_tboxes=true, target=missing, single_slidergrid_length=4)
 
     if !ismissing(prob)
         if prob.N_initial_conditions == 2
@@ -52,17 +52,31 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
     #pcof_range = LinRange(0, 1e-3, 11)
     pcof_range = LinRange(0, 1, 101)
 
+    N_parameters = get_number_of_control_parameters(controls)
     pcof_slider_parameters = [
         (label="pcof[$i]", range=pcof_range, startvalue=startvalues[i])
-        for i in 1:get_number_of_control_parameters(controls)
+        for i in 1:N_parameters
     ]
 
-    pcof_slidergrid = SliderGrid(fig[2,1], pcof_slider_parameters...)
+    N_slidergrids = convert(Int64, ceil(N_parameters / single_slidergrid_length))
+    pcof_slidergrids = []
+    for i in 1:N_slidergrids
+        # Get the parameters indices which correspond to this slidergrid (and don't walk past end of array)
+        parameter_indices = 1+(i-1)*single_slidergrid_length:min(i*single_slidergrid_length, N_parameters)
+        local_slidergrid = SliderGrid(fig[2,1][1,i], pcof_slider_parameters[parameter_indices]...)
+        push!(pcof_slidergrids, local_slidergrid)
+        for (j, k) in enumerate(parameter_indices)
+            pcof_obsv[k] = lift(x -> x, local_slidergrid.sliders[j].value)
+        end
+    end
+
+
+    #pcof_slidergrid = SliderGrid(fig[2,1], pcof_slider_parameters...)
 
     # Set up link between slider values and pcof observable values
-    for i in 1:get_number_of_control_parameters(controls)
-        pcof_obsv[i] = lift(x -> x, pcof_slidergrid.sliders[i].value)
-    end
+    #for i in 1:get_number_of_control_parameters(controls)
+    #    pcof_obsv[i] = lift(x -> x, pcof_slidergrid.sliders[i].value)
+    #end
 
     # Set up function value observables
     p_vals_whole_obsv = [Observable([Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], startvalues, i)*1e3/(2pi)) for k in 1:n_points]) for i in 1:length(controls)]
