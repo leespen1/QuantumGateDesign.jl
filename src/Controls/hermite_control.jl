@@ -224,11 +224,15 @@ function eval_derivative(control::HermiteControl, t::Real,
         copyto!(control.fn_vals_q,   1, pcof, offset_n_q,   1+N_derivatives)
         copyto!(control.fnp1_vals_q, 1, pcof, offset_np1_q, 1+N_derivatives)
 
+        # Try to get scaling so that the parameters corresponding to higher
+        # order derivatives have the same impact as the parameters
+        # corresponding to lower order derivatives.
         for i in 0:control.N_derivatives
-            control.fn_vals_p[1+i] *= dt^i / factorial(i)
-            control.fnp1_vals_p[1+i] *= dt^i / factorial(i)
-            control.fn_vals_q[1+i] *= dt^i / factorial(i)
-            control.fnp1_vals_q[1+i] *= dt^i / factorial(i)
+            scaling_factor = factorial(i+1)*2^i
+            control.fn_vals_p[1+i]   *= scaling_factor
+            control.fnp1_vals_p[1+i] *= scaling_factor
+            control.fn_vals_q[1+i]   *= scaling_factor
+            control.fnp1_vals_q[1+i] *= scaling_factor
         end
 
         copyto!(control.fvals_collected_p, 1, control.fn_vals_p, 1, 1+N_derivatives)
