@@ -13,7 +13,7 @@ This is really old. From back when I was using functions as parameters for the
 object instead of methods for the type. Needs to be updated to work.
 """
 function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missing, 
-        pcof_init=missing, use_tboxes=true, target=missing, single_slidergrid_length=4)
+        pcof_init=missing, use_tboxes=true, target=missing, single_slidergrid_length=4, scaling_factor=1)
 
     if !ismissing(prob)
         if prob.N_initial_conditions == 2
@@ -33,7 +33,7 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
 
     # Set up Makie figure and axis for plotting the control
     fig = Figure(;)
-    ax = Axis(fig[1,1], xlabel="Time (ns)", ylabel="Control Amplitude (MHz/2π)")
+    ax = Axis(fig[1,1], xlabel="Time (ns)", ylabel="Control Amplitude")
     xlims!(ax, -(1/16)*tf, tf*(1+(1/16))) # Put a little bit of padding outside the control range
 
     #==================================
@@ -50,7 +50,7 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
     end
 
     #pcof_range = LinRange(0, 1e-3, 11)
-    pcof_range = LinRange(0, 1, 101)
+    pcof_range = LinRange(-1, 1, 201)
 
     N_parameters = get_number_of_control_parameters(controls)
     pcof_slider_parameters = [
@@ -77,13 +77,14 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
     #for i in 1:get_number_of_control_parameters(controls)
     #    pcof_obsv[i] = lift(x -> x, pcof_slidergrid.sliders[i].value)
     #end
+    
 
     # Set up function value observables
-    p_vals_whole_obsv = [Observable([Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], startvalues, i)*1e3/(2pi)) for k in 1:n_points]) for i in 1:length(controls)]
-    q_vals_whole_obsv = [Observable([Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], startvalues, i)*1e3/(2pi)) for k in 1:n_points]) for i in 1:length(controls)]
+    p_vals_whole_obsv = [Observable([Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], startvalues, i)*scaling_factor) for k in 1:n_points]) for i in 1:length(controls)]
+    q_vals_whole_obsv = [Observable([Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], startvalues, i)*scaling_factor) for k in 1:n_points]) for i in 1:length(controls)]
 
-    p_vals_obsv = Observable([Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], startvalues, 1)*1e3/(2pi)) for k in 1:n_points])
-    q_vals_obsv = Observable([Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], startvalues, 1)*1e3/(2pi)) for k in 1:n_points])
+    p_vals_obsv = Observable([Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], startvalues, 1)*scaling_factor) for k in 1:n_points])
+    q_vals_obsv = Observable([Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], startvalues, 1)*scaling_factor) for k in 1:n_points])
 
     # If prob is provided, also plot population evolution
     if !ismissing(prob)
@@ -119,12 +120,12 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
         pcof = to_value.(pcof_obsv)
         # (in units of MHz, non angular)
         for i in 1:length(controls)
-            p_vals_whole_obsv[i][] = [Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], pcof, i)*1e3/(2pi)) for k in 1:n_points]
-            q_vals_whole_obsv[i][] = [Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], pcof, i)*1e3/(2pi)) for k in 1:n_points]
+            p_vals_whole_obsv[i][] = [Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], pcof, i)*scaling_factor) for k in 1:n_points]
+            q_vals_whole_obsv[i][] = [Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], pcof, i)*scaling_factor) for k in 1:n_points]
         end
 
-        p_vals_obsv[] = [Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], pcof, 1) * 1e3/(2pi)) for k in 1:n_points]
-        q_vals_obsv[] = [Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], pcof, 1) * 1e3/(2pi)) for k in 1:n_points]
+        p_vals_obsv[] = [Point2(t_range_control[k], eval_p_single(controls, t_range_control[k], pcof, 1) * scaling_factor) for k in 1:n_points]
+        q_vals_obsv[] = [Point2(t_range_control[k], eval_q_single(controls, t_range_control[k], pcof, 1) * scaling_factor) for k in 1:n_points]
 
         for i in 1:length(controls)
             max_p = maximum(getindex.(p_vals_whole_obsv[i][], 2))
