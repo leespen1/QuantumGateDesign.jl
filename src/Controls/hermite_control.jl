@@ -33,7 +33,8 @@ mutable struct HermiteControl <: AbstractControl
     uint_intermediate_q::Vector{Float64}
     ploc::Vector{Float64} # Just used for storage/working array. Values not important
     pcof_temp::Vector{Float64}
-    function HermiteControl(N_points::Int64, tf::Float64, N_derivatives::Int64)
+    scaling_type::Symbol
+    function HermiteControl(N_points::Int64, tf::Float64, N_derivatives::Int64, scaling_type::Symbol=:heuristic)
         @assert N_points > 1
 
         N_coeff = N_points*(N_derivatives+1)*2
@@ -72,7 +73,7 @@ mutable struct HermiteControl <: AbstractControl
             fn_vals_p, fnp1_vals_p, fvals_collected_p, 
             fn_vals_q, fnp1_vals_q, fvals_collected_q, 
             uint_p, uint_q, uint_intermediate_p, uint_intermediate_q, ploc,
-            pcof_temp)
+            pcof_temp, scaling_type)
     end
 end
 
@@ -228,7 +229,16 @@ function eval_derivative(control::HermiteControl, t::Real,
         # order derivatives have the same impact as the parameters
         # corresponding to lower order derivatives.
         for i in 0:control.N_derivatives
-            scaling_factor = factorial(i+1)*2^i
+            if (control.scaling_type == :Taylor)
+                scaling_factor = 1
+            elseif (control.scaling_type == :Derivative)
+                scaling_factor = dt^i / factorial(i)
+            elseif (control.scaling_type == :Heuristic)
+                scaling_factor = factorial(i+1)*2^i
+            else
+                throw(ArgumentError(string(control.scaling_type)))
+            end
+
             control.fn_vals_p[1+i]   *= scaling_factor
             control.fnp1_vals_p[1+i] *= scaling_factor
             control.fn_vals_q[1+i]   *= scaling_factor
