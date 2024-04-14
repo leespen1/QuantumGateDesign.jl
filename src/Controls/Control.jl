@@ -306,3 +306,18 @@ function eval_grad_p_derivative_fin_diff(control::AbstractControl, t::Real,
     end
     return grad
 end
+
+function eval_grad_q_derivative_fin_diff(control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real},  order::Int64)
+    pcof_copy = copy(pcof)
+    grad = zeros(length(pcof))
+    for i in 1:length(pcof)
+        pcof_copy .= pcof
+        pcof_copy[i] += 1e-5
+        pval_r = eval_q_derivative(control, t, pcof_copy, order)
+        pcof_copy[i] -= 2e-5
+        pval_l = eval_q_derivative(control, t, pcof_copy, order)
+        grad[i] = (pval_r - pval_l)/2e-5
+    end
+    return grad
+end
