@@ -2,39 +2,43 @@ using Test: @test, @testset
 
 function test_gradient_agreement(prob, control, pcof, target; 
         order=2, cost_type=:Infidelity,
-        print_results=false
+        print_results=false, gmres_abstol=1e-15, gmres_reltol=1e-15
     )
 
+    # Use 1e-15 gmres tolerance so that gradients don't differ due to different
+    # gmres results.
 
     # Check that gradients calculated using discrete adjoint and finite difference
     # methods agree to reasonable precision
     grad_disc_adj = discrete_adjoint(
         prob, control, pcof, target, order=order,
-        cost_type=cost_type
+        cost_type=cost_type, abstol=gmres_abstol, reltol=gmres_reltol
     )
 
     grad_forced = eval_grad_forced(
         prob, control, pcof, target, order=order,
-        cost_type=cost_type
+        cost_type=cost_type, abstol=gmres_abstol, reltol=gmres_reltol
     )
 
     grad_fin_diff = eval_grad_finite_difference(
         prob, control, pcof, target, order=order,
-        cost_type=cost_type
+        cost_type=cost_type, abstol=gmres_abstol, reltol=gmres_reltol
     )
 
     forced_atol = 1e-14
     fin_diff_atol = 1e-9
 
-    @testset "Forced Method" begin
-        for k in 1:length(grad_disc_adj)
-            @test isapprox(grad_disc_adj[k], grad_forced[k], atol=forced_atol, rtol=forced_atol)
+    @testset "Testing Gradient Agreement of Forced and Finite Difference Methods with Discrete Adjoint" begin
+        @testset "Forced Method" begin
+            for k in 1:length(grad_disc_adj)
+                @test isapprox(grad_disc_adj[k], grad_forced[k], atol=forced_atol, rtol=forced_atol)
+            end
         end
-    end
 
-    @testset "Finite Difference" begin
-        for k in 1:length(grad_disc_adj)
-            @test isapprox(grad_disc_adj[k], grad_fin_diff[k], atol=fin_diff_atol, rtol=forced_atol)
+        @testset "Finite Difference" begin
+            for k in 1:length(grad_disc_adj)
+                @test isapprox(grad_disc_adj[k], grad_fin_diff[k], atol=fin_diff_atol, rtol=forced_atol)
+            end
         end
     end
 
