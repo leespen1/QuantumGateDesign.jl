@@ -22,8 +22,11 @@ function test_control_gradient(control::AbstractControl, upto_order=0)
     return nothing
 end
 
-function test_control_derivatives(control::AbstractControl, upto_order=1)
-    pcof = rand(control.N_coeff)
+function test_control_derivatives(control::AbstractControl, upto_order=1, pcof=missing)
+    if ismissing(pcof)
+        pcof = rand(control.N_coeff)
+    end
+
     # Add cushion to start and end ts so we have enough space to do centered difference methods
     max_cd_stepsize = 1e-15 ^ (1/(2*upto_order+1))
     println(max_cd_stepsize)
@@ -31,6 +34,7 @@ function test_control_derivatives(control::AbstractControl, upto_order=1)
     max_t = control.tf - max_cd_stepsize*upto_order
     ts = LinRange(min_t, max_t, 1000)
     grad_analytic = zeros(control.N_coeff)
+
     for order in 1:upto_order
         @testset "Value p/q derivative order $order" begin
         # Once we believe eval_p_derivative gives analytically correct results,
@@ -38,14 +42,21 @@ function test_control_derivatives(control::AbstractControl, upto_order=1)
         p(x) = eval_p_derivative(control, x, pcof, order-1)
         q(x) = eval_q_derivative(control, x, pcof, order-1)
             for t in ts
+
+                function_val = eval_p_derivative(control, t, pcof, order-1)
                 dval_analytic = eval_p_derivative(control, t, pcof, order)
                 dval_fin_diff = central_difference(p, t, 1)
-                @test isapprox(dval_analytic, dval_fin_diff, atol=1e-9)
+
+                atol = 10*abs(1e-15*function_val)^(2/3)
+                @test isapprox(dval_analytic, dval_fin_diff, atol=atol)
                 # Expected error is ~1e-10
 
+                function_val = eval_q_derivative(control, t, pcof, order-1)
                 dval_analytic = eval_q_derivative(control, t, pcof, order)
                 dval_fin_diff = central_difference(q, t, 1)
-                @test isapprox(dval_analytic, dval_fin_diff, atol=1e-9)
+
+                atol = 10*abs(1e-15*function_val)^(2/3)
+                @test isapprox(dval_analytic, dval_fin_diff, atol=atol)
 
                 # Should add a relative tolerance check here as well
             end
