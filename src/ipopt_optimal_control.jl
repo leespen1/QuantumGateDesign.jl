@@ -49,7 +49,8 @@ function optimize_gate(
         pcof_init::AbstractVector{Float64}, target::VM;
         order=4,
         pcof_L=missing,
-        pcof_U=missing
+        pcof_U=missing,
+        maxIter=50
     ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
     # Right now I am unnecessarily doing a full forward evolution to compute the
@@ -108,7 +109,6 @@ function optimize_gate(
         dummy_eval_hessian!,
     )
 
-    maxIter = 150
     max_cpu_time = 300.0 # 5 minutes
     lbfgsMax = 200 
     acceptTol = 5e-5 
