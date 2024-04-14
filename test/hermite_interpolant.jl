@@ -16,5 +16,5 @@ function test_hermite_interpolant(control::HermiteControl, pcof::AbstractVector{
             @test isapprox(q_val, pcof[q_offset + 1 + i*(1+control.N_derivatives) + derivative_order], rtol=rtol)
         end
     end
-end
+    end # testset
 end
