@@ -34,7 +34,7 @@ mutable struct HermiteControl <: AbstractControl
     ploc::Vector{Float64} # Just used for storage/working array. Values not important
     pcof_temp::Vector{Float64}
     scaling_type::Symbol
-    function HermiteControl(N_points::Int64, tf::Float64, N_derivatives::Int64, scaling_type::Symbol=:heuristic)
+    function HermiteControl(N_points::Int64, tf::Float64, N_derivatives::Int64, scaling_type::Symbol=:Heuristic)
         @assert N_points > 1
 
         N_coeff = N_points*(N_derivatives+1)*2
