@@ -50,24 +50,38 @@ function optimize_gate(
         order=4,
         pcof_L=missing,
         pcof_U=missing,
-        maxIter=50
+        maxIter=50,
+        ridge_penalty_strength=1e-2
     ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
+
+
 
     # Right now I am unnecessarily doing a full forward evolution to compute the
     # infidelity, when this should be done already in the gradient computation.
     function eval_f(pcof::Vector{Float64})
-        #println(pcof)
         history = eval_forward(schro_prob, controls, pcof, order=order)
+
+        # Infidelity Term
         QN = @view history[:,1,end,:]
         infidelity_val = infidelity(QN, target, schro_prob.N_ess_levels) 
+
+        # Guard Penalty Term
         dt = schro_prob.tf / schro_prob.nsteps
         guard_pen_val = guard_penalty(history, dt, schro_prob.tf, schro_prob.guard_subspace_projector)
 
-        return infidelity_val + guard_pen_val
+        # Ridge/L2 Penalty Term
+        ridge_pen_val = dot(pcof, pcof)*ridge_penalty_strength / length(pcof)
+        
+
+        return infidelity_val + guard_pen_val + ridge_pen_val
     end
 
     function eval_grad_f!(pcof::Vector{Float64}, grad_f::Vector{Float64})
         grad_f .= discrete_adjoint(schro_prob, controls, pcof, target, order=order)
+
+        # Ridge Regression Penalty
+        N_coeff = length(pcof)
+        @. grad_f += 2.0*ridge_penalty_strength*pcof / N_coeff
     end
 
     N_parameters = length(pcof_init)
@@ -110,10 +124,10 @@ function optimize_gate(
     )
 
     max_cpu_time = 300.0 # 5 minutes
-    lbfgsMax = 200 
+    lbfgsMax = 10
     acceptTol = 5e-5 
-    ipTol = 5e-5
-    acceptIter = 10 # Number of "acceptable" iterations before calling it quits
+    ipTol = 1e-5
+    acceptIter = 15 # Number of "acceptable" iterations before calling it quits
     print_level = 5 # Default is 5
     nlp_lower_bound = 5e-5
 
@@ -129,10 +143,14 @@ function optimize_gate(
     Ipopt.AddIpoptIntOption(ipopt_prob, "acceptable_iter", acceptIter); # If we perform this many iterations with "acceptable" NLP error, terminate optimization process (useful if we can't reach desired tolerance)
     Ipopt.AddIpoptStrOption(ipopt_prob, "jacobian_approximation", "exact");
     #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "first-order") # What does this do?
-    Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "none") # Not sure what derivative test does, but it takes a minute.
+    #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "none") # Not sure what derivative test does, but it takes a minute.
     Ipopt.AddIpoptIntOption(ipopt_prob, "print_level", print_level)  
     # Anything below this number will be considered -∞. I.e., terminate when objective goes beloww this
-    Ipopt.AddIpoptNumOption(ipopt_prob, "nlp_lower_bound_inf", nlp_lower_bound)
+    #Ipopt.AddIpoptNumOption(ipopt_prob, "nlp_lower_bound_inf", nlp_lower_bound)
+    
+    # Trying to figure out why my ls is frequently bigger than in juqbox
+    # If I add this, the optimization suffers greatly.
+    Ipopt.AddIpoptStrOption(ipopt_prob, "accept_every_trial_step", "yes")
 
 
     ipopt_prob.x .= pcof_init
