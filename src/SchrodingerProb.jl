@@ -64,7 +64,6 @@ mutable struct SchrodingerProb{M, VM}
         # and an assertion that the projector is symmetric (which is really the
         # only requirement we have)
         if ismissing(guard_subspace_projector)
-            real_system_size = N_tot_levels
             guard_subspace_projector = SparseArrays.spzeros(real_system_size, real_system_size)
         end
 
