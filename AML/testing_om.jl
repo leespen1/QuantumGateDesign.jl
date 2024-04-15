@@ -43,6 +43,7 @@ function setup_carrier_prob(x1_x2_x12, om)
     println("Setup for ", eval_lab ? "lab frame evaluation" : "rotating frame optimization")
 
     Nctrl = 2 # Number of control Hamiltonians
+    Nfreq = size(om, 2)
 
     Ne1 = 2 # essential energy levels per oscillator 
     Ne2 = 2
@@ -292,10 +293,16 @@ function random_om_near_juqbox(x1_x2_x12)
     x2 = x1_x2_x12[2]
     x12 = x1_x2_x12[3]
 
-    #Nfreq = 2 # number of carrier frequencies
-    Nfreq = 3 # number of carrier frequencies
+    Nctrl = 2
+    Nfreq = rand([2,3])
 
     om = zeros(Nctrl, Nfreq) # Allocate space for the carrier wave frequencies
+
+    # This doesn't even matter if we match rot_freq to fa, fb
+    fa = 4.10595    # official
+    fb = 4.81526   # official
+    favg = 0.5*(fa+fb)
+    rot_freq = [fa, fb] # rotational frequencies
 
     @assert(Nfreq==1 || Nfreq==2 || Nfreq==3)
     if Nfreq == 2
