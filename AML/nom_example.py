@@ -36,6 +36,7 @@ y_train += np.random.normal(loc=0.0, scale=0.1, size=(N_samples, 1))
 
 
 
+
 # Create the model
 objective_model = objective_function_model()
 
@@ -45,11 +46,15 @@ objective_model.compile(optimizer='adam', loss='mse')
 # Train the model
 objective_model.fit(x_train, y_train, epochs=50, batch_size=32)
 
+objective_model.save_weights('my_weights.weights.h5')
+
 
 plt.scatter(x_train, y_train, label="training data")
 plt.scatter(x_test, y_test, label="test data")
 
 y_pred = objective_model.predict(x_test)
 plt.scatter(x_test, y_pred, label="NN pred")
+plt.legend()
 
 plt.show()
+
