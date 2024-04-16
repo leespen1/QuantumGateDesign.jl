@@ -76,7 +76,7 @@ function setup_carrier_prob(x1_x2_x12, om)
     #
     x1 = x1_x2_x12[1]
     x2 = x1_x2_x12[2]
-    x12 = x1_x2_x12[2]
+    x12 = x1_x2_x12[3]
       
     # construct the lowering and raising matricies: amat, bmat
 
@@ -192,19 +192,7 @@ function setup_carrier_prob(x1_x2_x12, om)
 
     nCoeff = 2*Nctrl*Nfreq*D1 # Total number of parameters.
 
-    Random.seed!(2456)
-    if startFromScratch
-        pcof0 = amax*0.01 * rand(nCoeff)
-        println("*** Starting from pcof with random amplitude ", amax*0.01)
-    else
-        # the data on the startfile must be consistent with the setup!
-        # use if you want to have initial coefficients read from file
-        pcof0 = read_pcof(startFile)
-        nCoeff = length(pcof0)
-        D1 = div(nCoeff, 2*Nctrl*Nfreq) # factor '2' is for sin/cos
-        nCoeff = 2*Nctrl*Nfreq*D1 # just to be safe if the file doesn't contain the right number of elements
-        println("*** Starting from B-spline coefficients in file: ", startFile)
-    end
+    pcof0 = zeros(nCoeff) # Use zero control to start with, just for consistency between runs
 
     samplerate = 32 # for plotting
     casename = "cnot2" # for constructing file names
