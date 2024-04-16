@@ -227,30 +227,7 @@ function setup_carrier_prob(x1_x2_x12, om)
     wa = Juqbox.Working_Arrays(params, nCoeff)
     juqbox_ipopt_prob = Juqbox.setup_ipopt_problem(params, wa, nCoeff, minCoeff, maxCoeff, maxIter=maxIter, lbfgsMax=lbfgsMax, startFromScratch=startFromScratch)
 
-    #uncomment to run the gradient checker for the initial pcof
-    #=
-    if @isdefined addOption
-        addOption( prob, "derivative_test", "first-order"); # for testing the gradient
-    else
-        AddIpoptStrOption( prob, "derivative_test", "first-order")
-    end
-    =#
 
-    #uncomment to change print level
-    #=
-    if @isdefined addOption
-        addOption(prob, "print_level", 0); # for testing the gradient
-    else
-        AddIpoptIntOption(prob, "print_level", 0)
-    end
-    =#
-
-    println("Initial coefficient vector stored in 'pcof0'")
-
-    if eval_lab
-        objf, uhist, trfid = traceobjgrad(pcof0, params, wa, true, false); # evaluate objective function, but not the gradient
-        println("Trace fidelity: ", trfid);
-    end
 
     return params, juqbox_ipopt_prob, pcof0
 end
