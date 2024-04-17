@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.initializers import Constant
 from itertools import combinations_with_replacement
+import numpy as np
 """
 A layer that does nothing but apply weights and add biases to the input. In
 this way, we obtain a 'controllable input'.
@@ -159,4 +160,52 @@ def get_results_NeuralalOptimizationMachine(neural_optimization_model, x):
     optimal_x = neural_optimization_model.layers[0](x)
     loss = neural_optimization_model(x)
     return optimal_x, loss
+
+"""
+Breaks labels into bins, and resamples points from bins with fewer entries
+until there is equal representation of points from each bin. This is done because
+'good' carrier wave frequencies are exponentially rare, so we want to make sure
+their impact is felt on the NN regressor (otherwise a low loss can be obtained
+by just always predicting an infidelity of -5e-5, which is where most random
+pulses end up)
+
+BE CAREFUL TO ONLY RESAMPLE TRAINING DATA, SO WE DONT ACCIDENTALLY TRAIN ON TEST DATA
+"""
+def resample_bins(X, y, bins=np.array([-5, -4, -3, -2, -1, 0])):
+    print(f"Using bins: {bins}")
+    # Digitize the labels to find out which bin they belong to
+    indices = np.digitize(y, bins, right=True)
+
+    # Find the number of samples per bin
+    num_samples_per_bin = np.array([np.sum(indices == i) for i in range(1, len(bins))])
+    print(f"Number of samples in each bin: {num_samples_per_bin}")
+
+    # Determine the maximum number of samples in any bin
+    max_samples = np.max(num_samples_per_bin)
+
+    # Initialize an array to hold the resampled indices
+    resampled_indices = np.array([], dtype=int)
+
+    # Resample each bin
+    for i in range(1, len(bins)):
+        # Get the indices of all samples in bin i
+        bin_indices = np.where(indices == i)[0]
+        # If this bin has fewer samples than max_samples, replicate them
+        if len(bin_indices) < max_samples:
+            # Calculate the number of times to repeat the bin to reach close to max_samples
+            repeat_times = int(np.ceil(max_samples / len(bin_indices)))
+            resampled_bin_indices = np.tile(bin_indices, repeat_times)[:max_samples]
+        else:
+            resampled_bin_indices = bin_indices
+        # Append the resampled indices for this bin
+        resampled_indices = np.concatenate((resampled_indices, resampled_bin_indices))
+
+    # Shuffle resampled indices to randomize data order
+    np.random.shuffle(resampled_indices)
+
+    # Create the new resampled dataset
+    X_resampled = X[resampled_indices]
+    y_resampled = y[resampled_indices]
+
+    return X_resampled, y_resampled
 
