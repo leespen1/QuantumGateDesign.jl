@@ -1,29 +1,25 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import Normalize
 
-def visualize_2freq(X_data, y_data, X_NN=None, y_NN=None):
-    if (X_NN is not None) and (y_NN is not None):
-        N_axes = 2
-    else:
-        N_axes = 1
+def visualize_2freq(X_data, y_data, X_NN, y_NN):
 
-    fig, axes = plt.subplots(1, N_axes)
+    fig, axes = plt.subplots(1, 2)
+
+    min_y = min(min(y_data), min(y_NN))
+    max_y = max(max(y_data), max(y_NN))
+    norm = Normalize(vmin=min_y, vmax=max_y)
     # Make sure axes subscriptable
 
-    try:
-        axes[0].scatter(X_data[:,-2], X_data[:,-1], c=y_data, cmap='viridis')
-        #axes[0].colorbar(label = 'Infidelity')
-        axes[0].set_title("Simulation Data")
-    except TypeError:
-        axes.scatter(X_data[:,-2], X_data[:,-1], c=y_data, cmap='viridis')
-        #axes[0].colorbar(label = 'Infidelity')
-        axes.set_title("Simulation Data")
+    axes[0].scatter(X_data[:,-2], X_data[:,-1], c=y_data, cmap='viridis', norm=norm)
+    #axes[0].colorbar(label = 'Infidelity')
+    axes[0].set_title("Simulation Data")
 
 
-    if (X_NN is not None) and (y_NN is not None):
-        axes[1].scatter(X_NN[:,-2], X_NN[:,-1], c=y_NN, cmap='viridis')
-        #axes[1].colorbar(label = 'Infidelity')
-        axes[1].set_title("NN Predictions")
+    scatter_ret = axes[1].scatter(X_NN[:,-2], X_NN[:,-1], c=y_NN, cmap='viridis', norm=norm)
+    axes[1].set_title("NN Predictions")
+    cbar = fig.colorbar(scatter_ret, ax=axes[1], location='right', pad=0.1)
+    cbar.set_label('Infidelity')
 
     return fig
 
