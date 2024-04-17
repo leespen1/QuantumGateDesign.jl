@@ -1,5 +1,6 @@
 import tensorflow as tf
-
+from tensorflow.keras.initializers import Constant
+from itertools import combinations_with_replacement
 """
 A layer that does nothing but apply weights and add biases to the input. In
 this way, we obtain a 'controllable input'.
@@ -80,5 +81,82 @@ def get_results_NeuralalOptimizationMachine(neural_optimization_model, x):
     return optimal_x, loss
 
 
+"""
+Because I need the input of the objective function model to be the frequencies
+and the physical parameters, but the physical parameters need to be fixed in the
+neural optimization machine, I need to write my own PolynomialFeatures layer so
+I can generate the polynomial features.
 
+Otherwise I would have, for example, x is constant, y is trainable, and xy is
+trainable directly in a way so that it doesnt actually equal xy.
+"""
+class PolynomialFeatures(tf.keras.layers.Layer):
+    def __init__(self, degree=2, **kwargs):
+        super().__init__(**kwargs)
+        self.degree = degree
+
+    def build(self, input_shape):
+        input_dim = input_shape[-1]
+        indices = []
+
+        # Generate all combinations of feature indices for each degree
+        for d in range(1, self.degree + 1):
+            for combo in combinations_with_replacement(range(input_dim), d):
+                indices.append(combo)
+
+        self.indices = indices
+        super(PolynomialFeatures, self).build(input_shape)
+
+    def call(self, inputs):
+        # Create the polynomial features
+        outputs = []
+        for index_tuple in self.indices:
+            feature = tf.reduce_prod(tf.gather(inputs, index_tuple, axis=1), axis=1, keepdims=True)
+            outputs.append(feature)
+
+        return tf.concat(outputs, axis=1)
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], len(self.indices))
+
+
+class StandardScaler(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # These will hold arrays for the mean and weight of each feature
+        self.mean = None
+        self.std = None
+
+    def build(self, input_shape):
+        # Initialize the mean and std to 0 and 1 respectively
+        self.mean = self.add_weight(name='mean',
+                                    shape=(input_shape[-1],),
+                                    initializer=Constant(0.0),
+                                    trainable=False)
+        self.std = self.add_weight(name='std',
+                                   shape=(input_shape[-1],),
+                                   initializer=Constant(1.0),
+                                   trainable=False)
+        super(StandardScaler, self).build(input_shape)
+
+    """
+    Set the mean and standard deviation to reflect a dataset.
+    """
+    def fit_data(self, data):
+        # Compute the mean and std of the data
+        mean = tf.reduce_mean(data, axis=0)
+        std = tf.math.reduce_std(data, axis=0)
+        # Set the mean and std to the computed values
+        self.mean.assign(mean)
+        self.std.assign(std)
+
+    def call(self, inputs):
+        # Perform standardization
+        return (inputs - self.mean) / (self.std + tf.keras.backend.epsilon())
+
+
+def get_results_NeuralalOptimizationMachine(neural_optimization_model, x):
+    optimal_x = neural_optimization_model.layers[0](x)
+    loss = neural_optimization_model(x)
+    return optimal_x, loss
 
