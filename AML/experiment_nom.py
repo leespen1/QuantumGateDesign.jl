@@ -16,11 +16,11 @@ def objective_function_model(X):
     model = tf.keras.Sequential([
         nom.PolynomialFeatures(input_shape=input_shape),
         nom.StandardScaler(),
-        #tf.keras.layers.Dense(128, activation='relu'),
-        #tf.keras.layers.Dropout(0.5),
-        #tf.keras.layers.Dense(128, activation='relu'),
-        #tf.keras.layers.BatchNormalization(),
-        #tf.keras.layers.Dropout(0.5),
+        tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.Dropout(0.5),
+        tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.BatchNormalization(),
+        tf.keras.layers.Dropout(0.5),
         tf.keras.layers.Dense(128, activation='relu'),
         tf.keras.layers.Dropout(0.5),
         tf.keras.layers.Dense(128, activation='relu'),
@@ -58,7 +58,8 @@ y_train = y[:test_cutoff]
 
 # Resample lower-infidelity samples to match frequency of higher-infidelity samples
 
-X_train_resampled, y_train_resampled = nom.resample_bins(X_train, y_train, bins=np.array([-5,-2,0]))
+#X_train_resampled, y_train_resampled = nom.resample_bins(X_train, y_train, bins=np.array([-5,-2,0]))
+X_train_resampled, y_train_resampled = nom.resample_bins(X_train, y_train, bins=np.array([-5,-4,-3,-2,-1,0]))
 
 X_test = X[test_cutoff:]
 y_test = y[test_cutoff:]
@@ -66,17 +67,18 @@ y_test = y[test_cutoff:]
 # Model the relationship between physical parameters, frequency, and infidelity
 objective_model = objective_function_model(X)
 objective_model.compile(optimizer='adam', loss='mse')
-history = objective_model.fit(X_train_resampled, y_train_resampled, epochs=300, batch_size=32, validation_split=0.2)
+history = objective_model.fit(X_train_resampled, y_train_resampled, epochs=600, batch_size=32, validation_split=0.2)
 
 loss = history.history['loss'][-1]
 test_loss = objective_model.evaluate(X_test, y_test)
 
-timestr = time.strftime("%Y%m%d-%H:%M:%S")
-filename_base = f"model_loss={test_loss:.4f}_date={timestr}_Nfreq={N_freq}_problemtype={problemtype}"
+timestr = time.strftime("%m%d-%H:%M:%S")
+filename_base = f"model_date={timestr}_loss={test_loss:.4f}__Nfreq={N_freq}_problemtype={problemtype}"
 
 plt.plot(history.history['loss'], label="Training Loss")
 plt.plot(history.history['val_loss'], label="Validation Loss")
 plt.title(f"Training Metrics - Final Test Loss = {test_loss}")
+plt.xlabel("# Epochs Trained")
 plt.legend()
 plt.savefig(filename_base + "_training_history.png")
 
@@ -89,8 +91,28 @@ objective_model.save_weights(model_weights_filename)
 fig_train = vs.visualize_2freq(X_train, y_train, X_train, objective_model(X_train))
 fig_train.savefig(filename_base + "_training_visualization.png")
 fig_test = vs.visualize_2freq(X_test, y_test, X_test, objective_model(X_test))
-fig_train.savefig(filename_base + "_testing_visualization.png")
+fig_test.savefig(filename_base + "_testing_visualization.png")
 
 dummy_label = np.ones((1,1))
 nom_model = nom.make_NeuralOptimizationMachine(objective_model, 3)
 nom_model.fit(X[0:1,:], dummy_label, epochs=100, batch_size=1)
+
+X_opt_initial_guesses = X_test[:100,:].copy()
+X_opt_initial_guesses[1:,:3] = X_opt_initial_guesses[1,:3] # Use same physical parameters in search
+X_opt = X_opt_initial_guesses.copy()
+y_opt = np.zeros(X_opt.shape[0])
+for i in range(X_opt_initial_guesses.shape[0]):
+    nom_model = nom.make_NeuralOptimizationMachine(objective_model, 3)
+    x_initial_guess = X_opt_initial_guesses[i:i+1, :]
+    nom_model.fit(x_initial_guess, dummy_label, epochs=300, batch_size=1)
+    optimal_x, loss = nom.get_results_NeuralalOptimizationMachine(nom_model, x_initial_guess)
+    X_opt[i:i+1, :] = optimal_x
+    y_opt[i] = loss
+
+with h5py.File(filename_base + 'data.h5', 'w') as file:
+     file.create_dataset('X_opt', data=X_opt)
+     file.create_dataset('y_opt', data=y_opt)
+
+julia_datasave = {"X_opt" : X_opt, "y_opt" : y_opt}
+jl.save(filename_base + "_finalstep.jld2", julia_datasave)
+
