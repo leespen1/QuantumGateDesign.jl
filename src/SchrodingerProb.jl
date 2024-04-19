@@ -36,7 +36,7 @@ mutable struct SchrodingerProb{M, VM}
             asym_operators::Vector{M},
             u0::VM,
             v0::VM,
-            tf::Float64,
+            tf::Real,
             nsteps::Int64,
             N_ess_levels::Int64,
             guard_subspace_projector::Union{M, Missing}=missing
@@ -44,6 +44,8 @@ mutable struct SchrodingerProb{M, VM}
 
         N_tot_levels = size(u0, 1)
         N_initial_conditions = size(u0, 2)
+
+        tf = convert(Float64, tf) # Make sure final time is a float
 
         # Check dimensions of all matrices and vectors
         @assert size(u0) == size(v0)
