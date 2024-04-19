@@ -264,7 +264,7 @@ Return the index of the region to which `t` belongs.
 """
 @inline function find_region_index(t, tf, N_regions)
     # Check that t is in the interval
-    if (t < 0) || (t > tf)
+    if (t < 0) || (t > tf*(1+eps()))
         throw(DomainError(t, "Value is outside the interval [0,tf]"))
     end
     # Calculate the width of each region
