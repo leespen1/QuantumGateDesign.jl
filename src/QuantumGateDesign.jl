@@ -74,8 +74,9 @@ include("eval_grad_discrete_adjoint.jl")
 include("eval_grad_finite_difference.jl")
 include("eval_grad_forced.jl")
 
-
 include("ipopt_optimal_control.jl")
+include("gradient_descent.jl")
+
 include("state_vector_helpers.jl")
 
 include("ProblemConstructors/common_operators.jl")
@@ -83,6 +84,7 @@ include("ProblemConstructors/multi_qudit_systems.jl")
 include("ProblemConstructors/rotating_frame_qubit.jl")
 include("ProblemConstructors/dahlquist_problem.jl")
 include("ProblemConstructors/juqbox_converter.jl")
+include("ProblemConstructors/rabi_oscillator.jl")
 
 
 include("Tests/test_gradient.jl")
