@@ -41,6 +41,7 @@ function dummy_eval_hessian!(
     return 
 end
 
+
 """
 Unused, but need a function to provide to ipopt.
 """
@@ -54,6 +55,10 @@ function optimize_gate(
         ridge_penalty_strength=1e-2
     ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
+
+    pcof_history = []
+    pcof_grad_history = []
+    objective_history = []
 
 
     # Right now I am unnecessarily doing a full forward evolution to compute the
@@ -72,8 +77,11 @@ function optimize_gate(
         # Ridge/L2 Penalty Term
         ridge_pen_val = dot(pcof, pcof)*ridge_penalty_strength / length(pcof)
         
+        objective_val = infidelity_val + guard_pen_val + ridge_pen_val
 
-        return infidelity_val + guard_pen_val + ridge_pen_val
+        push!(objective_history, objective_val)
+
+        return objective_val
     end
 
     function eval_grad_f!(pcof::Vector{Float64}, grad_f::Vector{Float64})
@@ -82,18 +90,26 @@ function optimize_gate(
         # Ridge Regression Penalty
         N_coeff = length(pcof)
         @. grad_f += 2.0*ridge_penalty_strength*pcof / N_coeff
+
+        push!(pcof_history, copy(pcof))
+        push!(pcof_grad_history, copy(grad_f))
     end
 
     N_parameters = length(pcof_init)
 
     if ismissing(pcof_L)
-        pcof_L = -ones(N_parameters) # A GHz control is pretty generous
+        # If lower bounds not provided, set lower bound to -Inf  
+        pcof_L = ones(N_parameters)*-Inf
     elseif isa(pcof_L, Real)
+        # If one value provided, apply that bound to all parameters
         pcof_L = ones(N_parameters) .* pcof_L
     end
+
     if ismissing(pcof_U)
-        pcof_U = ones(N_parameters)
+        # If upper bounds not provided, set upper bound to Inf
+        pcof_U = ones(N_parameters)*Inf
     elseif isa(pcof_U, Real)
+        # If one value provided, apply that bound to all parameters
         pcof_U = ones(N_parameters) .* pcof_U
     end
 
@@ -128,9 +144,10 @@ function optimize_gate(
     acceptTol = 5e-5 
     ipTol = 1e-5
     acceptIter = 15 # Number of "acceptable" iterations before calling it quits
-    print_level = 5 # Default is 5
-    nlp_lower_bound = 5e-5
+    print_level = 5 # Default is 5, goes from 0 to 12
 
+    # Should add derivative test back in. I think this tests for correct
+    # derivatives? Maybe gradients?
 
     # Description of options: https://coin-or.github.io/Ipopt/OPTIONS.html
 
@@ -139,7 +156,7 @@ function optimize_gate(
     Ipopt.AddIpoptIntOption(ipopt_prob, "max_iter", maxIter); # Maximum number of iterations to run before terminating
     Ipopt.AddIpoptNumOption(ipopt_prob, "max_cpu_time", max_cpu_time); # Maximum number of iterations to run before terminating
     Ipopt.AddIpoptNumOption(ipopt_prob, "tol", ipTol); # Relative convergence tolerance. Terminate if (scaled) NLP error becomes smaller than this (NLP = Nonlinear Programming, is NLP error just objective function, or something closely related?)
-    Ipopt.AddIpoptNumOption(ipopt_prob, "acceptable_tol", acceptTol); # "Acceptable" relative convergence tolerance
+    #Ipopt.AddIpoptNumOption(ipopt_prob, "acceptable_tol", acceptTol); # "Acceptable" relative convergence tolerance
     Ipopt.AddIpoptIntOption(ipopt_prob, "acceptable_iter", acceptIter); # If we perform this many iterations with "acceptable" NLP error, terminate optimization process (useful if we can't reach desired tolerance)
     Ipopt.AddIpoptStrOption(ipopt_prob, "jacobian_approximation", "exact");
     #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "first-order") # What does this do?
@@ -150,14 +167,21 @@ function optimize_gate(
     
     # Trying to figure out why my ls is frequently bigger than in juqbox
     # If I add this, the optimization suffers greatly.
-    Ipopt.AddIpoptStrOption(ipopt_prob, "accept_every_trial_step", "yes")
+    #Ipopt.AddIpoptStrOption(ipopt_prob, "accept_every_trial_step", "yes")
 
 
     ipopt_prob.x .= pcof_init
     solvestat = Ipopt.IpoptSolve(ipopt_prob)
     # solvestat I think is stored in ipopt_prob as 'status'
+    #
+    return_dict = OrderedCollections.OrderedDict(
+        "ipopt_prob" => ipopt_prob,
+        "objective_history" => objective_history,
+        "pcof_history" => pcof_history,
+        "pcof_grad_history" => pcof_grad_history
+    )
 
-    return ipopt_prob
+    return return_dict
 end
 
 #=
