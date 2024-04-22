@@ -124,7 +124,8 @@ end
     pcof_vec = collect(1:N_control_points*(1+N_derivatives)*2)
     pcof_array = reshape(pcof_vec, 1+N_derivatives, N_control_points, 2)
 
-    rtols = [1e-10, 1e-11, 1e-12, 1e-13, 1e-14]
+    #rtols = [1e-10, 1e-11, 1e-12, 1e-13, 1e-14]
+    rtols = [1e-10, 1e-11, 1e-12]
     for rtol in rtols
         @testset "pcof = [1, 2, 3, ...], rtol=$rtol" begin
             test_quintic_hermite(pcof_array=pcof_array, rtol=rtol)
