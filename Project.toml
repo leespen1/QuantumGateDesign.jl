@@ -16,6 +16,7 @@ OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [weakdeps]
 CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
@@ -24,8 +25,16 @@ Juqbox = "d847742d-ef10-4feb-8f3c-cfc2faa2caf7"
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
+
 [extensions]
 ControlVisualizer = "GLMakie"
 JuqboxHelpers = "Juqbox"
 OrdinaryDiffEqInterface = "OrdinaryDiffEq"
 QuTipIntegration = ["PythonCall", "CondaPkg"]
+
+[extras] # Exists solely to specify packages that will be used in tests, but not elsewhere
+Polynomials = "f27b6e38-b328-58d1-80ce-0feddd5e7a45"
+
+[targets] # Exists solely to specify the existence of the 'test' target, and load packages only used in tests
+test = ["Polynomials"]
+
