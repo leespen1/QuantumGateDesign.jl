@@ -52,6 +52,7 @@ function optimize_gate(
         pcof_L=missing,
         pcof_U=missing,
         maxIter=50,
+        print_level=5, # Default is 5, goes from 0 to 12
         ridge_penalty_strength=1e-2
     ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
@@ -144,7 +145,7 @@ function optimize_gate(
     acceptTol = 5e-5 
     ipTol = 1e-5
     acceptIter = 15 # Number of "acceptable" iterations before calling it quits
-    print_level = 5 # Default is 5, goes from 0 to 12
+    
 
     # Should add derivative test back in. I think this tests for correct
     # derivatives? Maybe gradients?
