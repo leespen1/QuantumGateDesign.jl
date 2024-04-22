@@ -177,7 +177,7 @@ nsteps = 1
 N_ess_levels = 2
 N_guard_levels = 0
 
-prob = SchrodingerProb(system_sym, system_asym, sym_ops, asym_ops, u0, v0, tf, nsteps, N_ess_levels, N_guard_levels)
+prob = SchrodingerProb(system_sym, system_asym, sym_ops, asym_ops, u0, v0, tf, nsteps, N_ess_levels)
 control = QuantumGateDesign.SingleSymCosControl(tf, frequency=1)
 pcof = [θ]
 
