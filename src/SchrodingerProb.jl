@@ -69,6 +69,8 @@ mutable struct SchrodingerProb{M, VM}
             guard_subspace_projector = SparseArrays.spzeros(real_system_size, real_system_size)
         end
 
+        @assert isprojection(guard_subspace_projector)
+
         # Copy arrays when creating a Schrodinger problem
         new{M, VM}(
             system_sym, system_asym,
@@ -226,6 +228,10 @@ function create_guard_subspace_projector(N_tot_levels, essential_levels=[])
     end
 
     return guard_subspace_projector
+end
+
+function isprojection(A::AbstractMatrix)
+    return isapprox(A*A, A, rtol=1e-15)
 end
 
 
