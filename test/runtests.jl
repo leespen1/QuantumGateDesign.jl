@@ -97,7 +97,9 @@ end
 end
 =#
 
+@testset "All Tests" begin
 include("./hardcoded_derivatives.jl")
 include("./quintic_hermite_interpolation.jl")
 include("./hermite_polynomial.jl")
-include("./optimization_rabi_osc.jl")
+include("./optimization_rabi_osc_SWAP.jl")
+end
