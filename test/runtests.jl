@@ -11,6 +11,8 @@ using Test: @testset, @test
 # the exact same results up to machine precision.
 #
 =#
+
+#=
 @testset "Constructing Typical Problem Without Throwing Exception" begin
 end
 
@@ -93,5 +95,9 @@ end
 
 @testset "Gradients Hard-Coded" begin
 end
+=#
 
 include("./hardcoded_derivatives.jl")
+include("./quintic_hermite_interpolation.jl")
+include("./hermite_polynomial.jl")
+include("./optimization_rabi_osc.jl")
