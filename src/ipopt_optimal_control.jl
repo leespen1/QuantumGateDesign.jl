@@ -53,7 +53,8 @@ function optimize_gate(
         pcof_U=missing,
         maxIter=50,
         print_level=5, # Default is 5, goes from 0 to 12
-        ridge_penalty_strength=1e-2
+        ridge_penalty_strength=1e-2,
+        max_cpu_time = 300.0 # 5 minutes
     ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
 
@@ -140,8 +141,7 @@ function optimize_gate(
         dummy_eval_hessian!,
     )
 
-    max_cpu_time = 300.0 # 5 minutes
-    lbfgsMax = 10
+    lbfgsMax = 40
     acceptTol = 5e-5 
     ipTol = 1e-5
     acceptIter = 15 # Number of "acceptable" iterations before calling it quits
