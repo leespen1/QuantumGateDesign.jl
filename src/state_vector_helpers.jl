@@ -23,6 +23,8 @@ function get_populations(history::AbstractArray{Float64, 4})
     return populations
 end
 
+
+
 """
 Given a history array, with indices
     history[component, derivative_order, time_index]
@@ -50,6 +52,7 @@ function get_populations(history::AbstractArray{Float64, 3})
 end
 
 
+
 """
 Convert possibly complex target to real-valued one, and pad with guard levels.
 """
@@ -66,50 +69,12 @@ function target_helper(target, N_guard_levels=0)
 end
 
 
-"""
-Given state vector history, plot population evolution (assuming single qubit for labels).
-
-Should make a version that takes a Schrodinger problem as an input, so I can
-get the number of subsystems, etc.
-
-"""
-function plot_populations(ts, history::AbstractArray{Float64, 4}, level_indices, labels)
-    populations = get_populations(history)
-    N_levels = size(populations, 1)
-
-    labels = reshape(labels, 1, :) # Labels must be a row matrix
-
-    ret = []
-    # Iterate over initial conditions
-    for initial_condition in 1:size(populations, 3)
-        title = labels[initial_condition]
-        pl = Plots.plot(xlabel="Time (ns)", ylabel="Population", 
-                        title=title, legend=false)
-        # Iterate over essential states
-        for (i, level_index) in enumerate(level_indices)
-            Plots.plot!(pl, ts, populations[level_index, :, initial_condition],
-                  label=labels[i])
-        end
-        push!(ret, pl)
-    end
-    return ret
-end
-
-"""
-Given state vector history for several initial conditions, plot population evolution
-(assuming single qubit for labels).
-"""
-function plot_populations(history::AbstractArray{Float64, 3})
-    N_initial_conditions = size(history, 3)
-    population_graphs = [plot_populations(history[:,:,i]) for i in 1:N_initial_conditions]
-
-    pl = Plots.plot(population_graphs..., layout = length(population_graphs))
-    return pl
-end
 
 function complex_to_real(x)
     return vcat(real(x), imag(x))
 end
+
+
 
 function real_to_complex(x)
     N = div(size(x, 1), 2)
@@ -122,9 +87,13 @@ function real_to_complex(x)
     return real_x .+ (im .* imag_x)
 end
 
+
+
 function real_to_complex(x_real, x_imag)
     return x_real .+ (im .* x_imag)
 end
+
+
 
 function initial_basis(N_ess, N_guard)
     N_tot = N_ess + N_guard

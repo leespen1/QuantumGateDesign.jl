@@ -91,6 +91,7 @@ include("Tests/test_gradient.jl")
 include("Tests/test_convergence.jl")
 
 include("Plotting/plot_control.jl")
+include("Plotting/plot_populations.jl")
 
 
 module OldCompat
