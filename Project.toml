@@ -34,7 +34,8 @@ QuTipIntegration = ["PythonCall", "CondaPkg"]
 
 [extras] # Exists solely to specify packages that will be used in tests, but not elsewhere
 Polynomials = "f27b6e38-b328-58d1-80ce-0feddd5e7a45"
+UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
 [targets] # Exists solely to specify the existence of the 'test' target, and load packages only used in tests
-test = ["Polynomials"]
+test = ["Polynomials", "UnicodePlots"]
 
