@@ -111,6 +111,43 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
         #fig[4,1] = Label("Hello World")
     end
 
+
+    # Handle history, final state
+    if !ismissing(prob)
+        history_obsv = Observable{Array{Float64, 4}}(eval_forward(prob, controls, to_value.(pcof_obsv), order=4))
+        final_state_obsv = lift(x -> x[:,1,end,:]', history_obsv)
+        #on(final_state_obsv) do final_state
+        #    display(final_state)
+        #end
+        #final_state_obsv[] = history_obsv[:,1,end,:]' # Initialize
+
+        final_state_fig = fig[3, 2]
+        final_state_ax, final_state_hm = heatmap(
+            final_state_fig, final_state_obsv, colorrange=(-1,1)
+        )
+        final_state_ax.title = "Final State" # For some reason if I set title= in heatmap the result is very slow
+        Colorbar(fig[3, 3], final_state_hm, label="Value")
+        #final_state_ax = Axis(final_state_fig)
+        #heatmap!(final_state_ax, final_state_obsv)
+
+        ## Attempt at Final State Matrix Display using Text (result was very slow)
+        #final_state_strings = [Observable(QuantumGateDesign.Printf.@sprintf("%.2f", final_state_obsv[][indices]))
+        #                       for indices in CartesianIndices(final_state_obsv[])
+        #                      ]
+        #on(final_state_obsv) do final_state_matrix
+        #    for indices in CartesianIndices(final_state_matrix)
+        #        final_state_strings[indices][] = QuantumGateDesign.Printf.@sprintf("%.2f", final_state_matrix[indices])
+        #    end
+        #end
+        #for i in 1:size(final_state_strings, 1)
+        #    for j in 1:size(final_state_strings, 2)
+        #        Label(final_state_fig[i+1,j], final_state_strings[i,j])
+        #    end
+        #end
+        #Label(final_state_fig[1,:], "Final State")
+    end
+
+
     max_control_amp = 1.0
     min_control_amp = -1.0
     #=================================================
@@ -140,14 +177,16 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
         ylims!(ax, min_control_amp, max_control_amp)
 
         if !ismissing(prob)
-            history = eval_forward(prob, controls, pcof, order=4)
-            populations = get_populations(history)
+            history_obsv[] = eval_forward(prob, controls, pcof, order=4)
+            populations = get_populations(history_obsv[])
             for i in 1:size(prob.u0, 2)
                 populations_obsv_list[i][] = populations[:,:,i]
             end
 
             infidelity_obsv[] = infidelity(prob, controls, pcof, target, order=4)
-            infidelity_str_obsv[] = "Fidelity: $(1 - infidelity_obsv[])"
+            #infidelity_str_obsv[] = "InFidelity: $(infidelity_obsv[])"
+            infidelity_str_obsv[] = QuantumGateDesign.Printf.@sprintf("Fidelity: %.2f %%", 100*(1-infidelity_obsv[]))
+
         end
     end
 
@@ -192,8 +231,24 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
     #menu = Menu(fig[4,1], options=options)
 
     if !ismissing(prob)
-        text!(infidelity_str_obsv, position=(0.0, 0.0), color=:red, font="Arial", fontsize=20)
+        text!(population_axes[1], infidelity_str_obsv, position=(0.0, 0.0), color=:red, font="Arial", fontsize=20)
     end
+
+    if !ismissing(target)
+        target_fig = fig[1,2]
+        target_ax, target_hm = heatmap(
+            target_fig, target', colorrange=(-1,1)
+        )
+        target_ax.title = "Target State"
+        Colorbar(fig[1,3], target_hm, label="Value")
+        #display_matrix(fig[1,2], target, "Target Matrix")
+        #target_ax = Axis(target_fig)
+        #heatmap!(target_ax, target, title="Target Matrix")
+    end
+
+    final_state_fig = fig[1,2]
+    
+    
 
     return fig
 end
@@ -225,5 +280,24 @@ function get_max_control_amp(control, n_samples, pcof_upper_lim, pcof_lower_lim)
     
     max_q = maximum(p_vals)
 end
+
+function display_matrix(fig, mat, title="Sample Text")
+    for i in 1:size(mat, 1)
+      for j in 1:size(mat, 2)
+          Label(fig[i+1,j], QuantumGateDesign.Printf.@sprintf("%.2f", mat[i,j]))
+      end
+    end
+    Label(fig[1,:], title)
+end
+
+function string_matrix(mat)
+    string_mat = Matrix{String}(undef, size(mat)...)
+    for i in eachindex(mat)
+        string_mat[i] = QuantumGateDesign.Printf.@sprintf("%.2f", mat[i])
+    end
+    return string_mat
+end
+
+
 
 end # Module
