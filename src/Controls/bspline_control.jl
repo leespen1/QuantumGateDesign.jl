@@ -9,7 +9,7 @@ struct BSplineControl <: AbstractControl
     bcpar::bcparams
 end
 
-function bspline_control(tf::Float64, D1::Int, omega::AbstractVector{Float64})
+function BsplineControl(tf::Float64, D1::Int, omega::AbstractVector{Float64})
     pcof = zeros(2*D1*length(omega)) # For now, only doing one coupled pair of control
     omega_bcpar = [omega] # Need to wrap in another vector, since bcparams generally expects multiple controls (multiple frequencies != multiple controls)
     bcpar = bcparams(tf, D1, omega_bcpar, pcof)
@@ -26,7 +26,7 @@ function bspline_controls(tf::Float64, D1::Int, omega::AbstractMatrix{Float64})
     controls = Vector{BSplineControl}()
     for i in 1:N_controls 
         omega_vec = omega[i,:]
-        push!(controls, bspline_control(tf, D1, omega_vec))
+        push!(controls, BsplineControl(tf, D1, omega_vec))
     end
 
     return controls
@@ -126,7 +126,7 @@ struct BSplineControlAutodiff <: AbstractControl
     bcpar::bcparams
 end
 
-function bspline_control_autodiff(tf::Float64, D1::Int, omega::AbstractVector{Float64})
+function BSplineControlAutodiff(tf::Float64, D1::Int, omega::AbstractVector{Float64})
     pcof = zeros(2*D1*length(omega)) # For now, only doing one coupled pair of control
     omega_bcpar = [omega] # Need to wrap in another vector, since bcparams generally expects multiple controls (multiple frequencies != multiple controls)
     bcpar = bcparams(tf, D1, omega_bcpar, pcof)
@@ -143,7 +143,7 @@ function bspline_controls_autodiff(tf::Float64, D1::Int, omega::AbstractMatrix{F
     controls = Vector{BSplineControlAutodiff}()
     for i in 1:N_controls 
         omega_vec = omega[i,:]
-        push!(controls, bspline_control_autodiff(tf, D1, omega_vec))
+        push!(controls, BSplineControlAutodiff(tf, D1, omega_vec))
     end
 
     return controls
