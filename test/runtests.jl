@@ -100,6 +100,8 @@ end
 @testset "All Tests" begin
 include("./hardcoded_derivatives.jl")
 include("./quintic_hermite_interpolation.jl")
+include("./test_control_derivatives.jl")
+include("./test_control_gradients.jl")
 include("./hermite_polynomial.jl")
 include("./forward_convergence.jl")
 include("./optimization_rabi_osc_SWAP.jl")
