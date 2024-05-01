@@ -3,7 +3,7 @@ module QuantumGateDesign
 
 import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
 import BenchmarkTools, SparseArrays, Dates, OrderedCollections, JLD2
-import Printf
+using Printf: @printf, @sprintf
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 
 # Export derivative computation functions
