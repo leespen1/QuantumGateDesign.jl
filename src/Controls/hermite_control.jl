@@ -193,8 +193,9 @@ function eval_derivative(control::HermiteControl, t::Real,
     )
 
     # Maybe remove this warning for speed.
-    if (order > (2+2*control.N_derivatives)-1)
-        throw(DomainError(order, "Derivative order must not exceed 2*(1+N_derivatives)"))
+    if (order >= 2*(1+control.N_derivatives))
+        return 0.0
+        #throw(DomainError(order, "Derivative order must not exceed 2*(1+N_derivatives)"))
     end
 
     k = order
