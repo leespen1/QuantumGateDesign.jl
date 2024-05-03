@@ -99,10 +99,15 @@ end
 
 @testset "All Tests" begin
 include("./hardcoded_derivatives.jl")
+# Test that Control Functions are working properly
 include("./quintic_hermite_interpolation.jl")
 include("./test_control_derivatives.jl")
 include("./test_control_gradients.jl")
 include("./hermite_polynomial.jl")
+# Test that IVPs are converging with correct order
 include("./forward_convergence.jl")
+# Test that gradients are being computed consistently
+include("./compare_gradients.jl")
+# Check that the gate design/optimization problem is behaving properly
 include("./optimization_rabi_osc_SWAP.jl")
 end
