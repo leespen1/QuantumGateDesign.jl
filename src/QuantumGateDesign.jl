@@ -2,7 +2,7 @@ module QuantumGateDesign
 
 
 import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
-import BenchmarkTools, SparseArrays, Dates, OrderedCollections, JLD2
+import BenchmarkTools, SparseArrays, Dates, OrderedCollections, JLD2, Random
 using Printf: @printf, @sprintf
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 
@@ -86,6 +86,7 @@ include("ProblemConstructors/rotating_frame_qubit.jl")
 include("ProblemConstructors/dahlquist_problem.jl")
 include("ProblemConstructors/juqbox_converter.jl")
 include("ProblemConstructors/rabi_oscillator.jl")
+include("ProblemConstructors/random_problem.jl")
 
 
 include("Tests/test_convergence.jl")

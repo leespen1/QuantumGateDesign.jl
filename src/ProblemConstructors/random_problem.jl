@@ -25,3 +25,5 @@ function construct_rand_prob(complex_system_size, N_operators; tf=2.0, nsteps=10
         system_sym, system_asym, sym_operators, asym_operators, u0, v0,
         tf, nsteps, N_ess_levels
     )
+    return prob
+end
