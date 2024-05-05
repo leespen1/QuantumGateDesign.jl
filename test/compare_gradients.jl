@@ -1,5 +1,6 @@
 using QuantumGateDesign
 using Test: @test, @testset
+using Random
 
 function test_gradient_agreement(prob, control, pcof, target; 
         orders=(2,4,6,8,10), cost_type=:Infidelity,
@@ -138,14 +139,41 @@ function plot_gradient_agreement(prob, controls, target;
 end
 
 
+println("#"^40, "\n")
+println("Comparing Gradients for several problems\n")
+println("#"^40, "\n")
+
 
 @testset "Checking That 3 Gradient Computation Methods Agree" begin
 Random.seed!(42)
 @testset "Rabi Oscillator" begin
+    println("-"^40, "\n")
+    println("Problem: Rabi Oscillator\n")
+    println("-"^40, "\n")
+
     prob = QuantumGateDesign.construct_rabi_prob(tf=pi)
     prob.nsteps = 10
     control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
     pcof = rand(control.N_coeff) 
+    target = rand(prob.real_system_size, prob.N_initial_conditions)
+
+    test_gradient_agreement(prob, control, pcof, target)
+end
+@testset "Random Problem" begin
+    println("-"^40, "\n")
+    println("Problem: Random\n")
+    println("-"^40, "\n")
+    complex_system_size = 4
+    N_operators = 1
+    prob = QuantumGateDesign.construct_rand_prob(
+        complex_system_size,
+        N_operators,
+        tf = 1.0,
+        nsteps = 10
+    )
+    control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
+    pcof = rand(control.N_coeff) 
+
     target = rand(prob.real_system_size, prob.N_initial_conditions)
 
     test_gradient_agreement(prob, control, pcof, target)
