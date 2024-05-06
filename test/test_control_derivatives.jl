@@ -1,6 +1,8 @@
 using QuantumGateDesign
 import QuantumGateDesign as QGD
 using Test: @test, @testset
+using Printf: @printf
+using PrettyTables
 
 function test_control_derivatives(control::AbstractControl, pcof; upto_order=1,
         ts=missing)
