@@ -6,7 +6,9 @@
 
 using QuantumGateDesign
 using Random
-using Test
+using Test: @testset, @test
+
+
 
 function quintic_hermite(x0, x1, f_x0, f_x1, x)
     # Compute the term which is 0th order in x
@@ -137,5 +139,4 @@ end
             test_quintic_hermite(rtol=rtol)
         end
     end
-
 end
