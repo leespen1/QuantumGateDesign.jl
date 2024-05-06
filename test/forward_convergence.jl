@@ -65,8 +65,29 @@ end
 @testset "Checking Forward Evolution Convergence Order" begin
 Random.seed!(42)
 @testset "Rabi Oscillator" begin
+    println("-"^40, "\n")
+    println("Problem: Rabi Oscillator\n")
+    println("-"^40, "\n")
+
     prob = QuantumGateDesign.construct_rabi_prob(tf=pi)
     prob.nsteps = 10
+    control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
+    pcof = rand(control.N_coeff) 
+
+    test_order(prob, control, pcof)
+end
+@testset "Random Problem" begin
+    println("-"^40, "\n")
+    println("Problem: Random\n")
+    println("-"^40, "\n")
+    complex_system_size = 4
+    N_operators = 1
+    prob = QuantumGateDesign.construct_rand_prob(
+        complex_system_size,
+        N_operators,
+        tf = 1.0,
+        nsteps = 10
+    )
     control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
     pcof = rand(control.N_coeff) 
 
