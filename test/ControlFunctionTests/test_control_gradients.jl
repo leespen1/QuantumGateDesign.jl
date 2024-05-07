@@ -2,9 +2,9 @@ using QuantumGateDesign
 import QuantumGateDesign as QGD
 using LinearAlgebra: norm
 using Test: @test, @testset
+using Random: rand, MersenneTwister
 
 function test_control_gradient(control::AbstractControl, pcof; upto_order=0)
-    pcof = rand(control.N_coeff)
     t_start = upto_order
     ts = LinRange(0, control.tf, 1001)
     grad_analytic = zeros(control.N_coeff)
@@ -82,7 +82,7 @@ end
         bspline_control = QGD.BsplineControl(tf, D1, omega)
         bspline_control_autodiff = QGD.BSplineControlAutodiff(tf, D1, omega)
 
-        pcof = rand(bspline_control.N_coeff)
+        pcof = rand(MersenneTwister(0), bspline_control.N_coeff)
 
         @testset "Hard Coded Derivative" begin
             test_control_gradient(bspline_control, pcof, upto_order=1)

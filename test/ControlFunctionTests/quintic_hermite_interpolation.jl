@@ -5,8 +5,8 @@
 ===============================================================================#
 
 using QuantumGateDesign
-using Random
 using Test: @testset, @test
+using Random: rand, MersenneTwister
 
 
 
@@ -41,21 +41,13 @@ end
 
 
 
-function test_quintic_hermite(;randseed=42, rtol=1e-15, pcof_array=missing)
+function test_quintic_hermite(pcof_vec; randseed=42, rtol=1e-14)
 
-    N_control_points = 3
     tf = 100.0
     N_derivatives = 2
 
-    # Default to random pcof_array, but can specify one if desired
-    if ismissing(pcof_array)
-        Random.seed!(randseed)
-        pcof_array = rand(1+N_derivatives, N_control_points, 2)
-    end
-
-    @assert size(pcof_array) == (1+N_derivatives, N_control_points, 2)
-    
-    pcof_vec = reshape(pcof_array, :)
+    pcof_array = reshape(pcof_vec, 1+N_derivatives, :, 2)
+    N_control_points = size(pcof_array, 2)
 
     quintic_hermite_control = QuantumGateDesign.HermiteControl(
         N_control_points, tf, N_derivatives, :Derivative
@@ -122,21 +114,21 @@ end
     N_control_points = 3
     N_derivatives = 2
 
-    # pcof = [1, 2, 3, ...]
-    pcof_vec = collect(1:N_control_points*(1+N_derivatives)*2)
-    pcof_array = reshape(pcof_vec, 1+N_derivatives, N_control_points, 2)
-
-    #rtols = [1e-10, 1e-11, 1e-12, 1e-13, 1e-14]
     rtols = [1e-10, 1e-11, 1e-12]
-    for rtol in rtols
-        @testset "pcof = [1, 2, 3, ...], rtol=$rtol" begin
-            test_quintic_hermite(pcof_array=pcof_array, rtol=rtol)
+    @testset "pcof = ones(...)" begin
+        pcof = ones((1+N_derivatives)*N_control_points*2)
+        for rtol in rtols
+            @testset "rtol = $rtol" begin
+                test_quintic_hermite(pcof, rtol=rtol)
+            end
         end
     end
-
-    for rtol in rtols
-        @testset "random pcof, rtol=$rtol" begin
-            test_quintic_hermite(rtol=rtol)
+    @testset "pcof = rand(...)" begin
+        pcof = rand(MersenneTwister(0), (1+N_derivatives)*N_control_points*2)
+        for rtol in rtols
+            @testset "rtol = $rtol" begin
+                test_quintic_hermite(pcof, rtol=rtol)
+            end
         end
     end
 end

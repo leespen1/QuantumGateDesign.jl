@@ -1,7 +1,7 @@
 using QuantumGateDesign
 using Polynomials
-using Random
 using Test: @test, @testset
+using Random: rand, MersenneTwister
 using LinearAlgebra: norm
 
 #===============================================================================
@@ -115,23 +115,23 @@ end
         println("#"^40, "\npcof = rand(...) tests\n", "#"^40)
         @testset "Degree 5 polynomial" begin
             println("-"^40, "\nTest: Degree 5 Polynomial\n", "-"^40)
-            poly_coeffs = rand(6)
+            poly_coeffs = rand(MersenneTwister(0), 6)
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
         @testset "Degree 11 polynomial" begin
             println("-"^40, "\nTest: Degree 10 Polynomial\n", "-"^40)
-            poly_coeffs = rand(12)
+            poly_coeffs = rand(MersenneTwister(0), 12)
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
 
         @testset "Degree 15 polynomial" begin
             println("-"^40, "\nTest: Degree 15 Polynomial\n", "-"^40)
-            poly_coeffs = rand(16)
+            poly_coeffs = rand(MersenneTwister(0), 16)
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
         @testset "Degree 21 polynomial" begin
             println("-"^40, "\nTest: Degree 20 Polynomial\n", "-"^40)
-            poly_coeffs = rand(22)
+            poly_coeffs = rand(MersenneTwister(0), 22)
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
     end

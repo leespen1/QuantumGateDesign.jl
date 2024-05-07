@@ -1,6 +1,6 @@
 using QuantumGateDesign
 using Test: @test, @testset
-using Random
+using Random: rand, MersenneTwister
 
 function test_gradient_agreement(prob, control, pcof, target; 
         orders=(2,4,6,8,10), cost_type=:Infidelity,
@@ -32,7 +32,7 @@ function test_gradient_agreement(prob, control, pcof, target;
             forced_atol = 1e-14
             fin_diff_atol = 1e-9
 
-            @testset "Testing Gradient Agreement of Forced and Finite Difference Methods with Discrete Adjoint" begin
+            @testset "Testing Gradient Agreement with Discrete Adjoint" begin
                 @testset "Forced Method" begin
                     for k in 1:length(grad_disc_adj)
                         @test isapprox(grad_disc_adj[k], grad_forced[k], atol=forced_atol, rtol=forced_atol)
@@ -86,7 +86,7 @@ function plot_gradient_agreement(prob, controls, target;
 
 
     for i in 1:n_runs
-        pcof = rand(N_coeffs) .* amax
+        pcof = rand(MersenneTwister(i), N_coeffs) .* amax
         for (k, order) in enumerate(orders)
             # Check that gradients calculated using discrete adjoint and finite difference
             # methods agree to reasonable precision
@@ -145,7 +145,6 @@ println("#"^40, "\n")
 
 
 @testset "Checking That 3 Gradient Computation Methods Agree" begin
-Random.seed!(42)
 @testset "Rabi Oscillator" begin
     println("-"^40, "\n")
     println("Problem: Rabi Oscillator\n")
@@ -154,8 +153,8 @@ Random.seed!(42)
     prob = QuantumGateDesign.construct_rabi_prob(tf=pi)
     prob.nsteps = 10
     control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
-    pcof = rand(control.N_coeff) 
-    target = rand(prob.real_system_size, prob.N_initial_conditions)
+    pcof = rand(MersenneTwister(0), control.N_coeff) 
+    target = rand(MersenneTwister(0), prob.real_system_size, prob.N_initial_conditions)
 
     test_gradient_agreement(prob, control, pcof, target)
 end
@@ -172,9 +171,9 @@ end
         nsteps = 10
     )
     control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
-    pcof = rand(control.N_coeff) 
+    pcof = rand(MersenneTwister(0), control.N_coeff) 
 
-    target = rand(prob.real_system_size, prob.N_initial_conditions)
+    target = rand(MersenneTwister(0), prob.real_system_size, prob.N_initial_conditions)
 
     test_gradient_agreement(prob, control, pcof, target)
 end

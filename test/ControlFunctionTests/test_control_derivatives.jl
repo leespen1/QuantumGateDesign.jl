@@ -1,14 +1,12 @@
 using QuantumGateDesign
 import QuantumGateDesign as QGD
 using Test: @test, @testset
+using Random: rand, MersenneTwister
 using Printf: @printf
 using PrettyTables
 
 function test_control_derivatives(control::AbstractControl, pcof; upto_order=1,
         ts=missing)
-    if ismissing(pcof)
-        pcof = rand(control.N_coeff)
-    end
 
     if ismissing(ts)
         # Add cushion to start and end ts so we have enough space to do centered difference methods
@@ -137,7 +135,7 @@ end
         bspline_control = QGD.BsplineControl(tf, D1, omega)
         bspline_control_autodiff = QGD.BSplineControlAutodiff(tf, D1, omega)
 
-        pcof = rand(bspline_control.N_coeff)
+        pcof = rand(MersenneTwister(0), bspline_control.N_coeff)
 
         @testset "Hard Coded Derivative" begin
             test_control_derivatives(bspline_control, pcof, upto_order=1)
@@ -154,7 +152,7 @@ end
         scaling_type = :Derivative
 
         hermite_control = QGD.HermiteControl(N_points, tf, N_derivatives, scaling_type)
-        pcof = rand(hermite_control.N_coeff)
+        pcof = rand(MersenneTwister(0), hermite_control.N_coeff)
 
         test_control_derivatives(hermite_control, pcof, upto_order=2*(1+N_derivatives))
     end

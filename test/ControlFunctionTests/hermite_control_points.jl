@@ -3,8 +3,9 @@
 # value is the corresponding control coefficient.
 ===============================================================================#
 
-using QuantumGateDesign: HermiteControl
+using QuantumGateDesign
 using Test: @test, @testset
+using Random: rand, MersenneTwister
 using LinearAlgebra: norm
 using PrettyTables
 
@@ -69,7 +70,7 @@ end
     N_derivatives = 4
     scaling_type = :Derivative
 
-    hermite_control = HermiteControl(N_points, tf, N_derivatives, scaling_type)
+    hermite_control = QuantumGateDesign.HermiteControl(N_points, tf, N_derivatives, scaling_type)
 
     @testset "pcof = ones(N_coeff)" begin
         println("-"^40, "\nTest: pcof = ones(N_coeff)\n", "-"^40)
@@ -78,7 +79,7 @@ end
     end
     @testset "pcof = rand(N_coeff)" begin
         println("-"^40, "\nTest: pcof = rand(N_coeff)\n", "-"^40)
-        pcof = rand(hermite_control.N_coeff)
+        pcof = rand(MersenneTwister(0), hermite_control.N_coeff)
         test_hermite_control_points(hermite_control, pcof)
     end
 end

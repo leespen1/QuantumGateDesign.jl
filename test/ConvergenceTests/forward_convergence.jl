@@ -1,6 +1,6 @@
 using QuantumGateDesign
 using LinearAlgebra: norm
-using Random
+using Random: rand, MersenneTwister
 using UnicodePlots
 using Test
 
@@ -63,7 +63,6 @@ function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
 end
 
 @testset "Checking Forward Evolution Convergence Order" begin
-Random.seed!(42)
 @testset "Rabi Oscillator" begin
     println("-"^40, "\n")
     println("Problem: Rabi Oscillator\n")
@@ -72,7 +71,7 @@ Random.seed!(42)
     prob = QuantumGateDesign.construct_rabi_prob(tf=pi)
     prob.nsteps = 10
     control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
-    pcof = rand(control.N_coeff) 
+    pcof = rand(MersenneTwister(0), control.N_coeff) 
 
     test_order(prob, control, pcof)
 end
@@ -89,7 +88,7 @@ end
         nsteps = 10
     )
     control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
-    pcof = rand(control.N_coeff) 
+    pcof = rand(MersenneTwister(0), control.N_coeff) 
 
     test_order(prob, control, pcof)
 end
