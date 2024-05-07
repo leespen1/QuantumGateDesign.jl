@@ -1,6 +1,7 @@
 function eval_hessian(prob::SchrodingerProb, controls, pcof,
         target; dpcof=1e-5, kwargs...
     )
+    #TODO verify that dpcof=1e-5 is a good choice
 
     N_coeff = length(pcof)
     hessian = zeros(N_coeff, N_coeff)
