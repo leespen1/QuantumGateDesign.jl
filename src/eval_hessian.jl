@@ -6,7 +6,6 @@ function eval_hessian(prob::SchrodingerProb, controls, pcof,
     hessian = zeros(N_coeff, N_coeff)
     dummy_pcof = copy(pcof)
 
-    # TODO Check that formula is still 2nd order for i = j
     for i in 1:length(pcof)
       for j in 1:length(pcof)
         if i != j
