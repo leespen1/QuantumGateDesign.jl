@@ -1,9 +1,10 @@
+#===============================================================================
+# Test that optimizer converges to nearest analytic minimum for rabi oscillator
+# problem with a SWAP gate target.
+===============================================================================#
 using QuantumGateDesign
 using Test
 
-#===============================================================================
-# Check that optimizer can converge to analytic minimum for rabi oscillator
-===============================================================================#
 
 #@testset "Rabi Oscillator SWAP Optimization"
 prob = QuantumGateDesign.construct_rabi_prob(tf=pi)
@@ -15,8 +16,9 @@ target = complex_to_real(SWAP_target_complex)
 pcof_init_saves = []
 pcof_final_saves = []
 
-@testset "Convergence to p0=0.5, q0=0.0 for nearby starting values" begin
-pcof_optimal = [0.5, 0.0]
+@testset "Optimization Convergence to Analytic Minimum Test: Rabi Oscillator SWAP Gate" begin
+    @info "Checking that analytic minimum of p0=0.5, q0=0.0 is found for nearby starting values."        
+    pcof_optimal = [0.5, 0.0]
     for p0 in LinRange(0.4, 0.6, 11)
         for q0 in LinRange(-0.1, 0.1, 11)
 
