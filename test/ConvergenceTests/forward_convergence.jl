@@ -9,7 +9,7 @@ function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
     )
     histories_dict = QuantumGateDesign.get_histories(
         prob, controls, pcof, N_iterations, orders=orders,
-        min_error_limit=1e-14
+        min_error_limit=1e-14, abstol=1e-15, reltol=1e-15
     )
 
     for order in orders
@@ -34,12 +34,21 @@ function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
         error_differences = diff(log_relative_errors) ./ diff(log_step_sizes)
 
 
-        println("Slopes (log scale) between adjacent points")
-        println(error_differences)
+        println("[Order $order] Slopes (log scale) between adjacent points:")
+        println("\t", error_differences)
         
         for error_diff in error_differences
             @test isapprox(error_diff, order, atol=0.5)
         end
+
+        # Method 2 : Do a least squares fit of the entire line, check that
+        # slope is roughly the order of the method
+        A = [ones(length(log_step_sizes)) log_step_sizes]
+        b = log_relative_errors
+        x = A \ b
+        slope = x[2]
+        println("[Order $order] Least-Squares Slope (log scale) of entire line = ", slope)
+        @test isapprox(slope, order, atol=0.5)
 
         pl = scatterplot(log_step_sizes, log_relative_errors,
             title="Order $order, Rel Err vs Step Size",
@@ -48,14 +57,6 @@ function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
         )
         display(pl)
 
-        # Method 2 : Do a least squares fit of the entire line, check that
-        # slope is roughly the order of the method
-        A = [ones(length(log_step_sizes)) log_step_sizes]
-        b = log_relative_errors
-        x = A \ b
-        slope = x[2]
-        println("Slope (log scale) of entire line = ", slope)
-        @test isapprox(slope, order, atol=0.5)
       end
     end
 
