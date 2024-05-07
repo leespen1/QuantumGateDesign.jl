@@ -73,7 +73,7 @@ function guard_penalty(history::AbstractArray{Float64, 4}, dt, T, W)
     return penalty_value
 end
 
-function infidelity_plus_guard(prob::SchrodingerProb, controls, pcof, target; order=2)
+function infidelity_plus_guard(prob::SchrodingerProb, controls, pcof, target; order=2, kwargs...)
     history = eval_forward(prob, controls, pcof; order=order, kwargs...)
     final_state = history[:,1,end,:]
     N_ess = prob.N_ess_levels
