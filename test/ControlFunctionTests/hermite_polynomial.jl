@@ -1,44 +1,32 @@
 using QuantumGateDesign
 using Polynomials
-using Test
+using Random
+using Test: @test, @testset
+using LinearAlgebra: norm
 
 #===============================================================================
-# Take a random polynomial, sample it and its derivatives at control points,
-# and check that a HermiteControl using those values as control parameters
-# produces the correct analytic result, as given by the Polynomials.jl package
-# (which takes derivatives of polynomials analytically).
+# Take a polynomial, sample it and it's derivatives (evaluated
+# analytically using the Derivatives.jl package), and construct a HermiteControl
+# based on that.
+#
+# Test that the original polynomial is reproduced (with enough derivatives taken
+# such that the polynomial should be unique).
 ===============================================================================#
 
-#=
-# A hardcoded example
-p(x) = x^7 + 1
-D1p(x) = 7*x^6
-D2p(x) = 7*6*x^5
-D3p(x) = 7*6*5*x^4
+function test_hermite_poly_agreement(poly_coeffs; rtol=1e-14)
+    # Choose number of derivatives so that interpolation is exact
+    N_derivatives = div(length(poly_coeffs), 2) - 1
+    inf_norm(x) = norm(x, Inf)
 
-tf = 1.0
-N_control_points = 3
-dt = tf / (N_control_points-1)
-pcof_mat1 = zeros(4, N_control_points, 2)
-for n in 1:N_control_points
-    t = dt*(n-1)
-    pcof_mat1[1,n,1] = p(t)
-    pcof_mat1[2,n,1] = D1p(t)
-    pcof_mat1[3,n,1] = D2p(t)
-    pcof_mat1[4,n,1] = D3p(t)
-end
-=#
+    N_control_points = 5
 
-function test_hermite_poly_agreement(;N_derivatives=10, randseed=42, rtol=1e-14)
-    Random.seed!(randseed)
     # Set up polynomials and their derivatives (technic)
-    p_poly = Polynomial(2*N_derivatives)
-    q_poly = Polynomial(2*N_derivatives)
+    p_poly = Polynomial(poly_coeffs)
+    q_poly = Polynomial(poly_coeffs)
     p_poly_derivatives = [derivative(p_poly, i) for i in 0:N_derivatives]
     q_poly_derivatives = [derivative(q_poly, i) for i in 0:N_derivatives]
 
-    tf = 100.0
-    N_control_points = 5
+    tf = 1.0
     ts_control = LinRange(0, tf, N_control_points)
     
     # Get control vector by evaluating polynomials at control points
@@ -55,33 +43,96 @@ function test_hermite_poly_agreement(;N_derivatives=10, randseed=42, rtol=1e-14)
         N_control_points, tf, N_derivatives, :Derivative
     )
 
+    data = ["Order" "Avg Error" "Max Error" "Max Function Value"]
+
     # Test that HermiteControl agrees with analytic polynomial derivative values when constructed 
-    ts_test = LinRange(0, tf, 1001)
+    ts = LinRange(0, tf, 101)
     for derivative_order in 0:N_derivatives
-        @testset "p | Derivative Order $derivative_order" begin
-            for t in ts_test
-                pval = eval_p_derivative(hermite_control, t, pcof_vec, derivative_order)
-                pval_analytic = p_poly_derivatives[1+derivative_order](t)
-                @test isapprox(pval, pval_analytic, rtol=rtol)
-            end
-        end
-        @testset "q | Derivative Order $derivative_order" begin
-            for t in ts_test
-                qval = eval_p_derivative(hermite_control, t, pcof_vec, derivative_order)
-                qval_analytic = q_poly_derivatives[1+derivative_order](t)
-                @test isapprox(qval, qval_analytic, rtol=rtol)
-            end
+        @testset "Derivative Order $derivative_order" begin
+            pvals = [eval_p_derivative(hermite_control, t, pcof_vec, derivative_order)
+                     for t in ts]
+            qvals = [eval_q_derivative(hermite_control, t, pcof_vec, derivative_order)
+                     for t in ts]
+
+            pvals_analytic = [p_poly_derivatives[1+derivative_order](t)
+                             for t in ts]
+            qvals_analytic = [q_poly_derivatives[1+derivative_order](t)
+                             for t in ts]
+
+            vals = vcat(pvals, qvals)
+            vals_analytic = vcat(pvals_analytic, qvals_analytic)
+
+            println("Maxval = ", norm(vals_analytic, Inf))
+            println("Order $derivative_order rel errors: ", norm((vals - vals_analytic)) / norm(vals_analytic))
+            @test isapprox(vals, vals_analytic, rtol=rtol)
+
+            errors = abs.(vals - vals_analytic)
+            rel_errors = abs.(errors ./ vals_analytic)
+            avg_error = sum(rel_errors) / length(rel_errors)
+            max_error = norm(rel_errors, Inf)
+            max_val = norm(vals_analytic, Inf)
+
+            data = vcat(data, [derivative_order avg_error max_error max_val])
         end
     end
+
+    results_table = pretty_table(
+        data[2:end,:];
+        header=data[1,:],
+        header_crayon = crayon"yellow bold",
+    )
 end
 
 
 
-@testset "HermiteControl values and derivatives agree with analytic polynomial results" begin
-    rtols = [1e-10, 1e-11, 1e-12, 1e-13, 1e-14]
-    for rtol in rtols
-        @testset "rtol=$rtol" begin
-            test_hermite_poly_agreement(rtol=rtol)
+@testset "HermiteControl Interpolation of Analytic Polynomial" begin
+    @info "Testing HermiteControl Interpolation of a Polynomial"
+    @testset "pcof = ones(...) tests" begin
+        println("#"^40, "\npcof = ones(...) tests\n", "#"^40)
+        @testset "Degree 5 polynomial" begin
+            println("-"^40, "\nTest: Degree 5 Polynomial\n", "-"^40)
+            poly_coeffs = ones(6)
+            test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
+        end
+        @testset "Degree 11 polynomial" begin
+            println("-"^40, "\nTest: Degree 10 Polynomial\n", "-"^40)
+            poly_coeffs = ones(12)
+            test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
+        end
+
+        @testset "Degree 15 polynomial" begin
+            println("-"^40, "\nTest: Degree 15 Polynomial\n", "-"^40)
+            poly_coeffs = ones(16)
+            test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
+        end
+        @testset "Degree 21 polynomial" begin
+            println("-"^40, "\nTest: Degree 20 Polynomial\n", "-"^40)
+            poly_coeffs = ones(22)
+            test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
+        end
+    end
+    @testset "pcof = rand(...) tests" begin
+        println("#"^40, "\npcof = rand(...) tests\n", "#"^40)
+        @testset "Degree 5 polynomial" begin
+            println("-"^40, "\nTest: Degree 5 Polynomial\n", "-"^40)
+            poly_coeffs = rand(6)
+            test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
+        end
+        @testset "Degree 11 polynomial" begin
+            println("-"^40, "\nTest: Degree 10 Polynomial\n", "-"^40)
+            poly_coeffs = rand(12)
+            test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
+        end
+
+        @testset "Degree 15 polynomial" begin
+            println("-"^40, "\nTest: Degree 15 Polynomial\n", "-"^40)
+            poly_coeffs = rand(16)
+            test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
+        end
+        @testset "Degree 21 polynomial" begin
+            println("-"^40, "\nTest: Degree 20 Polynomial\n", "-"^40)
+            poly_coeffs = rand(22)
+            test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
     end
 end
