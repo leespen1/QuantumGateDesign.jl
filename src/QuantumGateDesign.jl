@@ -17,6 +17,7 @@ export convert_old_ordering_to_new
 
 # Export gradient evaulation methods
 export eval_grad_finite_difference, eval_grad_forced, discrete_adjoint
+export eval_hessian
 export discrete_adjoint, compute_terminal_condition
 export eval_grad_forced
 
@@ -75,6 +76,8 @@ include("infidelity.jl")
 include("eval_grad_discrete_adjoint.jl")
 include("eval_grad_finite_difference.jl")
 include("eval_grad_forced.jl")
+
+include("eval_hessian.jl")
 
 include("ipopt_optimal_control.jl")
 include("gradient_descent.jl")
