@@ -3,6 +3,8 @@ import QuantumGateDesign as QGD
 using LinearAlgebra: norm
 using Test: @test, @testset
 using Random: rand, MersenneTwister
+using Printf: @printf
+using PrettyTables
 
 function test_control_gradient(control::AbstractControl, pcof; upto_order=0)
     t_start = upto_order
@@ -92,5 +94,14 @@ end
         #end
     end
     @testset "Hermite Control" begin
+        tf = 5.0
+        N_points = 3
+        N_derivatives = 4
+        scaling_type = :Derivative
+
+        hermite_control = QGD.HermiteControl(N_points, tf, N_derivatives, scaling_type)
+        pcof = rand(MersenneTwister(0), hermite_control.N_coeff)
+
+        test_control_gradient(hermite_control, pcof, upto_order=2*(1+N_derivatives))
     end
 end
