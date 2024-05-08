@@ -83,6 +83,15 @@ function test_hermite_poly_agreement(poly_coeffs; rtol=1e-14)
     )
 end
 
+function rescale_poly_coeffs(poly_coeffs)
+    rescaled_poly_coeffs = poly_coeffs .- 0.5
+    for i in 1:length(rescaled_poly_coeffs)
+        rescaled_poly_coeffs[i] /= factorial(big(i-1))
+    end
+    return rescaled_poly_coeffs
+end
+
+
 
 
 @testset "HermiteControl Interpolation of Analytic Polynomial" begin
@@ -92,22 +101,26 @@ end
         @testset "Degree 5 polynomial" begin
             println("-"^40, "\nTest: Degree 5 Polynomial\n", "-"^40)
             poly_coeffs = ones(6)
+            poly_coeffs = rescale_poly_coeffs(poly_coeffs)
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
         @testset "Degree 11 polynomial" begin
             println("-"^40, "\nTest: Degree 10 Polynomial\n", "-"^40)
             poly_coeffs = ones(12)
+            poly_coeffs = rescale_poly_coeffs(poly_coeffs)
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
 
         @testset "Degree 15 polynomial" begin
             println("-"^40, "\nTest: Degree 15 Polynomial\n", "-"^40)
             poly_coeffs = ones(16)
+            poly_coeffs = rescale_poly_coeffs(poly_coeffs)
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
         @testset "Degree 21 polynomial" begin
             println("-"^40, "\nTest: Degree 20 Polynomial\n", "-"^40)
             poly_coeffs = ones(22)
+            poly_coeffs = rescale_poly_coeffs(poly_coeffs)
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
     end
@@ -116,22 +129,27 @@ end
         @testset "Degree 5 polynomial" begin
             println("-"^40, "\nTest: Degree 5 Polynomial\n", "-"^40)
             poly_coeffs = rand(MersenneTwister(0), 6)
+            poly_coeffs = rescale_poly_coeffs(poly_coeffs)
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
         @testset "Degree 11 polynomial" begin
             println("-"^40, "\nTest: Degree 10 Polynomial\n", "-"^40)
             poly_coeffs = rand(MersenneTwister(0), 12)
+            poly_coeffs = rescale_poly_coeffs(poly_coeffs)
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
 
         @testset "Degree 15 polynomial" begin
             println("-"^40, "\nTest: Degree 15 Polynomial\n", "-"^40)
             poly_coeffs = rand(MersenneTwister(0), 16)
+            poly_coeffs = rescale_poly_coeffs(poly_coeffs)
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
         @testset "Degree 21 polynomial" begin
-            println("-"^40, "\nTest: Degree 20 Polynomial\n", "-"^40)
+            println("-"^40, "\nTest: Degree 21 Polynomial\n", "-"^40)
             poly_coeffs = rand(MersenneTwister(0), 22)
+            poly_coeffs = rescale_poly_coeffs(poly_coeffs)
+            
             test_hermite_poly_agreement(poly_coeffs, rtol=1e-12)
         end
     end
