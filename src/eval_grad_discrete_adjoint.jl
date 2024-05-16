@@ -108,12 +108,18 @@ end
 
 """
 Change name to 'accumulate gradient' or something
+
+Maybe I shoudl return the contribution added to the gradient instead of the
+gradient itself. That might make it easier to analyze things from the REPL.
 """
 function accumulate_gradient!(gradient::AbstractVector{Float64},
         prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
         history::AbstractArray{Float64, 3}, lambda_history::AbstractArray{Float64, 3};
         order=2
     )
+
+    accumulate_gradient_arbitrary_fast!(gradient, prob, controls, pcof, history, lambda_history, order=order)
+    return gradient
 
     if (order == 2)
         accumulate_gradient_order2!(gradient, prob, controls, pcof, history, lambda_history)
@@ -233,7 +239,7 @@ function accumulate_gradient_order2!(gradient::AbstractVector{Float64},
         grad_slice .+= grad_contrib
     end
 
-    return nothing
+    return gradient
 end
 
 
@@ -260,6 +266,7 @@ function accumulate_gradient_order2_new!(gradient::AbstractVector{Float64},
         grad_q = zeros(control.N_coeff)
 
         for n in 0:prob.nsteps-1
+            coeff = coefficient(1,1,1)
             # Explicit Part
             t = n*dt
             eval_grad_p_derivative!(grad_p, control, t, local_pcof, 0)
@@ -275,8 +282,16 @@ function accumulate_gradient_order2_new!(gradient::AbstractVector{Float64},
                 left_inner, right_inner, sym_op, working_vector, prob.real_system_size
             )
 
-            grad_contrib .+= grad_q .* inner_prod_S .* dt .* coefficient(1,1,1)
-            grad_contrib .+= grad_p .* inner_prod_K .* dt .* coefficient(1,1,1)
+            @. grad_contrib += grad_q * inner_prod_S * dt * coeff
+            @. grad_contrib += grad_p * inner_prod_K * dt * coeff
+
+            println("inner_prod_S: $inner_prod_S")
+            println("inner_prod_K: $inner_prod_K")
+            println("grad_p: $grad_p")
+            println("grad_q: $grad_q")
+            println("coeff: $(coeff*dt)")
+            println("other factor:")
+            println()
 
             #Implicit Part
             t = (n+1)*dt
@@ -293,8 +308,16 @@ function accumulate_gradient_order2_new!(gradient::AbstractVector{Float64},
                 left_inner, right_inner, sym_op, working_vector, prob.real_system_size
             )
 
-            grad_contrib .+= grad_q .* inner_prod_S .* dt .* coefficient(1,1,1)
-            grad_contrib .+= grad_p .* inner_prod_K .* dt .* coefficient(1,1,1)
+            @. grad_contrib += grad_q * inner_prod_S * dt * coeff
+            @. grad_contrib += grad_p * inner_prod_K * dt * coeff
+
+            println("inner_prod_S: $inner_prod_S")
+            println("inner_prod_K: $inner_prod_K")
+            println("grad_p: $grad_p")
+            println("grad_q: $grad_q")
+            println("coeff: $(coeff*dt)")
+            println("other factor:")
+            println()
 
         end
 
@@ -302,7 +325,7 @@ function accumulate_gradient_order2_new!(gradient::AbstractVector{Float64},
         grad_slice .-= grad_contrib
     end
 
-    return nothing
+    return gradient
 end
 
 
@@ -370,14 +393,10 @@ function accumulate_gradient_order4!(gradient::AbstractVector{Float64},
 
 
             # Second order contribution 2
-            left_inner .= 0
+            left_inner .= @view history[:,2,1+n]
             right_inner .= @view lambda_history[:,1,1+n+1]
-            working_vector .= @view history[:,1,1+n]
-
-            apply_hamiltonian!(
-                left_inner_re, left_inner_im, working_vector_re, working_vector_im,
-                prob, controls, t, pcof, use_adjoint=false
-            )
+            working_vector .= 0
+            
             inner_prod_S = compute_inner_prod_S!(
                 left_inner, right_inner, asym_op, working_vector, prob.real_system_size
             )
@@ -442,14 +461,10 @@ function accumulate_gradient_order4!(gradient::AbstractVector{Float64},
 
 
             # Second order contribution 2
-            left_inner .= 0
+            left_inner .= @view history[:,2,1+n+1]
             right_inner .= @view lambda_history[:,1,1+n+1]
-            working_vector .= @view history[:,1,1+n+1]
+            working_vector .= 0
 
-            apply_hamiltonian!(
-                left_inner_re, left_inner_im, working_vector_re, working_vector_im,
-                prob, controls, t, pcof, use_adjoint=false
-            )
             inner_prod_S = compute_inner_prod_S!(
                 left_inner, right_inner, asym_op, working_vector, prob.real_system_size
             )
@@ -487,12 +502,163 @@ function accumulate_gradient_order4!(gradient::AbstractVector{Float64},
         grad_slice .-= grad_contrib
     end
 
-    return nothing
+    return gradient
 end
 
+"""
+New version which is a bit more informative, but less efficient.
+
+Efficiency tricks I can do:
+1. do implicit and explicit alongside each other, like I do in the hard-coded 4th order
+   (actually that may not be so useful or easy) 
+2. reuse inner_prod_K/S, like I do in the hard-coded 4th
+"""
+function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
+        prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
+        history::AbstractArray{Float64, 3}, lambda_history::AbstractArray{Float64, 3};
+        order=2
+    )
+
+    N_derivatives = div(order, 2)
+    dt = prob.tf / prob.nsteps
+    λₙ₊₁ = zeros(prob.real_system_size) 
+    wₙ   = zeros(prob.real_system_size, 1+N_derivatives) 
+    wₙ₊₁ = zeros(prob.real_system_size, 1+N_derivatives) 
 
 
 
+    for i in 1:prob.N_operators
+        control = controls[i]
+        asym_op = prob.asym_operators[i]
+        sym_op = prob.sym_operators[i]
+        local_pcof = get_control_vector_slice(pcof, controls, i)
+
+        grad_contrib = zeros(control.N_coeff)
+        grad_p = zeros(control.N_coeff)
+        grad_q = zeros(control.N_coeff)
+
+        for n in 0:prob.nsteps-1
+            λₙ₊₁ .= @view lambda_history[:, 1, 1+n+1]
+            wₙ   .= @view history[:, :, 1+n]
+            wₙ₊₁ .= @view history[:, :, 1+n+1]
+            tₙ = n*dt
+            tₙ₊₁ = (n+1)*dt
+
+            #println("#"^20, "\nExplicit\n", "#"^20)
+            for k in 0:N_derivatives
+                #c_implicit = (-0.5*dt)^k * coefficient(k, N_derivatives, N_derivatives)
+                #c_explicit = (0.5*dt)^k  * coefficient(k, N_derivatives, N_derivatives)
+                c_implicit = -(-dt)^k * coefficient(k, N_derivatives, N_derivatives)
+                c_explicit = (dt)^k  * coefficient(k, N_derivatives, N_derivatives)
+
+                #println("#"^20, "\nOrder $k Contribution\n", "#"^20)
+                # Handle explicit
+                recursive_magic!(
+                    grad_contrib, wₙ, λₙ₊₁, k, c_explicit,
+                    prob, control, tₙ, local_pcof,
+                    sym_op, asym_op
+                )
+            end
+                
+            #println("#"^20, "\nImplicit\n", "#"^20)
+            for k in 0:N_derivatives
+                #c_implicit = (-0.5*dt)^k * coefficient(k, N_derivatives, N_derivatives)
+                #c_explicit = (0.5*dt)^k  * coefficient(k, N_derivatives, N_derivatives)
+                c_implicit = -(-dt)^k * coefficient(k, N_derivatives, N_derivatives)
+                c_explicit = (dt)^k  * coefficient(k, N_derivatives, N_derivatives)
+
+                #println("#"^20, "\nOrder $k Contribution\n", "#"^20)
+                # Handle implicit
+                recursive_magic!(
+                    grad_contrib, wₙ₊₁, λₙ₊₁, k, c_implicit,
+                    prob, control, tₙ₊₁, local_pcof,
+                    sym_op, asym_op
+                )
+            end
+        end
+
+        grad_slice = get_control_vector_slice(gradient, controls, i)
+        grad_slice .-= grad_contrib
+    end
+
+    return gradient
+end
+
+"""
+I will need a matrix of left_inners, since I have y0, y1, y2, etc. 
+
+May as well make a matrix of right inners, since I will have λ, A₀λ, A₁λ, ...
+
+Does the contribution of ⟨coeff*wⱼ₊₁, λ⟩
+"""
+function recursive_magic!(grad_contrib::AbstractVector,
+        w_mat::AbstractMatrix, lambda::AbstractVector,
+        derivative_order::Int, coeff::Real,
+        prob::SchrodingerProb, control::AbstractControl, t::Real,
+        pcof::AbstractVector, sym_op, asym_op
+    )
+    j = derivative_order-1
+    real_system_size = size(w_mat, 1)
+    working_vector = zeros(real_system_size)
+
+    # Will be better to feed in a matrix of each p/q gradient (one column for each derivative order)
+    grad_p = zeros(length(pcof))
+    grad_q = zeros(length(pcof))
+
+    for i in 0:j
+        # i=0,j=0 and i=0,j=1 will be the same except for the broadcasting.
+        # There should be a way to make use of this to avoid redoing computiation.
+        # It seems like once I do any i=i',j=j', I should be able to handle all subsequent
+        # cases of i=i',j=any at the same time. Investigate this (also only optimize slow things, don't dig
+        # into this prematurely).
+        eval_grad_p_derivative!(grad_p, control, t, pcof, j-i)
+        eval_grad_q_derivative!(grad_q, control, t, pcof, j-i)
+
+        # What I originally had (should work once I use a real history)
+        inner_prod_S = compute_inner_prod_S!(
+            view(w_mat, :, 1+i), lambda, asym_op, working_vector, prob.real_system_size
+        )
+        inner_prod_K = compute_inner_prod_K!(
+            view(w_mat, :, 1+i), lambda, sym_op, working_vector, prob.real_system_size
+        )
+
+
+        @. grad_contrib += grad_q * inner_prod_S * coeff / ((j+1)*factorial(j-i))
+        @. grad_contrib += grad_p * inner_prod_K * coeff / ((j+1)*factorial(j-i))
+
+        #println("i: $i")
+        #println("j: $j")
+        #println("inner_prod_S: $inner_prod_S")
+        #println("inner_prod_K: $inner_prod_K")
+        #println("grad_p: $grad_p")
+        #println("grad_q: $grad_q")
+        #println("coeff: $coeff")
+        #println("other factor: $((j+1)*factorial(j-i))")
+        #if (i == j == 1)
+        #    println(w_mat[:,1+i])
+        #end
+        #println()
+    end
+
+    # Better to do in two loops. Makes it more clear how I can make the first
+    # loop more efficient by reusing computation.
+    # Could also make the loop over 1:j, since if i=0 then this doesn't execute
+    for i in 0:j
+        # Take special care about how factors are handled
+        # Move this outside the loop
+        right_inner = zeros(real_system_size)
+        apply_hamiltonian!(right_inner, lambda, prob, control, t, pcof;
+                           derivative_order=(j-i), use_adjoint=true)
+        
+        # Maybe following line is needed
+        #working_vector ./= factorial(j-i)
+
+        recursive_magic!(grad_contrib, w_mat, right_inner, i, coeff/(j+1),
+                        prob, control, t, pcof, sym_op, asym_op)
+    end
+
+    return grad_contrib
+end
 
 """
 History should be 4D array
@@ -510,6 +676,10 @@ function compute_guard_forcing(prob, history)
     return forcing
 end
 
+"""
+H = [S K; -K S] (real-valued hamiltonian)
+⟨H*left_inner, right_inner⟩
+"""
 function compute_inner_prod_S!(left_inner, right_inner, S, working_vector, real_system_size)
     complex_system_size = div(real_system_size, 2)
     left_inner_re = view(left_inner, 1:complex_system_size)
