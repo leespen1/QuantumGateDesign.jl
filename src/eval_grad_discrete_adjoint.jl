@@ -529,9 +529,6 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
 
     for i in 1:prob.N_operators
         control = controls[i]
-        asym_op = prob.asym_operators[i]
-        sym_op = prob.sym_operators[i]
-        local_pcof = get_control_vector_slice(pcof, controls, i)
 
         grad_contrib = zeros(control.N_coeff)
         grad_p = zeros(control.N_coeff)
@@ -555,8 +552,7 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
                 # Handle explicit
                 recursive_magic!(
                     grad_contrib, wₙ, λₙ₊₁, k, c_explicit,
-                    prob, control, tₙ, local_pcof,
-                    sym_op, asym_op
+                    prob, controls, tₙ, pcof, i
                 )
             end
                 
@@ -571,8 +567,7 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
                 # Handle implicit
                 recursive_magic!(
                     grad_contrib, wₙ₊₁, λₙ₊₁, k, c_implicit,
-                    prob, control, tₙ₊₁, local_pcof,
-                    sym_op, asym_op
+                    prob, controls, tₙ₊₁, pcof, i 
                 )
             end
         end
@@ -591,12 +586,24 @@ May as well make a matrix of right inners, since I will have λ, A₀λ, A₁λ,
 
 Does the contribution of ⟨coeff*wⱼ₊₁, λ⟩
 """
+#function recursive_magic!(grad_contrib::AbstractVector,
+#        w_mat::AbstractMatrix, lambda::AbstractVector,
+#        derivative_order::Int, coeff::Real,
+#        prob::SchrodingerProb, control::AbstractControl, t::Real,
+#        pcof::AbstractVector, sym_op, asym_op
+#    )
 function recursive_magic!(grad_contrib::AbstractVector,
         w_mat::AbstractMatrix, lambda::AbstractVector,
         derivative_order::Int, coeff::Real,
-        prob::SchrodingerProb, control::AbstractControl, t::Real,
-        pcof::AbstractVector, sym_op, asym_op
+        prob::SchrodingerProb, controls, t::Real,
+        pcof::AbstractVector, control_index
     )
+    control = controls[control_index]
+    asym_op = prob.asym_operators[control_index]
+    sym_op = prob.sym_operators[control_index]
+    local_pcof = get_control_vector_slice(pcof, controls, control_index)
+
+    
     j = derivative_order-1
     real_system_size = size(w_mat, 1)
     working_vector = zeros(real_system_size)
@@ -611,8 +618,8 @@ function recursive_magic!(grad_contrib::AbstractVector,
         # It seems like once I do any i=i',j=j', I should be able to handle all subsequent
         # cases of i=i',j=any at the same time. Investigate this (also only optimize slow things, don't dig
         # into this prematurely).
-        eval_grad_p_derivative!(grad_p, control, t, pcof, j-i)
-        eval_grad_q_derivative!(grad_q, control, t, pcof, j-i)
+        eval_grad_p_derivative!(grad_p, control, t, local_pcof, j-i)
+        eval_grad_q_derivative!(grad_q, control, t, local_pcof, j-i)
 
         # What I originally had (should work once I use a real history)
         inner_prod_S = compute_inner_prod_S!(
@@ -647,14 +654,14 @@ function recursive_magic!(grad_contrib::AbstractVector,
         # Take special care about how factors are handled
         # Move this outside the loop
         right_inner = zeros(real_system_size)
-        apply_hamiltonian!(right_inner, lambda, prob, control, t, pcof;
+        apply_hamiltonian!(right_inner, lambda, prob, controls, t, pcof;
                            derivative_order=(j-i), use_adjoint=true)
         
         # Maybe following line is needed
         #working_vector ./= factorial(j-i)
 
         recursive_magic!(grad_contrib, w_mat, right_inner, i, coeff/(j+1),
-                        prob, control, t, pcof, sym_op, asym_op)
+                        prob, controls, t, pcof, control_index)
     end
 
     return grad_contrib
