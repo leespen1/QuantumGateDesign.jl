@@ -609,8 +609,8 @@ function recursive_magic!(grad_contrib::AbstractVector,
     working_vector = zeros(real_system_size)
 
     # Will be better to feed in a matrix of each p/q gradient (one column for each derivative order)
-    grad_p = zeros(length(pcof))
-    grad_q = zeros(length(pcof))
+    grad_p = zeros(length(local_pcof))
+    grad_q = zeros(length(local_pcof))
 
     for i in 0:j
         # i=0,j=0 and i=0,j=1 will be the same except for the broadcasting.
