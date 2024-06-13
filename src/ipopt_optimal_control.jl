@@ -1,5 +1,18 @@
 import Ipopt
 
+# Wrappers for easy parameter adding
+function genericAddOption(ipopt_prob, option, value::String)
+    Ipopt.AddIpoptStrOption(ipopt_prob, option, value)
+end
+
+function genericAddOption(ipopt_prob, option, value::Int)
+    Ipopt.AddIpoptIntOption(ipopt_prob, option, value)
+end
+
+function genericAddOption(ipopt_prob, option, value::Number)
+    Ipopt.AddIpoptNumOption(ipopt_prob, option, value)
+end
+
 # First set up constraint, jacobian, and hessian functions. We will not be
 # using those in our optimization process (yet), so they all just return
 # nothing.
@@ -60,7 +73,9 @@ function optimize_gate(
 
     pcof_history = []
     pcof_grad_history = []
-    objective_history = []
+    full_objective_history = []
+    iter_objective_history = []
+    iter_cpu_time_history = []
 
 
     # Right now I am unnecessarily doing a full forward evolution to compute the
@@ -81,7 +96,7 @@ function optimize_gate(
         
         objective_val = infidelity_val + guard_pen_val + ridge_pen_val
 
-        push!(objective_history, objective_val)
+        push!(full_objective_history, objective_val)
 
         return objective_val
     end
@@ -95,6 +110,25 @@ function optimize_gate(
 
         push!(pcof_history, copy(pcof))
         push!(pcof_grad_history, copy(grad_f))
+    end
+
+    function my_callback(
+        alg_mod,
+        iter_count,
+        obj_value,
+        inf_pr,
+        inf_du,
+        mu,
+        d_norm,
+        regularization_size,
+        alpha_du,
+        alpha_pr,
+        ls_trials
+    )
+
+        push!(iter_objective_history, obj_value)
+        push!(iter_cpu_time_history, time())
+        return true  # continue the optimization
     end
 
     N_parameters = length(pcof_init)
@@ -163,48 +197,33 @@ function optimize_gate(
     #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "first-order") # What does this do?
     #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "none") # Not sure what derivative test does, but it takes a minute.
     Ipopt.AddIpoptIntOption(ipopt_prob, "print_level", print_level)  
+    Ipopt.AddIpoptStrOption(ipopt_prob, "timing_statistics", "yes")
+    Ipopt.AddIpoptStrOption(ipopt_prob, "print_timing_statistics", "yes")
     # Anything below this number will be considered -∞. I.e., terminate when objective goes beloww this
     #Ipopt.AddIpoptNumOption(ipopt_prob, "nlp_lower_bound_inf", nlp_lower_bound)
     
     # Trying to figure out why my ls is frequently bigger than in juqbox
     # If I add this, the optimization suffers greatly.
     #Ipopt.AddIpoptStrOption(ipopt_prob, "accept_every_trial_step", "yes")
+    Ipopt.SetIntermediateCallback(ipopt_prob, my_callback)
 
 
     ipopt_prob.x .= pcof_init
     solvestat = Ipopt.IpoptSolve(ipopt_prob)
     # solvestat I think is stored in ipopt_prob as 'status'
-    #
+    
+    # Go from system time since epoch to system time since iteration 0.
+    @. iter_cpu_time_history -= iter_cpu_time_history[1]
+
     return_dict = OrderedCollections.OrderedDict(
         "ipopt_prob" => ipopt_prob,
-        "objective_history" => objective_history,
+        "full_objective_history" => full_objective_history,
         "pcof_history" => pcof_history,
-        "pcof_grad_history" => pcof_grad_history
+        "pcof_grad_history" => pcof_grad_history,
+        "iter_objective_history" => iter_objective_history,
+        "iter_cpu_time_history" => iter_cpu_time_history,
     )
 
     return return_dict
 end
 
-#=
-"""
-    pcof = run_optimizer(params, pcof0, maxAmp; maxIter=50, lbfgsMax=200, coldStart=true, ipTol=1e-5, acceptTol=1e-5, acceptIter=15, print_level=5, print_frequency_iter=1, nodes=[0.0], weights=[1.0])
-
-Call IPOPT to  optimizize the control functions.
-
-# Arguments
-- `params:: objparams`: Struct with problem definition
-- `pcof0:: Vector{Float64}`: Initial guess for the control vector
-- `maxAmp:: Vector{Float64}`: Maximum amplitude for each control function (size Nctrl)
-- `maxIter:: Int64`: (Optional-kw) Maximum number of iterations to be taken by optimizer
-- `lbfgsMax:: Int64`: (Optional-kw) Maximum number of past iterates for Hessian approximation by L-BFGS
-- `coldStart:: Bool`: (Optional-kw) true (default): start a new optimization with ipopt; false: continue a previous optimization
-- `ipTol:: Float64`: (Optional-kw) Desired convergence tolerance (relative)
-- `acceptTol:: Float64`: (Optional-kw) Acceptable convergence tolerance (relative)
-- `acceptIter:: Int64`: (Optional-kw) Number of acceptable iterates before triggering termination
-- `print_level:: Int64`: (Optional-kw) Ipopt verbosity level (5)
-- `print_frequency_iter:: Int64`: (Optional-kw) Ipopt printout frequency (1)
-- `nodes:: AbstractArray`: (Optional-kw) Risk-neutral opt: User specified quadrature nodes on the interval [-ϵ,ϵ] for some ϵ
-- `weights:: AbstractArray`: (Optional-kw) Risk-neutral opt: User specified quadrature weights on the interval [-ϵ,ϵ] for some ϵ
-- `derivative_test:: Bool`: (Optional-kw) Set to true to check the gradient against a FD approximation (default is false)
-"""
-=#
