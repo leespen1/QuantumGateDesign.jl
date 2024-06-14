@@ -1,4 +1,4 @@
-[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://leespen1.github.io/QuantumGateDesign.jl/)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://leespen1.github.io/QuantumGateDesign.jl/dev/)
 # QuantumGateDesign.jl
 Julia package for quantum optimal control using Hermite methods.
 
