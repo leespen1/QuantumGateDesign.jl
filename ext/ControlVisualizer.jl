@@ -3,6 +3,7 @@ module ControlVisualizer
 println("Loading ControlVisualizer")
 
 using QuantumGateDesign
+using Printf
 using GLMakie
 
 
@@ -185,7 +186,7 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
 
             infidelity_obsv[] = infidelity(prob, controls, pcof, target, order=4)
             #infidelity_str_obsv[] = "InFidelity: $(infidelity_obsv[])"
-            infidelity_str_obsv[] = QuantumGateDesign.Printf.@sprintf("Fidelity: %.2f %%", 100*(1-infidelity_obsv[]))
+            infidelity_str_obsv[] = Printf.@sprintf("Fidelity: %.2f %%", 100*(1-infidelity_obsv[]))
 
         end
     end
@@ -284,7 +285,7 @@ end
 function display_matrix(fig, mat, title="Sample Text")
     for i in 1:size(mat, 1)
       for j in 1:size(mat, 2)
-          Label(fig[i+1,j], QuantumGateDesign.Printf.@sprintf("%.2f", mat[i,j]))
+          Label(fig[i+1,j], Printf.@sprintf("%.2f", mat[i,j]))
       end
     end
     Label(fig[1,:], title)
@@ -293,7 +294,7 @@ end
 function string_matrix(mat)
     string_mat = Matrix{String}(undef, size(mat)...)
     for i in eachindex(mat)
-        string_mat[i] = QuantumGateDesign.Printf.@sprintf("%.2f", mat[i])
+        string_mat[i] = Printf.@sprintf("%.2f", mat[i])
     end
     return string_mat
 end
