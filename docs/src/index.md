@@ -1,4 +1,4 @@
-# HermiteOptimalControl.jl Documentation
+# QuantumGateDesign.jl
 ```@contents
 ```
 
