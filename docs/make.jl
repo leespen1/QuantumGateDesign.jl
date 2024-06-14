@@ -5,7 +5,7 @@ push!(LOAD_PATH,"../src/")
 makedocs(
     modules = [QuantumGateDesign],
     sitename = "QuantumGateDesign.jl",
-    doctest = true
+    doctest = true,
     pages = [
         "Home" => "index.md",
         "Index" => "function-index.md",
