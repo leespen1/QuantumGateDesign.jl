@@ -1,12 +1,12 @@
-using Documenter, HermiteOptimalControl
+using Documenter, QuantumGateDesign
 
 makedocs(sitename="My Documentation")
 push!(LOAD_PATH,"../src/")
 makedocs(
-    modules = [HermiteOptimalControl],
-    sitename = "HermiteOptimalControl.jl",
+    modules = [QuantumGateDesign],
+    sitename = "QuantumGateDesign.jl",
     doctest = true
 )
 deploydocs(
-    repo = "github.com/leespen1/HermiteOptimalControl.jl.git",
+    repo = "github.com/leespen1/QuantumGateDesign.jl.git",
 )
