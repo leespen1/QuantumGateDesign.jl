@@ -1,3 +1,20 @@
+"""
+    eval_grad_forced(prob, controls, pcof, target; [order=2, cost_type=:Infidelity, return_forcing=false, abstol=1e-10, reltol=1e-10])
+
+Compute the gradient by differentiating Schrodinger's equation w.r.t each control
+parameter (the GOAT method). Return the gradient.
+
+# Arguments
+- `prob::SchrodingerProb`: Object containing the Hamiltonians, number of timesteps, etc.
+- `controls`: An `AstractControl` or vector of controls, where the i-th control corresponds to the i-th control Hamiltonian.
+- `pcof::AbstractVector{<: Real}`: The control vector.
+- `target::AbstractMatrix{Float64}`: The target gate, in 'stacked' real-valued format.
+- `cost_type=:Infidelity`: The cost function to use (ONLY USE INFIDELITY, OTHERS HAVE NOT BEEN TESTED RECENTLY).
+- `return_forcing=false`: Whether to return the forcing array computed for the last control parameter (for debugging).
+- `order::Int64=2`: Which order of the method to use.
+- `abstol::Float64=1e-10`: Absolute tolerance to use in GMRES.
+- `reltol::Float64=1e-10`: Relative tolerance to use in GMRES.
+"""
 function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
         pcof::AbstractVector{Float64}, target::VM; order=2, 
         cost_type=:Infidelity, return_forcing=false, kwargs...

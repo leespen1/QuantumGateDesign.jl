@@ -28,7 +28,7 @@ export optimize_gate
 export get_populations, target_helper, plot_populations, real_to_complex, complex_to_real
 
 # Export control types and constructors
-export AbstractControl, BSplineControl, GRAPEControl, GeneralGRAPEControl
+export AbstractControl, BSplineControl, GRAPEControl, GeneralGRAPEControl, HermiteControl, HermiteCarrierControl
 export bspline_control, ZeroControl
 export eval_p, eval_q, eval_p_derivative, eval_q_derivative, eval_grad_p_derivative, eval_grad_q_derivative
 

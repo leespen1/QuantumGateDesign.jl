@@ -1,4 +1,12 @@
 """
+    HermiteCarrierControl(N_points, tf, N_derivatives, carrier_wave_freqs; [scaling_type=:Heuristic])
+
+Construct  a control that is the sum of Hermite interpolating polynomials of the values and first
+`N_derivatives` derivatives at `N_points` evenly spaced points, multiplied by carrier waves. The control
+vector gives the values and the derivatives (scaled depending on
+`scaling_type`) for each of the polynomials multiplied by carrier waves.
+
+# Notes
 Working on making this non-allocating and non-repeating.
 
 Also remember to eventually change when the 1/j! is applied, for better numerical

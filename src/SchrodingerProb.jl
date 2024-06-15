@@ -1,13 +1,23 @@
 """
-Struct containing all the necessary information needed (except the value of the
-control vector and target gate) to evolve a state vector according to
-Schrodinger's equation and compute gradients.
+    SchrodingerProb(system_sym, system_asym, sym_operators, asym_operators, u0, v0, tf, nsteps, N_ess_levels)
 
-TODO: if I add more types, i.e. one for system sym, one for system_asym, allow
-sym_ops to be a tuple of vectors, then I think we may be able to do some great
-things with Diagonal, TriDiagonal, etc types. It would be especially good to have
-the system_sym be Diagonal type (probably better than sparse), and system_asym
-be some 'empty' type.
+Set up an object containing the data that defines the physics and numerics
+of the problem (the Hamiltonians, initial conditions, number of timesteps, etc).
+
+# Arguments
+- `system_sym::M`: the symmetric/real part of the system Hamiltonian.
+- `system_asym::M`: the antisymmetric/imaginary part of the system Hamiltonian.
+- `sym_operators::Vector{M}`: a vector whose i-th entry is the symmetric part of the i-th control Hamiltonian.
+- `asym_operators::Vector{M}`: a vector whose i-th entry is the antisymmetric part of the i-th control Hamiltonian.
+- `u0::M`: the real part of the initial conditions. The i-th column corresponds to the i-th initial state in the gate basis.
+- `v0::M`: the imaginary part of the initial conditions. The i-th column corresponds to the i-th initial state in the gate basis.
+- `tf::Real`: duration of the gate.
+- `nsteps::Int64`: number of timesteps to take.
+- `N_ess_levels::Int64`: number of levels in the 'essential' subspace, i.e. the part of the subspace actually used for computation.
+- `guard_subspace_projector::Union{M, missing}=missing`: matrix projecting a state vector in to the 'guard' subspace.
+where `M <: AbstractMatrix{Float64}`
+
+TODO: allow different types for each operator, to allow better specializations (e.g. for symmetric or tridiagonal matrices).
 """
 mutable struct SchrodingerProb{M, VM} 
     system_sym::M

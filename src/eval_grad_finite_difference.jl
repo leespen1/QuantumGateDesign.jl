@@ -1,3 +1,20 @@
+"""
+    eval_grad_finite_difference(prob, controls, pcof, target; [dpcof=1e-5, order=2, cost_type=:Infidelity, abstol=1e-10, reltol=1e-10])
+
+Compute the gradient using centered difference for each control
+parameter. Return the gradient.
+
+# Arguments
+- `prob::SchrodingerProb`: Object containing the Hamiltonians, number of timesteps, etc.
+- `controls`: An `AstractControl` or vector of controls, where the i-th control corresponds to the i-th control Hamiltonian.
+- `pcof::AbstractVector{<: Real}`: The control vector.
+- `target::AbstractMatrix{Float64}`: The target gate, in 'stacked' real-valued format.
+- `dpcof=1e-5`: The spacing to be used in the centered difference method.
+- `cost_type=:Infidelity`: The cost function to use (ONLY USE INFIDELITY, OTHERS HAVE NOT BEEN TESTED RECENTLY)
+- `order::Int64=2`: Which order of the method to use.
+- `abstol::Float64=1e-10`: Absolute tolerance to use in GMRES.
+- `reltol::Float64=1e-10`: Relative tolerance to use in GMRES.
+"""
 function eval_grad_finite_difference(
         prob::SchrodingerProb, controls,
         pcof::AbstractVector{Float64}, target::AbstractMatrix{Float64};

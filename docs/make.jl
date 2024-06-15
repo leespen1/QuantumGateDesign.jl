@@ -8,6 +8,13 @@ makedocs(
     doctest = true,
     pages = [
         "Home" => "index.md",
+        "Problem Setup" => "problem_setup.md",
+        "Forward Simulation" => "forward_simulation.md",
+        "Gradient Evaluation" => "gradient_evaluation.md",
+        "Optimization" => "optimization.md",
+        "Control Functions" => "control_functions.md",
+        "Examples" => "examples.md",
+        "Visualization" => "visualization.md",
         "Index" => "function-index.md",
     ],
 )

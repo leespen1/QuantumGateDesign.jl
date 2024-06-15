@@ -1,3 +1,11 @@
+"""
+    plot_control(control, pcof; [npoints=1001, derivative_orders=0, convert_units=false, linewidth=2])
+
+Plot the pulse amplitudes over time for the given control and control vector.
+Return the plot.
+
+The derivatives can also be plotted by supplying an integer or vector of integers as the arguemnt for `derivative_orders`.
+"""
 function plot_control(control::AbstractControl, pcof::AbstractVector{Float64};
         npoints=1001, derivative_orders=0, convert_units=false, linewidth=2)
     t_grid = LinRange(0, control.tf, npoints)

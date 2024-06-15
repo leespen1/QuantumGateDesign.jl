@@ -59,8 +59,20 @@ function compute_terminal_condition(
 end
 
 """
-Arbitrary order version, should make one with target being abstract vector as
-well, so I can do state transfer problems.
+    discrete_adjoint(prob, controls, pcof, target; [order=2, cost_type=:Infidelity, return_lambda_history=false, abstol=1e-10, reltol=1e-10])
+
+Compute the gradient using the discrete adjoint method. Return the gradient.
+
+# Arguments
+- `prob::SchrodingerProb`: Object containing the Hamiltonians, number of timesteps, etc.
+- `controls`: An `AstractControl` or vector of controls, where the i-th control corresponds to the i-th control Hamiltonian.
+- `pcof::AbstractVector{<: Real}`: The control vector.
+- `target::AbstractMatrix{Float64}`: The target gate, in 'stacked' real-valued format.
+- `order::Int64=2`: Which order of the method to use.
+- `cost_type=:Infidelity`: The cost function to use (ONLY USE INFIDELITY, OTHERS HAVE NOT BEEN TESTED RECENTLY).
+- `return_lambda_history=false`: Whether to return the history of the adjoint variable lambda.
+- `abstol::Float64=1e-10`: Absolute tolerance to use in GMRES.
+- `reltol::Float64=1e-10`: Relative tolerance to use in GMRES.
 """
 function discrete_adjoint(
         prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}},

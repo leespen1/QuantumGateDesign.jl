@@ -1,5 +1,18 @@
 """
-kwargs should be propogated all the way down to the vector version of eval_forward.
+    eval_forward(prob, controls, pcof; [order=2, saveEveryNsteps=1, forcing=missing, abstol=1e-10, reltol=1e-10])
+
+Simulate a `SchrodingerProb` forward in time. Return the history of the state
+vector for each initial condition as a 4D array.
+
+# Arguments
+- `prob::SchrodingerProb`: Object containing the Hamiltonians, number of timesteps, etc.
+- `controls`: An `AstractControl` or vector of controls, where the i-th control corresponds to the i-th control Hamiltonian.
+- `pcof::AbstractVector{<: Real}`: The control vector.
+- `order::Int64=2`: Which order of the method to use.
+- `saveEveryNsteps::Int64=1`: Only store the state every `saveEveryNsteps` timesteps.
+- `forcing::Union{AbstractArray{Float64}, Missing}`: Optional forcing array, ordered in same format as the returned history.
+- `abstol::Float64=1e-10`: Absolute tolerance to use in GMRES.
+- `reltol::Float64=1e-10`: Relative tolerance to use in GMRES.
 """
 function eval_forward(
         prob::SchrodingerProb{M1, M2}, controls, pcof::AbstractVector{<: Real};

@@ -9,7 +9,12 @@ struct BSplineControl <: AbstractControl
     bcpar::bcparams
 end
 
-function BsplineControl(tf::Float64, D1::Int, omega::AbstractVector{Float64})
+"""
+    BsplineControl(tf, D1, omega)
+
+Construct a control whose value is the sum of Bspline envelopes multiplied by carrier waves.
+"""
+function BSplineControl(tf::Float64, D1::Int, omega::AbstractVector{Float64})
     pcof = zeros(2*D1*length(omega)) # For now, only doing one coupled pair of control
     omega_bcpar = [omega] # Need to wrap in another vector, since bcparams generally expects multiple controls (multiple frequencies != multiple controls)
     bcpar = bcparams(tf, D1, omega_bcpar, pcof)

@@ -1,9 +1,7 @@
 """
+    plot_populations(history; [ts=missing, level_indices=missing, labels=missing])
+
 Given state vector history, plot population evolution (assuming single qubit for labels).
-
-Should make a version that takes a Schrodinger problem as an input, so I can
-get the number of subsystems, etc.
-
 """
 function plot_populations(history::AbstractArray{Float64, 4}; ts=missing,
         level_indices=missing, labels=missing)

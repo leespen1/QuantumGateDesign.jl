@@ -7,27 +7,22 @@
 Abstract supertype for all controls.
 
 Every concrete subtype must have the following methods defined:
-    eval_p(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
-    eval_q(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})
+# Methods
+- `eval_p(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})`
+- `eval_q(control::AbstractControl, t::Real, pcof::AbstractVector{<: Real})`
 
-Every concrete subtype must have the following parameters
-    N_coeff::Int
-    tf::Float64
+Every concrete subtype must have the following parameters:
+# Parameters
+- `N_coeff::Int`
+- `tf::Float64`
 
-The following methods can also be defined, but have defaults implemented using
-automatic differentiation:
-    # For discrete adjoint / forced gradient calculation
-    eval_p_derivative
-    eval_q_derivative
-    eval_grad_p_derivative
-    eval_grad_q_derivative
-    ...
-    ...
-
-
-When I have multiple controls, I'm not sure if I should pass in a vector of
-control objects, or just one control object which evaluate each of the controls.
-I am leaning toward the former option, since it would be easier to implement.
+The following methods can also be handwritten for efficiency, but have defaults
+implemented using automatic differentiation (currently broken):
+# Optional Methods
+- `eval_p_derivative`
+- `eval_q_derivative`
+- `eval_grad_p_derivative`
+- `eval_grad_q_derivative`
 """
 abstract type AbstractControl end
 

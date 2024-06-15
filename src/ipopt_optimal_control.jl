@@ -56,7 +56,33 @@ end
 
 
 """
-Unused, but need a function to provide to ipopt.
+    optimize_gate(schro_prob, controls, pcof_init, target, [order=4, pcof_L=missing, pcof_U=missing, maxIter=50, print_level=5, ridge_penalty_strength=1e-2, max_cpu_time = 300.0])
+
+Perform gradient-based search (L-BFGS) to find value of the control vector `pcof`
+which minimizes the objective function for the given problem and target.
+Returns a dictionary which contains the ipopt optimization problem object, as
+well as other information about the optimization.
+
+NOTE: Right now the GMRES tolerance is not implemented as a kwarg, so the
+default value of 1e-10 for abstol and reltol will be used. 
+
+NOTE: to play around with IPOPT settings which are not accessible through this
+function call, could run the optimization with maxIter=1, then grab the IPOPT
+problem from the return dictionary, and change the IPOPT settings directly through
+the IPOPT API.
+
+# Arguments
+- `prob::SchrodingerProb`: Object containing the Hamiltonians, number of timesteps, etc.
+- `controls`: An `AstractControl` or vector of controls, where the i-th control corresponds to the i-th control Hamiltonian.
+- `pcof::AbstractVector{<: Real}`: The control vector.
+- `target::AbstractMatrix{Float64}`: The target gate, in 'stacked' real-valued format.
+- `order::Int64=2`: Which order of the timestepping method to use.
+- `pcof_L=missing`: Lower bounds of the control parameters. Can either be a single number, used for all parameters, or a vector the same length as `pcof`, which will set a lower limit on each parameter.
+- `pcof_U=missing`: Upper bounds of the control parameters.
+- `maxIter=50`: Maximum number of iterations to perform.
+- `print_level=5`: Print level of IPOPT.
+- `ridge_penalty_strength`: Strength of the ridge/Tikhonov regularization term in the objective function.
+- `max_cpu_time`: Maximum CPU time (in seconds) to spend on the optimization problem.
 """
 function optimize_gate(
         schro_prob::SchrodingerProb{M, VM}, controls,
@@ -197,8 +223,8 @@ function optimize_gate(
     #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "first-order") # What does this do?
     #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "none") # Not sure what derivative test does, but it takes a minute.
     Ipopt.AddIpoptIntOption(ipopt_prob, "print_level", print_level)  
-    Ipopt.AddIpoptStrOption(ipopt_prob, "timing_statistics", "yes")
-    Ipopt.AddIpoptStrOption(ipopt_prob, "print_timing_statistics", "yes")
+    #Ipopt.AddIpoptStrOption(ipopt_prob, "timing_statistics", "yes")
+    #Ipopt.AddIpoptStrOption(ipopt_prob, "print_timing_statistics", "yes")
     # Anything below this number will be considered -∞. I.e., terminate when objective goes beloww this
     #Ipopt.AddIpoptNumOption(ipopt_prob, "nlp_lower_bound_inf", nlp_lower_bound)
     

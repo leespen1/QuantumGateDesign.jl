@@ -1,4 +1,11 @@
 """
+    HermiteControl(N_points, tf, N_derivatives; [scaling_type=:Heuristic])
+
+Construct a control that is a Hermite interpolating polynomial of the values and first
+`N_derivatives` derivatives at `N_points` evenly spaced points. The control
+vector gives the values and the derivatives (scaled depending on `scaling_type`).
+
+# Notes
 Working on making this non-allocating and non-repeating.
 
 Also remember to eventually change when the 1/j! is applied, for better numerical
@@ -8,8 +15,6 @@ Note: I can use a high-order hermite control for a low order method, and pcof st
 works the same way.
 
 And for pcof, it is convenient to just reshape a matrix whose columns are the derivatives
-
-
 """
 mutable struct HermiteControl <: AbstractControl
     N_coeff::Int64
