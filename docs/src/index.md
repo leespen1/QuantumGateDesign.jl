@@ -23,11 +23,11 @@ H(t;\boldsymbol\theta) = H_d + \sum_{j=1}^{N_c} c_j(t; \boldsymbol\theta) \cdot 
 
 # Workflow
 The basic workflow is:
-1. Set up a [`SchrodingerProb`](@ref).
-2. Set up the control functions.
+1. Set up the physics of the [problem](problem_setup.md).
+2. Set up the [control functions](control_functions.md).
 3. Choose an initial guess for the control vector.
 4. Choose a target gate.
-5. Optimize the control vector using ipopt.
+5. [Optimize](optimization.md) the control vector using ipopt.
 
 The user can also directly simulate the time evolution of the state vector and
 compute gradients of the gate-infidelity, outside of the optimization loop.
