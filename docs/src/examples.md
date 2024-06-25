@@ -20,7 +20,7 @@ a = \begin{bmatrix} 0 & 1 \\ 0 & 0 \end{bmatrix}.
 Consequently, the dynamics of the problem are
 ```math
 \frac{dU}{dt} = \left(p_0\begin{bmatrix} 0 & 1 \\ 1 & 0 \end{bmatrix} +iq_0
-\begin{bmatrix} 0 & 1 \\ 1 & 0 \end{bmatrix}\right)U
+\begin{bmatrix} 0 & 1 \\ -1 & 0 \end{bmatrix}\right)U
 ```
 (NOTE: not sure if there should be a $-i$ on the right-hand side when we work in
 the complex formulation).
