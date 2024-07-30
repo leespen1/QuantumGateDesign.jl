@@ -1,27 +1,19 @@
 """
-Form the identity matrix of sixe N×N. (Actually forming the matrix, so we can
-take kronecker products).
+Construct the lowering operator for a single subsystem.
 """
-function identity(N)
-    return Matrix{Int64}(LinearAlgebra.I, N, N)
-end
-
-
-"""
-Construct the lowering operator for a single system.
-"""
-function lowering_operator(system_size::Int)
-    return sqrt.(LinearAlgebra.diagm(1 => 1:(system_size-1)))
+function lowering_operator_subsystem(subsystem_size::Int)
+    return sqrt.(LinearAlgebra.diagm(1 => 1:(subsystem_size-1)))
 end
 
 """
-Construct the lowering operators for each subsystem of a larger system.
+Construct the lowering operators for each subsystem of a larger system, as
+applied to the larger system.
 """
-function lowering_operators(subsystem_sizes::AbstractVector{Int})
+function lowering_operators_system(subsystem_sizes::AbstractVector{Int})
     full_system_size = prod(subsystem_sizes)
 
     # Holds the identity matrix for each subsystem 
-    subsystem_identity_matrices = [identity(n) for n in subsystem_sizes] 
+    subsystem_identity_matrices = [Matrix(LinearAlgebra.I, n, n) for n in subsystem_sizes] 
     # Holds the matrices we will take the kronecker product of to form the lowering operators for the whole system.
     kronecker_prod_vec = Vector{Matrix{Float64}}(undef, length(subsystem_sizes))
 
@@ -33,7 +25,7 @@ function lowering_operators(subsystem_sizes::AbstractVector{Int})
         # Set all matrices to the identity matrix for that subssystem
         kronecker_prod_vec .= subsystem_identity_matrices
         # Replace i-th matrix with the lowering operator for that subsystem
-        kronecker_prod_vec[i] = lowering_operator(subsys_size)
+        kronecker_prod_vec[i] = lowering_operator_subsystem(subsys_size)
         # Take the kronecker product of all the matrices (all identity matrices except for the one lowering operator)
         lowering_operators_vec[i] = kron(kronecker_prod_vec...)
     end

@@ -8,3 +8,7 @@ matrices. There are currently bugs when giving them as vectors.
 ```@docs
 SchrodingerProb
 ```
+
+```@docs
+guard_projector
+```

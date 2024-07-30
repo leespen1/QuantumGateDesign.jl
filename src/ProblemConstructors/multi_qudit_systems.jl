@@ -23,21 +23,26 @@ A cavity appears to be treated the same as a qudit, just with many levels.
 
 Maybe I should add a separate thing for rotating frequencies?
 """
-function multi_qudit_hamiltonian(subsystem_sizes::AbstractVector{Int}, transition_freqs::AbstractVector{<: Real},
-        kerr_coeffs::AbstractMatrix{<: Real}; sparse_rep=true)
+function multi_qudit_hamiltonian(
+        subsystem_sizes::AbstractVector{Int},
+        transition_freqs::AbstractVector{<: Real},
+        rotation_freqs::AbstractVector{<: Real},
+        kerr_coeffs::AbstractMatrix{<: Real};
+        sparse_rep=true)
 
     @assert length(transition_freqs) == size(kerr_coeffs, 1) == size(kerr_coeffs, 2)
+    @assert issymmetric(kerr_coeffs)
 
     Q = length(subsystem_sizes)
     full_system_size = prod(subsystem_sizes)
     H_sym = zeros(full_system_size, full_system_size)
     H_asym = zeros(full_system_size, full_system_size)
 
-    lowering_ops = lowering_operators(subsystem_sizes)
+    lowering_ops = lowering_operators_system(subsystem_sizes)
 
     for q in 1:Q
         a_q = lowering_ops[q]
-        H_sym .+= transition_freqs[q] .* (a_q' * a_q)
+        H_sym .+= (transition_freqs[q] - rotation_freqs[q]) .* (a_q' * a_q)
         H_sym .-= 0.5*kerr_coeffs[q,q] .* (a_q' * a_q' * a_q * a_q)
         for p in (q+1):Q
             a_p = lowering_ops[p]
@@ -68,47 +73,116 @@ end
 
 
 """
-Given a base qubit transition frequency, and base self/cross-kerr coefficients,
-perturb them to create a problem for an ensemble of semi-random qubits.
+Construct a multi-qudit hamilotonian with kerr and Jaynes-cummings terms.
+We require that the same rotation frequency be used in all subsystems, so that
+the system Hamiltonian is time-independent.
+
+To get the lab frame hamiltonian, take `transition_freq=0`
 """
-function randomized_multi_qubit_system(subsystem_sizes::AbstractVector{Int},
-        base_transition_frequency, base_self_kerr, base_cross_kerr; perturbation_ratio=0.0)
-    N = length(subsystem_sizes)
+function multi_qudit_hamiltonian_jayne(
+        subsystem_sizes::AbstractVector{Int},
+        transition_freqs::AbstractVector{<: Real},
+        rotation_freq::Real,
+        kerr_coeffs::AbstractMatrix{<: Real},
+        jayne_cummings_coeffs::AbstractMatrix{<: Real};
+        sparse_rep=true
+    )
+    @assert issymmetric(kerr_coeffs)
+    @assert issymmetric(jayne_cummings_coeffs)
+    @assert iszero(diag(jayne_cummings_coeffs)) # No self JC coupling
 
-    # Function for 'perturbing' a value (uniform distribution)
-    perturb(val) = val + val*rand()*rand([-1,1])*perturbation_ratio
+    Q = length(subsystem_sizes)
+    full_system_size = prod(subsystem_sizes)
+    H_sym = SparseArrays.spzeros(Float64, full_system_size, full_system_size)
+    H_asym = SparseArrays.spzeros(Float64, full_system_size, full_system_size)
 
-    transition_freqs = ones(N) .* base_transition_frequency
-    transition_freqs = perturb.(transition_freqs)
+    lowering_ops = lowering_operators_system(subsystem_sizes)
 
-    kerr_coeffs = zeros(N,N)
-    for i in 1:N
-        kerr_coeffs[i,i] = perturb(base_self_kerr)
-        for j in (i+1):N
-            kerr_coeffs[j,i] = perturb(base_cross_kerr)
+    for q in 1:Q
+        a_q = lowering_ops[q]
+        H_sym .+= (transition_freqs[q] - rotation_freq) .* (a_q' * a_q)
+        H_sym .-= 0.5*kerr_coeffs[q,q] .* (a_q' * a_q' * a_q * a_q)
+        for p in (q+1):Q
+            a_p = lowering_ops[p]
+            H_sym .-= kerr_coeffs[p,q] .* (a_p' * a_p* a_q' * a_q)
+            # No time dependence in Jayne-Cummings because we use the same rotational frequency in all subsystems
+            H_sym .+= jayne_cummings_coeffs[p,q]*(a_q'*a_p + a_q*a_p')
         end
     end
 
-    # Convert to angular
-    transition_freqs .*= 2pi
-    kerr_coeffs .*= 2pi
+    if sparse_rep
+        return SparseArrays.sparse(H_sym), SparseArrays.sparse(H_asym)
+    end
 
-    H = hamiltonian(subsystem_sizes, transition_freqs, kerr_coeffs)
-    sym_ops, asym_ops = control_ops(subsystem_sizes)
+    return H_sym, H_asym
+end
 
-    tf = 50.0
-    nsteps = 10
 
-    complex_system_size = size(H, 1)
+"""
+Given the size of each subsystem and the number of essential levels in each subsystem,
+return a matrix which projects the state vector onto the guarded subspace.
 
-    U0 = diagm(ones(complex_system_size))
+Note that the first subsystem corresponds to the leftmost bit of the quantum bitstring.
 
-    # Assume all states are essential
-    N_ess = complex_system_size
-    N_guard = 0
+E.g.
 
-    prob = SchrodingerProb(real(H), imag(H), sym_ops, asym_ops, real(U0), imag(U0),
-        tf, nsteps, N_ess)
+``|n_0 n_1 n_2 \rangle = |n_0\rangle \otimes |n_1\rangle \otimes |n_2\rangle``
 
-    return prob
+Examples
+≡≡≡≡≡≡≡≡
+julia> guard_projector([3], [2])
+6×6 SparseMatrixCSC{Int64, Int64} with 6 stored entries:
+ 0  ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  0  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  1  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  0  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  0  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅  1
+
+julia> guard_projector([2,2], [2,1])
+8×8 SparseMatrixCSC{Int64, Int64} with 8 stored entries:
+ 0  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  0  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  1  ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  1  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  0  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅  0  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  1  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  1
+
+"""
+function guard_projector(subsystem_sizes::AbstractVector{Int}, essential_levels_vec::AbstractVector{Int})
+    system_size = prod(subsystem_sizes)
+    guard_levels_vec = subsystem_sizes - essential_levels_vec
+
+    forbidden_slices = [1+n_ess_levels:n_ess_levels+n_guard_levels
+                        for (n_ess_levels, n_guard_levels)
+                        in zip(essential_levels_vec, guard_levels_vec)]
+    guard_projector_tensor = zeros(Int64, subsystem_sizes...)
+    for (subsystem_index, forbidden_slice) in enumerate(forbidden_slices)
+        selectdim(guard_projector_tensor, subsystem_index, forbidden_slice) .= 1
+    end
+
+    complex_guard_projector = SparseArrays.spdiagm(reshape(guard_projector_tensor, :))
+
+    Re = real(complex_guard_projector)
+    Im = imag(complex_guard_projector)
+    real_guard_projector = [Re -Im; Im Re]
+    return real_guard_projector
+end
+
+"""
+Make a Jaynes-Cummings SchrodingerProb
+"""
+function JaynesCummingsProblem(
+        subsystem_sizes::AbstractVector{Int},
+        transition_freqs::AbstractVector{<: Real},
+        rotation_freq::Real,
+        kerr_coeffs::AbstractMatrix{<: Real},
+        jayne_cummings_coeffs::AbstractMatrix{<: Real};
+        sparse_rep=true
+        # What else do I need? Final time? Guard penalty? Preconditioner?
+        # (it would be good to have the preconditioner determined here)
+    )
+
 end
