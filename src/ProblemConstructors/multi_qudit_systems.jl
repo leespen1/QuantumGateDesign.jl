@@ -126,7 +126,7 @@ Note that the first subsystem corresponds to the leftmost bit of the quantum bit
 
 E.g.
 
-``|n_0 n_1 n_2 \rangle = |n_0\rangle \otimes |n_1\rangle \otimes |n_2\rangle``
+``|n_0 n_1 n_2 \\rangle = |n_0\\rangle \\otimes |n_1\\rangle \\otimes |n_2\\rangle``
 
 Examples
 ≡≡≡≡≡≡≡≡
@@ -149,7 +149,6 @@ julia> guard_projector([2,2], [2,1])
  ⋅  ⋅  ⋅  ⋅  ⋅  0  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  1  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  1
-
 """
 function guard_projector(subsystem_sizes::AbstractVector{Int}, essential_levels_vec::AbstractVector{Int})
     system_size = prod(subsystem_sizes)
