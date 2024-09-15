@@ -144,6 +144,7 @@ end
 
 """
 Show/display problem parameters in a human readable format.
+(Considering getting rid of the matrix displays, they are cumbersome. Maybe have another function for seeing those.)
 """
 function Base.show(io::IO, ::MIME"text/plain", prob::SchrodingerProb{M, VM}) where {M, VM}
     println(io, typeof(prob))
@@ -154,27 +155,34 @@ function Base.show(io::IO, ::MIME"text/plain", prob::SchrodingerProb{M, VM}) whe
     elseif (VM <: AbstractMatrix)
         print(io, " (gate design problem)")
     end
-    print(io, "\n")
 
-    println(io, "System symmetric operator: \n", prob.system_sym)
-    println(io, "System asymmetric operator: \n", prob.system_asym)
+    println(io, "\n\nSystem symmetric operator:")
+    show(io, "text/plain", prob.system_sym)
 
-    println(io, "Control symmetric operators:")
+    println(io, "\n\nSystem asymmetric operator:")
+    show(io, "text/plain", prob.system_asym)
+
+    println(io, "\n\nControl symmetric operators:")
     for op in prob.sym_operators
-        println(io, "\t", op)
+        println(io)
+        show(io, "text/plain", op)
     end
 
-    println(io, "Control asymmetric operators:")
+    println(io, "\n\nControl asymmetric operators:")
     for op in prob.asym_operators
-        println(io, "\t", op)
+        println(io)
+        show(io, "text/plain", op)
     end
 
-    println(io, "Guard supspace projector: \n", prob.guard_subspace_projector)
+    println(io, "\n\nGuard supspace projector:")
+    show(io, "text/plain", prob.guard_subspace_projector)
 
-    println(io, "Real part of initial state(s): ", prob.u0)
-    println(io, "Imaginary part of initial state(s): ", prob.v0)
+    println(io, "\n\nReal part of initial state(s):")
+    show(io, "text/plain",  prob.u0)
+    println(io, "\n\nImaginary part of initial state(s):")
+    show(io, "text/plain",  prob.v0)
 
-    println(io, "Final time: ", prob.tf)
+    println(io, "\n\nFinal time: ", prob.tf)
     println(io, "Number of timesteps: ", prob.nsteps)
     println(io, "Number of initial condtions: ", prob.N_initial_conditions)
     println(io, "Number of essential levels: ", prob.N_ess_levels)
