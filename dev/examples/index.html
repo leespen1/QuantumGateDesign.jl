@@ -35,4 +35,46 @@ target_complex = [0.0 1;
                   1   0]
 target = vcat(real(target_complex), imag(target_complex))
 
-ret_dict = optimize_gate(prob, control, pcof, target, order=4)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../control_functions/">« Control Functions</a><a class="docs-footer-nextpage" href="../visualization/">Visualization »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.25 on <span class="colophon-date" title="Tuesday 25 June 2024 00:48">Tuesday 25 June 2024</span>. Using Julia version 1.9.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+ret_dict = optimize_gate(prob, control, pcof, target, order=4)</code></pre><h3 id="Qudit-System-with-Jaynes-Cummings-Coupling"><a class="docs-heading-anchor" href="#Qudit-System-with-Jaynes-Cummings-Coupling">3 Qudit System with Jaynes-Cummings Coupling</a><a id="Qudit-System-with-Jaynes-Cummings-Coupling-1"></a><a class="docs-heading-anchor-permalink" href="#Qudit-System-with-Jaynes-Cummings-Coupling" title="Permalink"></a></h3><p>QuantumGateDesign.jl provides convenience functions for setting up several <a href="../problem_setup/#QuantumGateDesign.SchrodingerProb"><code>SchrodingerProb</code></a>&#39;s which arise frequently in quantum computing.</p><pre><code class="nohighlight hljs">using QuantumGateDesign
+
+# Transition frequencies in GHz
+transition_frequencies = [5.18, 5.12, 5.06]
+
+# Rotation frequency to use in each subsystem 
+# (for Jaynes-Cummings, must be same in all subsystems so system Hamiltonian is time-independent)
+rotation_frequency = 5.12
+
+# The self-Kerr coefficients (we ignore cross-kerr here)
+kerr_coefficients = [
+    0.34 0    0
+    0    0.34 0
+    0    0    0.34
+] 
+
+# The cross resonance coefficients (Jayne-Cummings coupling)
+cross_resonance_coefficients = [
+    0    5e-3 0
+    5e-3 0    5e-3
+    0    5e-3 0
+]
+
+# Number of timesteps
+nsteps = 500
+
+# Gate duration (nanoseconds)
+tf = 500
+
+# Model each qudit with 3 levels, 2 of which are used for computation
+subsystem_sizes = [3, 3, 3]
+essential_levels_vec = [2, 2, 2]
+
+prob = QuantumGateDesign.JaynesCummingsProblem(
+    subsystem_sizes,
+    essential_levels_vec,
+    transition_frequencies,
+    rotation_frequency,
+    kerr_coefficients,
+    cross_resonance_coefficients,
+    tf,
+    nsteps
+)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../control_functions/">« Control Functions</a><a class="docs-footer-nextpage" href="../visualization/">Visualization »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.25 on <span class="colophon-date" title="Monday 16 September 2024 00:05">Monday 16 September 2024</span>. Using Julia version 1.9.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
