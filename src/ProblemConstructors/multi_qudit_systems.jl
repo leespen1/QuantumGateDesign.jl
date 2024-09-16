@@ -38,7 +38,7 @@ function multi_qudit_hamiltonian(
     H_sym = zeros(full_system_size, full_system_size)
     H_asym = zeros(full_system_size, full_system_size)
 
-    lowering_ops = lowering_operators_system(subsystem_sizes)
+    lowering_ops = QuantumGateDesign.lowering_operators_system(subsystem_sizes)
 
     for q in 1:Q
         a_q = lowering_ops[q]
@@ -59,7 +59,7 @@ function multi_qudit_hamiltonian(
 end
 
 function control_ops(subsystem_sizes::AbstractVector{Int}; sparse_rep=true)
-    lower_ops = lowering_operators(subsystem_sizes)
+    lower_ops = QuantumGateDesign.lowering_operators_system(subsystem_sizes)
     sym_ops = [a + a' for a in lower_ops]
     asym_ops = [a - a' for a in lower_ops]
     if sparse_rep
@@ -130,6 +130,8 @@ E.g.
 
 Examples
 ≡≡≡≡≡≡≡≡
+
+```
 julia> guard_projector([3], [2])
 6×6 SparseMatrixCSC{Int64, Int64} with 6 stored entries:
  0  ⋅  ⋅  ⋅  ⋅  ⋅
@@ -149,39 +151,124 @@ julia> guard_projector([2,2], [2,1])
  ⋅  ⋅  ⋅  ⋅  ⋅  0  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  1  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  1
+ ```
 """
-function guard_projector(subsystem_sizes::AbstractVector{Int}, essential_levels_vec::AbstractVector{Int})
+function guard_projector(subsystem_sizes::AbstractVector{Int}, essential_levels_vec::AbstractVector{Int}; use_sparse=true)
     system_size = prod(subsystem_sizes)
-    guard_levels_vec = subsystem_sizes - essential_levels_vec
+    vecs = [zeros(subsystem_size) for subsystem_size in subsystem_sizes]
 
-    forbidden_slices = [1+n_ess_levels:n_ess_levels+n_guard_levels
-                        for (n_ess_levels, n_guard_levels)
-                        in zip(essential_levels_vec, guard_levels_vec)]
-    guard_projector_tensor = zeros(Int64, subsystem_sizes...)
-    for (subsystem_index, forbidden_slice) in enumerate(forbidden_slices)
-        selectdim(guard_projector_tensor, subsystem_index, forbidden_slice) .= 1
+    if use_sparse
+        guard_projector = SparseArrays.spzeros(system_size, 0)
+        zero_vec = SparseArrays.spzeros(system_size)
+    else
+        guard_projector = zeros(system_size, 0)
+        zero_vec = zeros(system_size)
     end
 
-    complex_guard_projector = SparseArrays.spdiagm(reshape(guard_projector_tensor, :))
+    # The reverse and end+i-1 are done so that the initial conditions are
+    # ordered from lowest state to highest state. 
+    for I in CartesianIndices(Tuple(reverse(subsystem_sizes)))
+        I_tup = Tuple(I)
 
-    Re = real(complex_guard_projector)
-    Im = imag(complex_guard_projector)
+        state_is_essential = true
+        for (i, val) in enumerate(I_tup)
+            vecs[end+1-i] .= 0
+            vecs[end+1-i][val] = 1
+            # Check if subsystem state is essential or not
+            if (val > essential_levels_vec[end+1-i])
+                state_is_essential = false
+            end
+        end
+
+        # If the state is essential, column should be zero
+        if state_is_essential
+            column = zero_vec
+        else
+            column = reduce(kron, vecs)
+        end
+
+        guard_projector = hcat(guard_projector, column)
+    end
+
+    Re = real(guard_projector)
+    Im = imag(guard_projector)
     real_guard_projector = [Re -Im; Im Re]
     return real_guard_projector
 end
 
 """
+Create iniitial conditions.
+"""
+function create_intial_conditions(subsystem_sizes, essential_levels_vec)
+    vecs = [zeros(subsystem_size) for subsystem_size in subsystem_sizes]
+    essential_states = Vector{Float64}[]
+    # The reverse and end+i-1 are done so that the initial conditions are
+    # ordered from lowest state to highest state. 
+    for I in CartesianIndices(Tuple(reverse(essential_levels_vec)))
+        I_tup = Tuple(I)
+
+        for (i, val) in enumerate(I_tup)
+            vecs[end+1-i] .= 0
+            vecs[end+1-i][val] = 1
+        end
+        essential_state = reduce(kron, vecs)
+        push!(essential_states, essential_state)
+    end
+
+    essential_states_matrix = reduce(hcat, essential_states)
+    u0 = real(essential_states_matrix)
+    v0 = imag(essential_states_matrix)
+
+    #BUGBUGBUGBUG
+    
+    return u0, v0
+end
+
+"""
 Make a Jaynes-Cummings SchrodingerProb
+
+I should really have a hard-coded example to test correctness. 3 qubits should be enough to test.
 """
 function JaynesCummingsProblem(
-        subsystem_sizes::AbstractVector{Int},
+        subsystem_sizes::AbstractVector{Int}, # Maybe I should allow any iterable? I think tuples are reasonable
+        essential_levels_vec::AbstractVector{Int}, # Should I have a default? E.g. [2,2,2...]?
         transition_freqs::AbstractVector{<: Real},
         rotation_freq::Real,
         kerr_coeffs::AbstractMatrix{<: Real},
-        jayne_cummings_coeffs::AbstractMatrix{<: Real};
+        jayne_cummings_coeffs::AbstractMatrix{<: Real},
+        tf,
+        nsteps;
         sparse_rep=true
         # What else do I need? Final time? Guard penalty? Preconditioner?
         # (it would be good to have the preconditioner determined here)
     )
 
+    system_sym, system_asym = multi_qudit_hamiltonian_jayne(
+        subsystem_sizes,
+        transition_freqs,
+        rotation_freq,
+        kerr_coeffs, 
+        jayne_cummings_coeffs
+    )
+
+    sym_ops, asym_ops = control_ops(subsystem_sizes)
+
+    guard_subspace_projector = guard_projector(subsystem_sizes, essential_levels_vec)
+
+    N_ess_levels = prod(essential_levels_vec) # Pretty sure this is correct
+
+    u0, v0 = create_intial_conditions(subsystem_sizes, essential_levels_vec)
+
+    return SchrodingerProb(
+        system_sym,
+        system_asym,
+        sym_ops,
+        asym_ops,
+        u0,
+        v0,
+        tf,
+        nsteps,
+        N_ess_levels,
+        guard_subspace_projector,
+    )
 end
