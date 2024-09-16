@@ -33,6 +33,8 @@ function lowering_operators_system(subsystem_sizes::AbstractVector{Int})
     return lowering_operators_vec
 end
 
+# Unfinished work for open systems
+#=
 function collapse_operators(subsystem_sizes::AbstractVector{Int}, T1_times::AbstractVector{<: Real})
     @assert length(subsystem_sizes) == length(T1_times)
     return lowering_operators(subsystem_sizes) ./ (sqrt.(T1_times))
@@ -74,4 +76,4 @@ function closed_operator_to_open(op::AbstractMatrix)
     I_N = identity(size(op, 1))
     return kron(I_N, op) - kron(transpose(op), I_n)
 end
-
+=#
