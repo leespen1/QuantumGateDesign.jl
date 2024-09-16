@@ -80,3 +80,53 @@ target = vcat(real(target_complex), imag(target_complex))
 
 ret_dict = optimize_gate(prob, control, pcof, target, order=4)
 ```
+
+### 3 Qudit System with Jaynes-Cummings Coupling
+QuantumGateDesign.jl provides convenience functions for setting up
+several [`SchrodingerProb`](@ref)'s which arise frequently in quantum computing.
+
+```
+using QuantumGateDesign
+
+# Transition frequencies in GHz
+transition_frequencies = [5.18, 5.12, 5.06]
+
+# Rotation frequency to use in each subsystem 
+# (for Jaynes-Cummings, must be same in all subsystems so system Hamiltonian is time-independent)
+rotation_frequency = 5.12
+
+# The self-Kerr coefficients (we ignore cross-kerr here)
+kerr_coefficients = [
+    0.34 0    0
+    0    0.34 0
+    0    0    0.34
+] 
+
+# The cross resonance coefficients (Jayne-Cummings coupling)
+cross_resonance_coefficients = [
+    0    5e-3 0
+    5e-3 0    5e-3
+    0    5e-3 0
+]
+
+# Number of timesteps
+nsteps = 500
+
+# Gate duration (nanoseconds)
+tf = 500
+
+# Model each qudit with 3 levels, 2 of which are used for computation
+subsystem_sizes = [3, 3, 3]
+essential_levels_vec = [2, 2, 2]
+
+prob = QuantumGateDesign.JaynesCummingsProblem(
+    subsystem_sizes,
+    essential_levels_vec,
+    transition_frequencies,
+    rotation_frequency,
+    kerr_coefficients,
+    cross_resonance_coefficients,
+    tf,
+    nsteps
+)
+```
