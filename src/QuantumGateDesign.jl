@@ -105,17 +105,6 @@ include("Plotting/plot_gradient_agreement.jl")
 include("Plotting/plot_states.jl")
 
 
-module OldCompat
-include("OldHardcoded/SchrodingerProb.jl")
-include("OldHardcoded/eval_grad_discrete_adjoint.jl")
-include("OldHardcoded/eval_grad_finite_difference.jl")
-include("OldHardcoded/eval_grad_forced.jl")
-include("OldHardcoded/forward_evolution.jl")
-include("OldHardcoded/hermite.jl")
-include("OldHardcoded/infidelity.jl")
-include("OldHardcoded/state_vector_helper.jl")
-end # module OldCompat
-
 # Define functions without methods, so that extensions can override them
 include("extension_compatibility.jl")
 export visualize_control
