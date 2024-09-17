@@ -23,6 +23,9 @@ export eval_hessian
 export discrete_adjoint, compute_terminal_condition
 export eval_grad_forced
 
+export control_ops, basis_state, create_initial_conditions, guard_projector, create_gate
+export lowering_operator_subsystem, lowering_operators_system
+
 # Export optimization callback
 export optimize_gate
 
@@ -33,6 +36,8 @@ export get_populations, target_helper, plot_populations, real_to_complex, comple
 export AbstractControl, BSplineControl, GRAPEControl, GeneralGRAPEControl, HermiteControl, HermiteCarrierControl
 export bspline_control, ZeroControl, GeneralBSplineControl, CarrierControl
 export eval_p, eval_q, eval_p_derivative, eval_q_derivative, eval_grad_p_derivative, eval_grad_q_derivative, eval_grad_p_derivative!, eval_grad_q_derivative!
+
+export DispersiveProblem, JaynesCummingsProblem
 
 
 # Export example problems and problem construction helpers
