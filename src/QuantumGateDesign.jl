@@ -93,7 +93,6 @@ include("gradient_descent.jl")
 
 include("state_vector_helpers.jl")
 
-include("ProblemConstructors/common_operators.jl")
 include("ProblemConstructors/multi_qudit_systems.jl")
 include("ProblemConstructors/rotating_frame_qubit.jl")
 include("ProblemConstructors/dahlquist_problem.jl")
