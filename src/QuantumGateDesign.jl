@@ -3,6 +3,7 @@ module QuantumGateDesign
 
 import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
 import BenchmarkTools, SparseArrays, Dates, OrderedCollections, JLD2, Random
+import BSplines
 using Printf: @printf, @sprintf
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 using Random: rand, MersenneTwister
@@ -30,8 +31,8 @@ export get_populations, target_helper, plot_populations, real_to_complex, comple
 
 # Export control types and constructors
 export AbstractControl, BSplineControl, GRAPEControl, GeneralGRAPEControl, HermiteControl, HermiteCarrierControl
-export bspline_control, ZeroControl
-export eval_p, eval_q, eval_p_derivative, eval_q_derivative, eval_grad_p_derivative, eval_grad_q_derivative
+export bspline_control, ZeroControl, GeneralBSplineControl, CarrierControl
+export eval_p, eval_q, eval_p_derivative, eval_q_derivative, eval_grad_p_derivative, eval_grad_q_derivative, eval_grad_p_derivative!, eval_grad_q_derivative!
 
 
 # Export example problems and problem construction helpers
@@ -66,6 +67,8 @@ include("Controls/sincos_control.jl")
 include("Controls/zero_control.jl")
 include("Controls/generalized_grape_control.jl")
 include("Controls/hermite_carrier.jl")
+include("Controls/GeneralBSplineControl.jl")
+include("Controls/CarrierControl.jl")
 
 
 include("hermite.jl")
