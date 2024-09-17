@@ -135,3 +135,48 @@ function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::Carrier
     end
     return grad
 end
+
+function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::CarrierControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
+    grad .= 0
+
+    for (i, w) in enumerate(control.carrier_frequencies)
+        offset = (i-1)*control.N_coeffs_per_frequency
+        this_carrier_pcof = view(pcof, 1+offset:offset+control.N_coeffs_per_frequency)
+        this_carrier_grad = view(grad, 1+offset:offset+control.N_coeffs_per_frequency)
+
+        for k in 0:order
+            if (k % 4) == 0
+                carrier_val1 =  sin(w*t) * (w^k)
+                carrier_val2 =  cos(w*t) * (w^k)
+            elseif (k % 4) == 1
+                carrier_val1 =  cos(w*t) * (w^k)
+                carrier_val2 = -sin(w*t) * (w^k)
+            elseif (k % 4) == 2
+                carrier_val1 = -sin(w*t) * (w^k)
+                carrier_val2 = -cos(w*t) * (w^k)
+            elseif (k % 4) == 3
+                carrier_val1 = -cos(w*t) * (w^k)
+                carrier_val2 =  sin(w*t) * (w^k)
+            end
+
+            control.pcof_storage .= 0
+            eval_grad_p_derivative!(
+                control.pcof_storage, control.base_control, t,
+                this_carrier_pcof, order-k
+            )
+
+            @. control.pcof_storage *= carrier_val1 * binomial(order, k)
+            this_carrier_grad .+= control.pcof_storage
+
+            control.pcof_storage .= 0
+            eval_grad_q_derivative!(
+                control.pcof_storage, control.base_control, t,
+                this_carrier_pcof, order-k
+            )
+
+            @. control.pcof_storage *= carrier_val2 * binomial(order, k)
+            this_carrier_grad .+= control.pcof_storage
+        end 
+    end
+    return grad
+end
