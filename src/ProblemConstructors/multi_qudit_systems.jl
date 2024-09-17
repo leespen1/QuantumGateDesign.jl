@@ -23,8 +23,8 @@ A cavity appears to be treated the same as a qudit, just with many levels.
 
 Maybe I should add a separate thing for rotating frequencies?
 """
-function multi_qudit_hamiltonian(
-        subsystem_sizes::AbstractVector{Int},
+function multi_qudit_hamiltonian_dispersive(
+        subsystem_sizes,
         transition_freqs::AbstractVector{<: Real},
         rotation_freqs::AbstractVector{<: Real},
         kerr_coeffs::AbstractMatrix{<: Real};
@@ -58,7 +58,7 @@ function multi_qudit_hamiltonian(
     return H_sym, H_asym
 end
 
-function control_ops(subsystem_sizes::AbstractVector{Int}; sparse_rep=true)
+function control_ops(subsystem_sizes; sparse_rep=true)
     lower_ops = QuantumGateDesign.lowering_operators_system(subsystem_sizes)
     sym_ops = [a + a' for a in lower_ops]
     asym_ops = [a - a' for a in lower_ops]
@@ -80,7 +80,7 @@ the system Hamiltonian is time-independent.
 To get the lab frame hamiltonian, take `transition_freq=0`
 """
 function multi_qudit_hamiltonian_jayne(
-        subsystem_sizes::AbstractVector{Int},
+        subsystem_sizes,
         transition_freqs::AbstractVector{<: Real},
         rotation_freq::Real,
         kerr_coeffs::AbstractMatrix{<: Real},
@@ -117,7 +117,47 @@ function multi_qudit_hamiltonian_jayne(
     return H_sym, H_asym
 end
 
+function DispersiveProblem(
+        subsystem_sizes,
+        essential_subsystem_sizes,
+        transition_freqs::AbstractVector{<: Real},
+        rotation_freqs::AbstractVector{<: Real},
+        kerr_coeffs::AbstractMatrix{<: Real},
+        tf,
+        nsteps;
+        sparse_rep=true,
+        bitstring_ordered=true
+    )
 
+    system_sym, system_asym = multi_qudit_hamiltonian_dispersive(
+        subsystem_sizes,
+        transition_freqs,
+        rotation_freqs,
+        kerr_coeffs, 
+        sparse_rep=sparse_rep
+    )
+
+    sym_ops, asym_ops = control_ops(subsystem_sizes)
+
+    guard_subspace_projector = guard_projector(subsystem_sizes, essential_subsystem_sizes)
+
+    N_ess_levels = prod(essential_subsystem_sizes)
+
+    u0, v0 = create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, bitstring_ordered)
+
+    return SchrodingerProb(
+        system_sym,
+        system_asym,
+        sym_ops,
+        asym_ops,
+        u0,
+        v0,
+        tf,
+        nsteps,
+        N_ess_levels,
+        guard_subspace_projector,
+    )
+end
 
 """
 Make a Jaynes-Cummings SchrodingerProb
@@ -125,8 +165,8 @@ Make a Jaynes-Cummings SchrodingerProb
 I should really have a hard-coded example to test correctness. 3 qubits should be enough to test.
 """
 function JaynesCummingsProblem(
-        subsystem_sizes::AbstractVector{Int}, # Maybe I should allow any iterable? I think tuples are reasonable
-        essential_subsystem_sizes::AbstractVector{Int}, # Should I have a default? E.g. [2,2,2...]?
+        subsystem_sizes, # Maybe I should allow any iterable? I think tuples are reasonable
+        essential_subsystem_sizes, # Should I have a default? E.g. [2,2,2...]?
         transition_freqs::AbstractVector{<: Real},
         rotation_freq::Real,
         kerr_coeffs::AbstractMatrix{<: Real},
@@ -151,9 +191,9 @@ function JaynesCummingsProblem(
 
     guard_subspace_projector = guard_projector(subsystem_sizes, essential_subsystem_sizes)
 
-    N_ess_levels = prod(essential_subsystem_sizes) # Pretty sure this is correct
+    N_ess_levels = prod(essential_subsystem_sizes)
 
-    u0, v0 = create_intial_conditions(subsystem_sizes, essential_subsystem_sizes, bitstring_ordered)
+    u0, v0 = create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, bitstring_ordered)
 
     return SchrodingerProb(
         system_sym,
@@ -214,7 +254,7 @@ function create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, b
     
     # E.g. if essential_subsystem_sizes is (2,3,4), get (0:1, 0:2, 0:4)
     essential_index_ranges = ntuple(
-        i -> 0:essential_index_ranges[i]-1, length(essential_subsystem_sizes)
+        i -> 0:essential_subsystem_sizes[i]-1, length(essential_subsystem_sizes)
     )
 
     if bitstring_ordered
@@ -315,7 +355,7 @@ end
 Construct the lowering operators for each subsystem of a larger system, as
 applied to the larger system.
 """
-function lowering_operators_system(subsystem_sizes::AbstractVector{Int}, bitstring_ordered=true)
+function lowering_operators_system(subsystem_sizes, bitstring_ordered=true)
     if !bitstring_ordered
         throw(ArgumentError("bitstring_ordered=false not yet supported."))
     end
@@ -343,6 +383,27 @@ function lowering_operators_system(subsystem_sizes::AbstractVector{Int}, bitstri
     return lowering_operators_vec
 end
 
+function create_gate(subsystem_sizes, essential_subsystem_sizes, initial_final_pairs, bitstring_ordered=true)
+    u0, v0 = create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, bitstring_ordered)
+    system_size = prod(subsystem_sizes)
+    essential_system_size = prod(essential_subsystem_sizes)
+
+    # E.g. if essential_subsystem_sizes is (2,3,4), get (0:1, 0:2, 0:4)
+    essential_index_ranges = ntuple(
+        i -> 0:essential_subsystem_sizes[i]-1, length(essential_subsystem_sizes)
+    )
+
+    if bitstring_ordered
+        essential_index_ranges = reverse(essential_index_ranges)
+    end
+    ordered_essential_states = reshape(collect(product(essential_index_ranges...)), :)
+    for pair in initial_final_pairs
+        i = findfirst(x -> x == reverse(pair.first), ordered_essential_states)
+        u0[:, i] .= basis_state(subsystem_sizes, pair.second)
+    end
+    return vcat(u0, v0)
+end
+ 
 # Unfinished work for open systems
 #=
 function collapse_operators(subsystem_sizes::AbstractVector{Int}, T1_times::AbstractVector{<: Real})
