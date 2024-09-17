@@ -108,6 +108,7 @@ function Base.iterate(control::AbstractControl, state=missing)
 end
 
 
+#= Removing automativ differentiation for now
 """
 Arbitrary order version, only ever uses automatic differentiation to get high
 order derivatives.
@@ -179,6 +180,7 @@ function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::Abstrac
     grad .= ForwardDiff.gradient(pcof_dummy -> eval_q_derivative_untyped(control, t, pcof_dummy, order), pcof)
     return grad
 end
+=#
 
 """
 Mutating version. The default is to call the allocating version and copy that.
