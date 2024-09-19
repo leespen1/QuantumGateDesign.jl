@@ -272,7 +272,7 @@ target = vcat(params.Utarget_r, params.Utarget_i)
 # Should this be for T=100 or T=50?
 #include("../drives/cnot2_t100.jl")
 
-use_opt_pcof = true
+use_opt_pcof = false
 if use_opt_pcof
     pcof = jldopen("cnot3_save_good_pcof.jld2")["pcof"]
 else
@@ -280,12 +280,13 @@ else
 end
 
 N_derivatives = 5
-N_hermite_samples = 100
+N_hermite_samples = 5
 hermite_controls, hermite_pcof = QuantumGateDesign.sample_from_controls(
     controls_autodiff, pcof, N_hermite_samples, N_derivatives
 )
 
 # 1e19 is the 'infinity' value for ipopt
+#=
 hermite_pcof_L_mat = fill(-2e19, (1+N_derivatives, 
                                   N_hermite_samples*length(hermite_controls), 2))
 hermite_pcof_U_mat = fill(2e19, (1+N_derivatives, 
@@ -297,6 +298,23 @@ hermite_pcof_L_mat[1,:,:] .= -amax
 hermite_pcof_U_mat[1,:,:] .= amax
 hermite_pcof_L = reshape(hermite_pcof_L_mat, :)
 hermite_pcof_U = reshape(hermite_pcof_U_mat, :)
+=#
+
+hermite_pcof_L = fill(-amax, get_number_of_control_parameters(controls))
+hermite_pcof_U = fill(amax,  get_number_of_control_parameters(controls))
+
+
+#prob.nsteps = trunc(prob.tf / 1e-2)
+#ret_dict_opt4 = optimize_gate(prob, hermite_controls, pcof0, target,
+#    order=4, pcof_L=hermite_pcof_L, pcof_U=hermite_pcof_U, maxIter=150,
+#    max_cpu_time = 60.0*60
+#)
+
+prob.nsteps = trunc(prob.tf / 1e-1)
+ret_dict_opt8 = optimize_gate(prob, hermite_controls, pcof0, target,
+    order=8, pcof_L=hermite_pcof_L, pcof_U=hermite_pcof_U, maxIter=150,
+    max_cpu_time = 60.0*60
+)
 
 
 ## Check infidelity after converting to hermite control
