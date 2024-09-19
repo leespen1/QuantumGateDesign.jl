@@ -25,6 +25,7 @@ export eval_grad_forced
 
 export control_ops, basis_state, create_initial_conditions, guard_projector, create_gate
 export lowering_operator_subsystem, lowering_operators_system
+export rotation_matrix
 
 # Export optimization callback
 export optimize_gate
@@ -92,6 +93,8 @@ include("ipopt_optimal_control.jl")
 include("gradient_descent.jl")
 
 include("state_vector_helpers.jl")
+
+include("DiagonalHamiltonianPreconditioner.jl")
 
 include("ProblemConstructors/multi_qudit_systems.jl")
 include("ProblemConstructors/rotating_frame_qubit.jl")

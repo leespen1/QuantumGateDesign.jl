@@ -126,7 +126,9 @@ function DispersiveProblem(
         tf,
         nsteps;
         sparse_rep=true,
-        bitstring_ordered=true
+        bitstring_ordered=true,
+        gmres_abstol=1e-10,
+        gmres_reltol=1e-10,
     )
 
     system_sym, system_asym = multi_qudit_hamiltonian_dispersive(
@@ -174,7 +176,8 @@ function JaynesCummingsProblem(
         tf,
         nsteps;
         sparse_rep=true,
-        bitstring_ordered=true
+        bitstring_ordered=true,
+        use_lu_preconditioner=true
         # What else do I need? Final time? Guard penalty? Preconditioner?
         # (it would be good to have the preconditioner determined here)
     )
@@ -377,8 +380,7 @@ function lowering_operators_system(subsystem_sizes, bitstring_ordered=true)
         # Replace i-th matrix with the lowering operator for that subsystem
         kronecker_prod_vec[i] = lowering_operator_subsystem(subsys_size)
         # Take the kronecker product of all the matrices (all identity matrices except for the one lowering operator)
-        lowering_operators_vec[i] = reduce(kron, kronecker_prod_vec)
-    end
+        lowering_operators_vec[i] = reduce(kron, kronecker_prod_vec) end
 
     return lowering_operators_vec
 end
@@ -403,6 +405,119 @@ function create_gate(subsystem_sizes, essential_subsystem_sizes, initial_final_p
     end
     return vcat(u0, v0)
 end
+
+function rotation_matrix(subsystem_sizes, rotation_frequencies, t)
+    full_system_size = prod(subsystem_sizes)
+
+
+    # Holds the identity matrix for each subsystem 
+    subsystem_identity_matrices = [Matrix(LinearAlgebra.I, n, n) for n in subsystem_sizes] 
+    # Holds the matrices we will take the kronecker product of to form the lowering operators for the whole system.
+    kronecker_prod_vec = Vector{Any}(undef, length(subsystem_sizes))
+
+    # The full-system lowering operators we will return.
+    rotation_matrices_vec = Vector{Any}(undef, length(subsystem_sizes))
+
+    for i in eachindex(subsystem_sizes)
+        subsys_size = subsystem_sizes[i]
+        # Set all matrices to the identity matrix for that subssystem
+        kronecker_prod_vec .= subsystem_identity_matrices
+        # Replace i-th matrix with the lowering operator for that subsystem
+        #number_operator = Diagonal(0:subsys_size-1)
+        rotation_matrix =  Diagonal(exp.(im*rotation_frequencies[i]*t*(0:subsys_size-1)))
+        #display(SparseArrays.sparse(rotation_matrix))
+        kronecker_prod_vec[i] = rotation_matrix
+        # Take the kronecker product of all the matrices (all identity matrices except for the one lowering operator)
+        rotation_matrices_vec[i] = reduce(kron, reverse(kronecker_prod_vec))
+    end
+
+    return rotation_matrices_vec
+
+    #= According to the definition in juqbox. But that seems to be different than what is done in Juqbox software
+    rotation_matrices_vec = Any[]
+
+    for i in eachindex(subsystem_sizes)
+        subsys_size = subsystem_sizes[i]
+
+        number_operator = Diagonal(0:subsys_size-1)
+        rotation_matrix = exp(im*rotation_frequencies[i]*t*number_operator)
+        display(diag(rotation_matrix))
+        push!(rotation_matrices_vec, rotation_matrix)
+    end
+
+    # The rotation matrices commute, so order doesn't matter
+    full_rotation_matrix = reduce(kron, rotation_matrices_vec)
+    return full_rotation_matrix
+    =#
+end
+
+#=
+    Nosc = length(Ne)
+    @assert(Nosc >= 1 && Nosc <=3)
+
+    if Nosc==1 # 1 oscillator
+        Ntot = Ne[1] + Ng[1]
+        omega1 = 2*pi*fund_freq[1]*Array(collect(0:Ntot-1))
+        return omega1
+    elseif Nosc==2 # 2 oscillators
+        Nt1 = Ne[1] + Ng[1]
+        Nt2 = Ne[2] + Ng[2]
+# Note: The ket psi = ji> = e_j kron e_i.
+# We order the elements in the vector psi such that i varies the fastest with i in [1,Nt1] and j in [1,Nt2]
+# The matrix amat = I kron a1 acts on alpha in psi = beta kron alpha
+# The matrix bmat = a2 kron I acts on beta in psi = beta kron alpha
+        I1 = Array{Float64, 2}(I, Nt1, Nt1)
+        I2 = Array{Float64, 2}(I, Nt2, Nt2)
+
+        num1 = Diagonal(collect(0:Nt1-1))
+        num2 = Diagonal(collect(0:Nt2-1))
+
+        Na = Diagonal(kron(I2, num1))
+        Nb = Diagonal(kron(num2, I1))
+
+        # rotation matrices
+        wa = diag(Na)
+        wb = diag(Nb)
+
+        omega1 = 2*pi*fund_freq[1]*wa
+        omega2 = 2*pi*fund_freq[2]*wb 
+
+        return omega1, omega2
+    elseif Nosc==3 # 3 coupled quantum systems
+        Nt1 = Ne[1] + Ng[1]
+        Nt2 = Ne[2] + Ng[2]
+        Nt3 = Ne[3] + Ng[3]
+# Note: The ket psi = kji> = e_k kron (e_j kron e_i).
+# We order the elements in the vector psi such that i varies the fastest with i in [1,Nt1], j in [1,Nt2] and k in [1,Nt3]
+# The matrix amat = I kron I kron a1 acts on alpha in psi = gamma kron beta kron alpha
+# The matrix bmat = I kron a2 kron I acts on beta in psi = gamma kron beta kron alpha
+# The matrix cmat = a3 kron I kron I acts on gamma in psi = gamma kron beta kron alpha
+        I1 = Array{Float64, 2}(I, Nt1, Nt1)
+        I2 = Array{Float64, 2}(I, Nt2, Nt2)
+        I3 = Array{Float64, 2}(I, Nt3, Nt3)
+
+        num1 = Diagonal(collect(0:Nt1-1))
+        num2 = Diagonal(collect(0:Nt2-1))
+        num3 = Diagonal(collect(0:Nt3-1))
+
+        N1 = Diagonal(kron(I3, I2, num1))
+        N2 = Diagonal(kron(I3, num2, I1))
+        N3 = Diagonal(kron(num3, I2, I1))
+
+        # rotation matrices
+        w1 = diag(N1)
+        w2 = diag(N2)
+        w3 = diag(N3)
+
+        omega1 = 2*pi*fund_freq[1]*w1
+        omega2 = 2*pi*fund_freq[2]*w2 
+        omega3 = 2*pi*fund_freq[3]*w3 
+
+        return omega1, omega2, omega3 # Put them in an Array to make the return type uniform?
+    end
+end
+end
+=#
  
 # Unfinished work for open systems
 #=
