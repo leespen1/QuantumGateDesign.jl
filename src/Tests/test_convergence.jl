@@ -169,7 +169,9 @@ end
 
 
 function plot_timing_convergence(dict_of_summary_dicts=Dict(); fontsize=16,
-        true_history=missing)
+        linecolor=:black, marker=:+,
+        true_history=missing
+    )
     xlabel = "Log₁₀(Elapsed Time (s))"
     ylabel = "Log₁₀(Rel Err)"
     yticks = -15:15 
