@@ -200,7 +200,7 @@ nCoeff = 2*Nctrl*Nfreq*D1 # Total number of parameters.
 
 Random.seed!(2456)
 if startFromScratch
-    pcof0 = amax*0.01 * rand(nCoeff)
+    pcof0 = amax * ones(nCoeff)
     println("*** Starting from pcof with random amplitude ", amax*0.01)
 else
     # the data on the startfile must be consistent with the setup!
@@ -243,31 +243,56 @@ estimate_Neumann!(new_tol, params, maxpar);
 
 # Allocate all working arrays
 wa = Juqbox.Working_Arrays(params, nCoeff)
-prob = Juqbox.setup_ipopt_problem(params, wa, nCoeff, minCoeff, maxCoeff, maxIter=maxIter, lbfgsMax=lbfgsMax, startFromScratch=startFromScratch)
-
-#uncomment to run the gradient checker for the initial pcof
-#=
-if @isdefined addOption
-    addOption( prob, "derivative_test", "first-order"); # for testing the gradient
-else
-    AddIpoptStrOption( prob, "derivative_test", "first-order")
-end
-=#
-
-#uncomment to change print level
-#=
-if @isdefined addOption
-    addOption(prob, "print_level", 0); # for testing the gradient
-else
-    AddIpoptIntOption(prob, "print_level", 0)
-end
-=#
+#prob = Juqbox.setup_ipopt_problem(params, wa, nCoeff, minCoeff, maxCoeff, maxIter=maxIter, lbfgsMax=lbfgsMax, startFromScratch=startFromScratch)
 
 println("Initial coefficient vector stored in 'pcof0'")
 
-if eval_lab
-    objf, uhist, trfid = traceobjgrad(pcof0, params, wa, true, false); # evaluate objective function, but not the gradient
-    println("Trace fidelity: ", trfid);
+
+
+
+
+prob = QuantumGateDesign.convert_juqbox(params)
+
+# (degree + N_knots)
+bspline_degree = 2
+N_knots = D1 - bspline_degree + 1
+base_control = GeneralBSplineControl(bspline_degree, N_knots, Tmax)
+controls = [CarrierControl(base_control, om[i,:]) for i in 1:size(om, 1)]
+
+target = vcat(params.Utarget_r, params.Utarget_i)
+
+
+
+run_convergence = true
+if run_convergence
+    #params.nsteps = 5
+    #prob.nsteps = 5
+
+    ret_qgd = get_histories(prob, controls, pcof0, 5, base_nsteps=10)
+    ret_juq = get_histories(params, wa, pcof0, 5, base_nsteps=10)
+    ret_full = merge(ret_qgd, ret_juq)
+
+    labels = ["Order 2" "Order 4" "Order 6" "Order 8" "Order 10" "Juqbox"]
+    pl = QuantumGateDesign.plot_stepsize_convergence(ret_full)
+    #QuantumGateDesign.plot_stepsize_convergence!(
+    #    pl, ret_juq..., label="Juqbox",
+    #)
+
+    #labels = ["Order 2" "Order 4" "Order 6" "Order 8" "Order 10"]
+    #pl = QuantumGateDesign.plot_stepsize_convergence(ret_qgd)
+    #QuantumGateDesign.plot_stepsize_convergence!(
+    #    pl, ret_juq..., label="Juqbox",
+    #)
+
+
+    #println(
+    #    "Runtime Ratios: ",
+    #    QuantumGateDesign.get_runtime_ratios(ret_qgd[2], ret_qgd[3], ret_juq[2], ret_juq[3])
+    #)
 end
 
-
+## For plotting controls
+#i = 2
+#pcof_old = QuantumGateDesign.get_control_vector_slice(pcof, controls, i)
+#pcof_new = QuantumGateDesign.get_control_vector_slice(hermite_pcof, hermite_controls, i)
+#plot(plot_control(controls[i], pcof_old), plot_control(hermite_controls[i], pcof_new))
