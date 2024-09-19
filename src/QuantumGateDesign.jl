@@ -112,6 +112,7 @@ include("Plotting/plot_gradient_agreement.jl")
 include("Plotting/plot_states.jl")
 
 
+
 # Define functions without methods, so that extensions can override them
 include("extension_compatibility.jl")
 export visualize_control
@@ -122,5 +123,7 @@ export get_number_of_control_parameters
 export multi_qudit_hamiltonian
 export control_ops
 export eval_p_single, eval_q_single
+
+export get_histories
 
 end # module QuantumGateDesign
