@@ -22,7 +22,9 @@ function convert_juqbox(juqbox_params)
 
     N_ess_levels = juqbox_params.N
 
-    guard_subspace_projector = gurard_projector(params.Ne, params.Ne .+ params.Ng)
+    guard_subspace_projector = guard_projector(
+        juqbox_params.Ne, juqbox_params.Ne .+ juqbox_params.Ng
+    )
 
     prob = SchrodingerProb(
         system_sym,
