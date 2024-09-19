@@ -1,5 +1,5 @@
 """
-    eval_forward(prob, controls, pcof; [order=2, saveEveryNsteps=1, forcing=missing, abstol=1e-10, reltol=1e-10])
+    eval_forward(prob, controls, pcof; [order=2, saveEveryNsteps=1, forcing=missing,])
 
 Simulate a `SchrodingerProb` forward in time. Return the history of the state
 vector for each initial condition as a 4D array.
@@ -11,8 +11,6 @@ vector for each initial condition as a 4D array.
 - `order::Int64=2`: Which order of the method to use.
 - `saveEveryNsteps::Int64=1`: Only store the state every `saveEveryNsteps` timesteps.
 - `forcing::Union{AbstractArray{Float64}, Missing}`: Optional forcing array, ordered in same format as the returned history.
-- `abstol::Float64=1e-10`: Absolute tolerance to use in GMRES.
-- `reltol::Float64=1e-10`: Relative tolerance to use in GMRES.
 """
 function eval_forward(
         prob::SchrodingerProb{M1, M2}, controls, pcof::AbstractVector{<: Real};
@@ -92,7 +90,6 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         order::Int=2, saveEveryNsteps::Int=1, 
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
         use_taylor_guess=true, verbose=false,
-        abstol=1e-10, reltol=1e-10
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     if verbose
@@ -140,16 +137,10 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         ismutating=true
     )
 
-
-    # Need to add test that evolution is still the same with preconditioner
-    # Also check how our preconditioner compares against diagonal preconditioner
-    #preconditioner = IterativeSolvers.Identity()
-    preconditioner = MyPreconditioner(prob, order)
-
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
-        abstol=abstol, reltol=reltol, restart=prob.real_system_size,
-        initially_zero=false, Pl=preconditioner
+        abstol=prob.gmres_abstol, reltol=prob.gmres_reltol, restart=prob.real_system_size,
+        initially_zero=false, Pl=prob.forward_preconditioner
     )
 
     # Important to do this after setting up the linear map and gmres_iterable. One of those seems to be overwriting uv_mat
@@ -343,7 +334,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         terminal_condition::AbstractVector{Float64};
         forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
         order::Int=2,
-        use_taylor_guess=true, verbose=false, abstol=1e-10, reltol=1e-10
+        use_taylor_guess=true, verbose=false,
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     
@@ -387,13 +378,10 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         ismutating=true
     )
 
-    #preconditioner = IterativeSolvers.Identity()
-    preconditioner = MyPreconditioner(prob, order, adjoint=true)
-
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
-        abstol=abstol, reltol=reltol, restart=prob.real_system_size,
-        initially_zero=false, Pl=preconditioner
+        abstol=prob.gmres_abstol, reltol=prob.gmres_reltol, restart=prob.real_system_size,
+        initially_zero=false, Pl=prob.adjoint_preconditioner
     )
 
     # Important to do this after setting up the linear map and gmres_iterable. One of those seems to be overwriting uv_mat
@@ -576,7 +564,7 @@ mutable struct TimestepHolder{T1, T2, T3, T4}
 
         gmres_iterable = IterativeSolvers.gmres_iterable!(
             zeros(system_size), LHS_map, zeros(system_size),
-            abstol=1e-15, reltol=1e-15, restart=system_size,
+            abstol=prob.gmres_abstol, reltol=prob.gmres_reltol, restart=system_size,
             initially_zero=false
         )
 
@@ -703,64 +691,27 @@ function (self::LHSHolderAdjoint)(out_vec, in_vec)
     return nothing
 end
 
-"""
-A is assumed to be the identity along the diagonal.
 
-This only takes O(n) operations
-
-Will the shape hold for kronecker products? Apparently not.
-But I can still work out a good gaussian elim procedure.
-"""
-function ldiv_P(A, b)
-
-    x = copy(b)
-    N = size(A, 1)
-    Nhalf = div(N, 2)
-    D = LinearAlgebra.diag(A)
-    subD = LinearAlgebra.diag(A, -Nhalf)
-    # Should be able to do this very broadcasted
-    # Clear lower-left block, get lower-right block to ones on
-    for i in eachindex(subD)
-        x[Nhalf+i] -= subD[i] * x[i]
-        x[Nhalf+i] /= 1 + subD[i]*subD[i]
-    end
-    for i in eachindex(subD)
-        x[i] += subD[i] * x[Nhalf+i]
-    end
-      
-    return x
+function form_LHS_no_control(prob::SchrodingerProb, order::Int; adjoint=false)
+    dt = prob.tf/prob.nsteps
+    return form_LHS_no_control(prob.system_sym, prob.system_asym, order, dt; adjoint=adjoint)
 end
 
-
-
-struct MyPreconditioner
-    LHS_diagonal::Vector{Float64} 
-    LHS_upper_diagonal::Vector{Float64}
-    LHS_lower_diagonal::Vector{Float64}
-    real_system_size::Int64
-    complex_system_size::Int64
-end
-
-
-
-"""
-Construct preconditioner based on schrodinger prob.
-"""
-function MyPreconditioner(prob::SchrodingerProb, order::Int; adjoint=false)
-    A = [prob.system_asym prob.system_sym; -prob.system_sym prob.system_asym]
+function form_LHS_no_control(system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64}, order::Int, dt; adjoint=false)
+    A = [system_asym system_sym; -system_sym system_asym]
 
     if adjoint
         # Without time dependence, all the matrices are A, A², A³, etc, so it's
         # okay to just take transpose directly
         A = A'
     end
-    dt = prob.tf/prob.nsteps
 
     real_system_size = size(A, 1)
     complex_system_size = div(real_system_size, 2)
     N_derivatives = div(order, 2)
 
-    LHS = zeros(size(A)) 
+    LHS = similar(A) 
+    LHS .= 0
 
     for i in 1:size(LHS, 2)
         LHS[i,i] = 1
@@ -770,66 +721,5 @@ function MyPreconditioner(prob::SchrodingerProb, order::Int; adjoint=false)
         axpy!(coeff, A^j, LHS)
     end
 
-    return MyPreconditioner(LHS)
-end
-
-
-
-"""
-Construct preconditioner based on arbitrary LHS matrix.
-E.g. preconditioner for LHS*x = b
-"""
-function MyPreconditioner(LHS)
-    @assert size(LHS, 1) == size(LHS, 2)
-    @assert iseven(size(LHS, 1))
-    real_system_size = size(LHS, 1)
-    complex_system_size = div(real_system_size, 2)
-
-    LHS_diagonal = LinearAlgebra.diag(LHS)
-    @assert all(LHS_diagonal .!= 0) # Make sure no diagonal entries are zero
-
-    LHS_upper_diagonal = LinearAlgebra.diag(LHS, complex_system_size)
-    LHS_lower_diagonal = LinearAlgebra.diag(LHS, -complex_system_size)
-
-    ## Technically we won't get an error if this is not the case, but still good to check
-    #@assert LHS_upper_diagonal == -LHS_lower_diagonal
-        
-    return MyPreconditioner(LHS_diagonal, LHS_upper_diagonal, LHS_lower_diagonal,
-                            real_system_size, complex_system_size)
-end
-
-
-
-function LinearAlgebra.ldiv!(y::AbstractVector, P::MyPreconditioner, x::AbstractVector)
-    y .= x
-    ldiv!(P, y)
-end
-
-
-
-function LinearAlgebra.ldiv!(P::MyPreconditioner, x::AbstractVector)
-    N = P.complex_system_size
-    # Should be able to do this very broadcasted
-    for i in eachindex(P.LHS_lower_diagonal)
-        # Clear lower-left block diagonal
-        ratio = P.LHS_lower_diagonal[i] / P.LHS_diagonal[i]
-        x[N+i] -= x[i]*ratio
-        # Get bottom-right block diagonal to ones
-        x[N+i] /= (P.LHS_diagonal[N+i] - P.LHS_upper_diagonal[i]*ratio)
-    end
-    for i in eachindex(P.LHS_lower_diagonal)
-        # Clear diagonal of of upper-right block
-        x[i] -= P.LHS_upper_diagonal[i] * x[N+i]
-        # Get upper-left block diagonal to ones
-        x[i] /= P.LHS_diagonal[i]
-    end
-      
-    return x
-end
-
-
-
-function Base.:\(P::MyPreconditioner, b::AbstractVector)
-    x = similar(b)
-    ldiv!(x, P, b)
+    return LHS
 end
