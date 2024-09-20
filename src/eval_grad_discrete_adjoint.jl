@@ -61,7 +61,7 @@ function compute_terminal_condition(
 end
 
 """
-    discrete_adjoint(prob, controls, pcof, target; [order=2, cost_type=:Infidelity, return_lambda_history=false, abstol=1e-10, reltol=1e-10])
+    discrete_adjoint(prob, controls, pcof, target; [order=2, cost_type=:Infidelity, return_lambda_history=false])
 
 Compute the gradient using the discrete adjoint method. Return the gradient.
 
@@ -75,12 +75,12 @@ Compute the gradient using the discrete adjoint method. Return the gradient.
 - `return_lambda_history=false`: Whether to return the history of the adjoint variable lambda.
 """
 function discrete_adjoint(
-        prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}},
+        prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}, P},
         controls, pcof::AbstractVector{Float64},
         target::AbstractMatrix{Float64}; 
         order=2, cost_type=:Infidelity, return_lambda_history=false,
         kwargs...
-    )
+    ) where P
 
     history = eval_forward(prob, controls, pcof; order=order, kwargs...)
 

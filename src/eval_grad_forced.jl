@@ -1,5 +1,5 @@
 """
-    eval_grad_forced(prob, controls, pcof, target; [order=2, cost_type=:Infidelity, return_forcing=false, abstol=1e-10, reltol=1e-10])
+    eval_grad_forced(prob, controls, pcof, target; [order=2, cost_type=:Infidelity, return_forcing=false])
 
 Compute the gradient by differentiating Schrodinger's equation w.r.t each control
 parameter (the GOAT method). Return the gradient.
