@@ -35,46 +35,77 @@ target_complex = [0.0 1;
                   1   0]
 target = vcat(real(target_complex), imag(target_complex))
 
-ret_dict = optimize_gate(prob, control, pcof, target, order=4)</code></pre><h3 id="Qudit-System-with-Jaynes-Cummings-Coupling"><a class="docs-heading-anchor" href="#Qudit-System-with-Jaynes-Cummings-Coupling">3 Qudit System with Jaynes-Cummings Coupling</a><a id="Qudit-System-with-Jaynes-Cummings-Coupling-1"></a><a class="docs-heading-anchor-permalink" href="#Qudit-System-with-Jaynes-Cummings-Coupling" title="Permalink"></a></h3><p>QuantumGateDesign.jl provides convenience functions for setting up several <a href="../problem_setup/#QuantumGateDesign.SchrodingerProb"><code>SchrodingerProb</code></a>&#39;s which arise frequently in quantum computing.</p><pre><code class="nohighlight hljs">using QuantumGateDesign
+ret_dict = optimize_gate(prob, control, pcof, target, order=4)</code></pre><h3 id="Qudits-in-the-Dispersive-limit"><a class="docs-heading-anchor" href="#Qudits-in-the-Dispersive-limit">2 Qudits in the Dispersive limit</a><a id="Qudits-in-the-Dispersive-limit-1"></a><a class="docs-heading-anchor-permalink" href="#Qudits-in-the-Dispersive-limit" title="Permalink"></a></h3><p>QuantumGateDesign.jl provides convenience functions for setting up several <a href="../problem_setup/#QuantumGateDesign.SchrodingerProb"><code>SchrodingerProb</code></a>&#39;s which arise frequently in quantum computing. The code below uses the <code>DispersiveProblem</code> constructor to make a <code>SchrodingerProb</code> representing two qubits in the dispersive limit.</p><pre><code class="nohighlight hljs"># Set up the SchrodingerProb
+subsystem_sizes = (4,4)
+essential_subsystem_sizes = (2,2)
+transition_freqs = [4.10595, 4.81526] .* 2pi
+rotation_freqs = copy(transition_freqs)
+# 0.1 for artificially large fast coupling. Actual value is 1e-6
+kerr_coeffs = 2pi .* [2*0.1099   0.1
+                      0.1        2*0.1126]
+tf = 50.0
+nsteps = 100
+sparse_rep=true
 
-# Transition frequencies in GHz
-transition_frequencies = [5.18, 5.12, 5.06]
+prob = DispersiveProblem(
+    subsystem_sizes, essential_subsystem_sizes,
+    transition_freqs, rotation_freqs, kerr_coeffs,
+    tf, nsteps;
+    sparse_rep=sparse_rep
+)
 
-# Rotation frequency to use in each subsystem 
-# (for Jaynes-Cummings, must be same in all subsystems so system Hamiltonian is time-independent)
-rotation_frequency = 5.12
+# Set up the Controls
+carrier_wave_freqs = transition_freqs .- rotation_freqs
+bspline_degree = 2
+N_knots = 5
 
-# The self-Kerr coefficients (we ignore cross-kerr here)
-kerr_coefficients = [
-    0.34 0    0
-    0    0.34 0
-    0    0    0.34
-] 
+D1 = 10
+fa = sum(transition_freqs) / length(transition_freqs)
+om1 = 2pi .* [transition_freqs[1] - rotation_freqs[1],
+              transition_freqs[1] - rotation_freqs[1] - kerr_coeffs[1,2],
+             ]
+om2 = 2pi .* [transition_freqs[2] - rotation_freqs[2],
+              transition_freqs[2] - rotation_freqs[2] - kerr_coeffs[1,2],
+             ]
 
-# The cross resonance coefficients (Jayne-Cummings coupling)
-cross_resonance_coefficients = [
-    0    5e-3 0
-    5e-3 0    5e-3
-    0    5e-3 0
-]
+control1 =  BSplineControl(tf, D1, om1)
+control2 =  BSplineControl(tf, D1, om2)
 
-# Number of timesteps
-nsteps = 500
+controls = [control1, control2]
 
-# Gate duration (nanoseconds)
-tf = 500
+N_coeff = get_number_of_control_parameters(controls)
 
-# Model each qudit with 3 levels, 2 of which are used for computation
-subsystem_sizes = [3, 3, 3]
-essential_levels_vec = [2, 2, 2]
+amax = 0.04 # Keeping pulse amplitudes below 40 MHz
+pcof0 = rand(N_coeff) .* 0.04 / 10
 
-prob = QuantumGateDesign.JaynesCummingsProblem(
-    subsystem_sizes,
-    essential_levels_vec,
-    transition_frequencies,
-    rotation_frequency,
-    kerr_coefficients,
-    cross_resonance_coefficients,
-    tf,
-    nsteps
-)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../control_functions/">« Control Functions</a><a class="docs-footer-nextpage" href="../visualization/">Visualization »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.25 on <span class="colophon-date" title="Thursday 19 September 2024 14:13">Thursday 19 September 2024</span>. Using Julia version 1.9.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+# Set up target gate
+CNOT_target = create_gate(
+    subsystem_sizes, essential_subsystem_sizes,
+    [(1,0) =&gt; (1,1),
+     (1,1) =&gt; (1,0)]
+)
+
+# Transform target into rotating frame
+rot_mat = rotation_matrix(subsystem_sizes, rotation_freqs, tf)
+CNOT_target_complex = real_to_complex(CNOT_target)
+CNOT_target_rotating_frame_complex = prod(rot_mat) * CNOT_target_complex
+CNOT_target = complex_to_real(CNOT_target_rotating_frame_complex)
+
+# Compare stepsize to relative error in solution history
+run_convergence_test = false
+if run_convergence_test
+    convergence_dict = QuantumGateDesign.get_histories(prob, controls, pcof0, 15, base_nsteps=100, orders=(2,4))
+    pl1 = QuantumGateDesign.plot_stepsize_convergence(convergence_dict)
+    pl2 = QuantumGateDesign.plot_timing_convergence(convergence_dict)
+end
+
+# Use step sizes based on output of above tests
+nsteps_order2 = trunc(Int, tf/10.0^(-3.5))
+nsteps_order4 = trunc(Int, tf/10.0^(-0.5))
+
+#prob.nsteps = nsteps_order2
+prob.nsteps = 100
+return_dict_order2 = optimize_gate(prob, controls, pcof0, CNOT_target, order=2, maxIter=50, pcof_L=-amax, pcof_U=amax)
+
+prob.nsteps = nsteps_order4
+return_dict_order4 = optimize_gate(prob, controls, pcof0, CNOT_target, order=4, maxIter=50, pcof_L=-amax, pcof_U=amax)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../control_functions/">« Control Functions</a><a class="docs-footer-nextpage" href="../visualization/">Visualization »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.25 on <span class="colophon-date" title="Friday 20 September 2024 09:17">Friday 20 September 2024</span>. Using Julia version 1.9.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
