@@ -226,4 +226,24 @@ function isprojection(A::AbstractMatrix)
     return isapprox(A*A, A, rtol=1e-15)
 end
 
-
+function change_preconditioners(prob::SchrodingerProb,
+        forward_preconditioner=prob.forward_preconditioner,
+        adjoint_preconditioner=prob.adjoint_preconditioner,
+    )
+    return SchrodingerProb(
+            prob.system_sym,
+            prob.system_asym,
+            prob.sym_operators,
+            prob.asym_operators,
+            prob.u0,
+            prob.v0,
+            prob.tf,
+            prob.nsteps,
+            prob.N_ess_levels,
+            prob.guard_subspace_projector;
+            gmres_abstol=prob.gmres_abstol,
+            gmres_reltol=prob.gmres_reltol,
+            forward_preconditioner=forward_preconditioner,
+            adjoint_preconditioner=adjoint_preconditioner,
+    )
+end
