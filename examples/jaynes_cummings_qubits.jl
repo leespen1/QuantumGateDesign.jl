@@ -1,7 +1,7 @@
 # Set up the SchrodingerProb
 
 # Two qubits with guard levels
-subsystem_sizes = (8,8)
+subsystem_sizes = (4,4)
 essential_subsystem_sizes = (2,2)
 
 transition_freqs = [5.17839, 5.06323] .* 2pi
