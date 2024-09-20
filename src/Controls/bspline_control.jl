@@ -106,6 +106,10 @@ function eval_grad_p_derivative(control::BSplineControl, t::Real, pcof::Abstract
     return NaN
 end
 
+function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::BSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
+    grad .= eval_grad_p_derivative(control, t, pcof, order)
+end
+
 function eval_grad_q_derivative(control::BSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     if (order == 0)
         return eval_grad_q(control, t, pcof)
@@ -116,6 +120,10 @@ function eval_grad_q_derivative(control::BSplineControl, t::Real, pcof::Abstract
     end
 
     return NaN
+end
+
+function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::BSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
+    grad .= eval_grad_q_derivative(control, t, pcof, order)
 end
 
 #=================================================
