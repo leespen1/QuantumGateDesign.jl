@@ -177,7 +177,7 @@ function JaynesCummingsProblem(
         nsteps;
         sparse_rep=true,
         bitstring_ordered=true,
-        use_lu_preconditioner=true,
+        preconditioner_type=LUPreconditioner,
         gmres_abstol=1e-10,
         gmres_reltol=1e-10,
         # What else do I need? Final time? Guard penalty? Preconditioner?
@@ -213,6 +213,7 @@ function JaynesCummingsProblem(
         guard_subspace_projector,
         gmres_abstol=gmres_abstol,
         gmres_reltol=gmres_reltol,
+        preconditioner_type=preconditioner_type
     )
 end
 
