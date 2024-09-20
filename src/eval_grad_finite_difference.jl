@@ -12,8 +12,6 @@ parameter. Return the gradient.
 - `dpcof=1e-5`: The spacing to be used in the centered difference method.
 - `cost_type=:Infidelity`: The cost function to use (ONLY USE INFIDELITY, OTHERS HAVE NOT BEEN TESTED RECENTLY)
 - `order::Int64=2`: Which order of the method to use.
-- `abstol::Float64=1e-10`: Absolute tolerance to use in GMRES.
-- `reltol::Float64=1e-10`: Relative tolerance to use in GMRES.
 """
 function eval_grad_finite_difference(
         prob::SchrodingerProb, controls,

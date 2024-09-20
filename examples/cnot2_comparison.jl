@@ -1,3 +1,4 @@
+
 #==========================================================
 This routine initializes an optimization problem to recover 
 a CNOT gate on a coupled 2-qubit system with 2 energy 
@@ -190,8 +191,7 @@ if eval_lab
 else
     startFromScratch = true
 end
-#startFile = "examples/drives/cnot2-pcof-opt-t100.jld2"
-startFile = "../drives/cnot2-pcof-opt-t50-avg.jld2"
+startFile = "drives/cnot2-pcof-opt-t50-avg.jld2"
 
 # dimensions for the parameter vector
 D1 = 10 # number of B-spline coeff per oscillator, freq and sin/cos
@@ -200,7 +200,7 @@ nCoeff = 2*Nctrl*Nfreq*D1 # Total number of parameters.
 
 Random.seed!(2456)
 if startFromScratch
-    pcof0 = amax*0.01 * rand(nCoeff)
+    pcof0 = amax * ones(nCoeff)
     println("*** Starting from pcof with random amplitude ", amax*0.01)
 else
     # the data on the startfile must be consistent with the setup!
@@ -239,97 +239,60 @@ end
 
 new_tol = 1e-12
 estimate_Neumann!(new_tol, params, maxpar);
-println("Using tolerance", new_tol, " and ", params.linear_solver.max_iter, " terms in the Neumann iteration")
+#println("Using tolerance", new_tol, " and ", params.linear_solver.iter, " terms in the Neumann iteration")
 
 # Allocate all working arrays
 wa = Juqbox.Working_Arrays(params, nCoeff)
-juqbox_ipopt_prob = Juqbox.setup_ipopt_problem(params, wa, nCoeff, minCoeff, maxCoeff, maxIter=maxIter, lbfgsMax=lbfgsMax, startFromScratch=startFromScratch)
-
-#uncomment to run the gradient checker for the initial pcof
-#=
-if @isdefined addOption
-    addOption( prob, "derivative_test", "first-order"); # for testing the gradient
-else
-    AddIpoptStrOption( prob, "derivative_test", "first-order")
-end
-=#
-
-#uncomment to change print level
-#=
-if @isdefined addOption
-    addOption(prob, "print_level", 0); # for testing the gradient
-else
-    AddIpoptIntOption(prob, "print_level", 0)
-end
-=#
+#prob = Juqbox.setup_ipopt_problem(params, wa, nCoeff, minCoeff, maxCoeff, maxIter=maxIter, lbfgsMax=lbfgsMax, startFromScratch=startFromScratch)
 
 println("Initial coefficient vector stored in 'pcof0'")
 
-if eval_lab
-    objf, uhist, trfid = traceobjgrad(pcof0, params, wa, true, false); # evaluate objective function, but not the gradient
-    println("Trace fidelity: ", trfid);
-end
 
-prob = convert_juqbox(params)
-controls = QuantumGateDesign.bspline_controls(prob.tf, D1, om)
-controls_autodiff = QuantumGateDesign.bspline_controls_autodiff(prob.tf, D1, om)
+
+
+
+prob = QuantumGateDesign.convert_juqbox(params)
+
+# (degree + N_knots)
+bspline_degree = 2
+N_knots = D1 - bspline_degree + 1
+base_control = GeneralBSplineControl(bspline_degree, N_knots, Tmax)
+controls = [CarrierControl(base_control, om[i,:]) for i in 1:size(om, 1)]
+
 target = vcat(params.Utarget_r, params.Utarget_i)
 
-# Should this be for T=100 or T=50?
-include("../drives/cnot2_t100.jl")
-
-N_derivatives = 5
-N_hermite_samples = 8
-hermite_controls, hermite_pcof = QuantumGateDesign.sample_from_controls(
-    controls_autodiff, pcof, N_hermite_samples, N_derivatives
-)
-
-hermite_pcof_L_mat = fill(-2e19, (1+N_derivatives, 
-                                  N_hermite_samples*length(hermite_controls), 2))
-hermite_pcof_U_mat = fill(2e19, (1+N_derivatives, 
-                                  N_hermite_samples*length(hermite_controls), 2))
-
-# For now, instead of doing a proper constraint just hack it by limiting
-# vals at the sample points
-hermite_pcof_L_mat[1,:,:] .= -amax
-hermite_pcof_U_mat[1,:,:] .= amax
-hermite_pcof_L = reshape(hermite_pcof_L_mat, :)
-hermite_pcof_U = reshape(hermite_pcof_U_mat, :)
 
 
-# Check infidelity after converting to hermite control
-println(
-    "Infidelity after hermite conversion is ",
-    QuantumGateDesign.infidelity(prob, hermite_controls, hermite_pcof, target, order=8)
-)
+run_convergence = true
+if run_convergence
+    #params.nsteps = 5
+    #prob.nsteps = 5
+
+    ret_qgd = get_histories(prob, controls, pcof0, 5, base_nsteps=10)
+    ret_juq = get_histories(params, wa, pcof0, 5, base_nsteps=10)
+    ret_full = merge(ret_qgd, ret_juq)
+
+    labels = ["Order 2" "Order 4" "Order 6" "Order 8" "Order 10" "Juqbox"]
+    pl = QuantumGateDesign.plot_stepsize_convergence(ret_full)
+    #QuantumGateDesign.plot_stepsize_convergence!(
+    #    pl, ret_juq..., label="Juqbox",
+    #)
+
+    #labels = ["Order 2" "Order 4" "Order 6" "Order 8" "Order 10"]
+    #pl = QuantumGateDesign.plot_stepsize_convergence(ret_qgd)
+    #QuantumGateDesign.plot_stepsize_convergence!(
+    #    pl, ret_juq..., label="Juqbox",
+    #)
+
+
+    #println(
+    #    "Runtime Ratios: ",
+    #    QuantumGateDesign.get_runtime_ratios(ret_qgd[2], ret_qgd[3], ret_juq[2], ret_juq[3])
+    #)
+end
 
 ## For plotting controls
 #i = 2
 #pcof_old = QuantumGateDesign.get_control_vector_slice(pcof, controls, i)
 #pcof_new = QuantumGateDesign.get_control_vector_slice(hermite_pcof, hermite_controls, i)
 #plot(plot_control(controls[i], pcof_old), plot_control(hermite_controls[i], pcof_new))
-
-run_convergence = false
-if run_convergence
-    params.nsteps = 5
-    prob.nsteps = 5
-
-    ret_qgd = get_history_convergence(prob, hermite_controls, hermite_pcof, 15)
-    ret_juq = get_history_convergence(params, pcof, wa, 15)
-
-    labels = ["Hermite-2" "Hermite-4" "Hermite-6" "Hermite-8"]
-    pls = plot_history_convergence(ret..., include_orderlines=false, labels=labels)
-    QuantumGateDesign.plot_history_convergence!(
-        pls..., ret_juq..., labels="Juqbox", colors=:black, marker=:star
-    )
-
-
-    println(
-        "Runtime Ratios: ",
-        QuantumGateDesign.get_runtime_ratios(ret_qgd[2], ret_qgd[3], ret_juq[2], ret_juq[3])
-    )
-    #  3.7454890210116e+00
-    #  7.7500209338029e-02
-    #  1.4760277802926e-01
-    #  1.7436255934397e-01
-end

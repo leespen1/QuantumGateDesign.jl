@@ -50,8 +50,10 @@ function compute_terminal_condition(
         ismutating=true
     )
 
+    #TODO Add preconditioner to call
     for i in 1:size(target, 2)
-        IterativeSolvers.gmres!(uv_vec, LHS_map, terminal_RHS[:,i], abstol=1e-15, reltol=1e-15)
+        IterativeSolvers.gmres!(uv_vec, LHS_map, terminal_RHS[:,i],
+                                abstol=prob.gmres_abstol, reltol=prob.gmres_reltol)
         terminal_condition[:,i] .= uv_vec
     end
 
@@ -59,7 +61,7 @@ function compute_terminal_condition(
 end
 
 """
-    discrete_adjoint(prob, controls, pcof, target; [order=2, cost_type=:Infidelity, return_lambda_history=false, abstol=1e-10, reltol=1e-10])
+    discrete_adjoint(prob, controls, pcof, target; [order=2, cost_type=:Infidelity, return_lambda_history=false])
 
 Compute the gradient using the discrete adjoint method. Return the gradient.
 
@@ -71,16 +73,14 @@ Compute the gradient using the discrete adjoint method. Return the gradient.
 - `order::Int64=2`: Which order of the method to use.
 - `cost_type=:Infidelity`: The cost function to use (ONLY USE INFIDELITY, OTHERS HAVE NOT BEEN TESTED RECENTLY).
 - `return_lambda_history=false`: Whether to return the history of the adjoint variable lambda.
-- `abstol::Float64=1e-10`: Absolute tolerance to use in GMRES.
-- `reltol::Float64=1e-10`: Relative tolerance to use in GMRES.
 """
 function discrete_adjoint(
-        prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}},
+        prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}, P},
         controls, pcof::AbstractVector{Float64},
         target::AbstractMatrix{Float64}; 
         order=2, cost_type=:Infidelity, return_lambda_history=false,
         kwargs...
-    )
+    ) where P
 
     history = eval_forward(prob, controls, pcof; order=order, kwargs...)
 

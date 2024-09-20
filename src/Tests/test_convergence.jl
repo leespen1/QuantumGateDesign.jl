@@ -169,7 +169,9 @@ end
 
 
 function plot_timing_convergence(dict_of_summary_dicts=Dict(); fontsize=16,
-        true_history=missing)
+        linecolor=:black, marker=:+,
+        true_history=missing
+    )
     xlabel = "Log₁₀(Elapsed Time (s))"
     ylabel = "Log₁₀(Rel Err)"
     yticks = -15:15 
@@ -204,7 +206,7 @@ function plot_stepsize_convergence!(pl, summary_dict; label=missing, true_histor
     step_sizes = log10.(step_sizes)
     errors = log10.(errors)
 
-    Plots.plot!(pl, step_sizes, errors, label=label)
+    Plots.plot!(pl, step_sizes, errors, label=label, marker=:circle)
 end
 
 
@@ -224,7 +226,7 @@ function plot_timing_convergence!(pl, summary_dict; label=missing, true_history=
     elapsed_times = log10.(elapsed_times)
     errors = log10.(errors)
 
-    Plots.plot!(pl, elapsed_times, errors, label=label)
+    Plots.plot!(pl, elapsed_times, errors, label=label, marker=:circle)
 end
 
 

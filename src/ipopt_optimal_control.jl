@@ -63,9 +63,6 @@ which minimizes the objective function for the given problem and target.
 Returns a dictionary which contains the ipopt optimization problem object, as
 well as other information about the optimization.
 
-NOTE: Right now the GMRES tolerance is not implemented as a kwarg, so the
-default value of 1e-10 for abstol and reltol will be used. 
-
 NOTE: to play around with IPOPT settings which are not accessible through this
 function call, could run the optimization with maxIter=1, then grab the IPOPT
 problem from the return dictionary, and change the IPOPT settings directly through

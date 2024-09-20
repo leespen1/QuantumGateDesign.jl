@@ -3,9 +3,11 @@ module QuantumGateDesign
 
 import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
 import BenchmarkTools, SparseArrays, Dates, OrderedCollections, JLD2, Random
+import BSplines
 using Printf: @printf, @sprintf
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 using Random: rand, MersenneTwister
+using Base.Iterators: product
 
 # Export derivative computation functions
 export compute_derivatives!, compute_adjoint_derivatives!, compute_partial_derivative!, apply_hamiltonian!
@@ -21,6 +23,10 @@ export eval_hessian
 export discrete_adjoint, compute_terminal_condition
 export eval_grad_forced
 
+export control_ops, basis_state, create_initial_conditions, guard_projector, create_gate
+export lowering_operator_subsystem, lowering_operators_system
+export rotation_matrix
+
 # Export optimization callback
 export optimize_gate
 
@@ -29,8 +35,10 @@ export get_populations, target_helper, plot_populations, real_to_complex, comple
 
 # Export control types and constructors
 export AbstractControl, BSplineControl, GRAPEControl, GeneralGRAPEControl, HermiteControl, HermiteCarrierControl
-export bspline_control, ZeroControl
-export eval_p, eval_q, eval_p_derivative, eval_q_derivative, eval_grad_p_derivative, eval_grad_q_derivative
+export bspline_control, ZeroControl, GeneralBSplineControl, CarrierControl
+export eval_p, eval_q, eval_p_derivative, eval_q_derivative, eval_grad_p_derivative, eval_grad_q_derivative, eval_grad_p_derivative!, eval_grad_q_derivative!
+
+export DispersiveProblem, JaynesCummingsProblem
 
 
 # Export example problems and problem construction helpers
@@ -52,6 +60,7 @@ export hermite_interp_poly
 
 export convert_juqbox
 
+include("preconditioners.jl")
 include("SchrodingerProb.jl")
 include("../Daniel/hermite_map.jl")
 
@@ -65,6 +74,8 @@ include("Controls/sincos_control.jl")
 include("Controls/zero_control.jl")
 include("Controls/generalized_grape_control.jl")
 include("Controls/hermite_carrier.jl")
+include("Controls/GeneralBSplineControl.jl")
+include("Controls/CarrierControl.jl")
 
 
 include("hermite.jl")
@@ -84,7 +95,7 @@ include("gradient_descent.jl")
 
 include("state_vector_helpers.jl")
 
-include("ProblemConstructors/common_operators.jl")
+
 include("ProblemConstructors/multi_qudit_systems.jl")
 include("ProblemConstructors/rotating_frame_qubit.jl")
 include("ProblemConstructors/dahlquist_problem.jl")
@@ -101,16 +112,6 @@ include("Plotting/plot_gradient_agreement.jl")
 include("Plotting/plot_states.jl")
 
 
-module OldCompat
-include("OldHardcoded/SchrodingerProb.jl")
-include("OldHardcoded/eval_grad_discrete_adjoint.jl")
-include("OldHardcoded/eval_grad_finite_difference.jl")
-include("OldHardcoded/eval_grad_forced.jl")
-include("OldHardcoded/forward_evolution.jl")
-include("OldHardcoded/hermite.jl")
-include("OldHardcoded/infidelity.jl")
-include("OldHardcoded/state_vector_helper.jl")
-end # module OldCompat
 
 # Define functions without methods, so that extensions can override them
 include("extension_compatibility.jl")
@@ -122,5 +123,7 @@ export get_number_of_control_parameters
 export multi_qudit_hamiltonian
 export control_ops
 export eval_p_single, eval_q_single
+
+export get_histories
 
 end # module QuantumGateDesign
