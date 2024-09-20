@@ -7,6 +7,7 @@ essential_subsystem_sizes = (2,2)
 transition_freqs = [5.17839, 5.06323] .* 2pi
 # Use the average transition frequency as the frequency of rotation
 rotation_freq = sum(transition_freqs) / length(transition_freqs)
+rotation_freqs = fill(rotation_freq, length(transition_freqs))
 
 kerr_coeffs = 2pi .* [0.3411 0
                       0      0.3413]
@@ -55,14 +56,14 @@ CNOT_target = complex_to_real(CNOT_target_rotating_frame_complex)
 
 #ret = optimize_gate(prob, controls, pcof_init, CNOT_target, order=4, maxIter=50)
 
-# Setup Juqbox version of the problem
-Cfreq = vcat(carrier_wave_freqs, carrier_wave_freqs)
-params = QuantumGateDesign.convert_to_juqbox(
-    prob,
-    essential_subsystem_sizes,
-    subsystem_sizes .- essential_subsystem_sizes,
-    Cfreq,
-    200,
-    CNOT_target_rotating_frame_complex
-)
-
+## Setup Juqbox version of the problem
+#Cfreq = vcat(carrier_wave_freqs, carrier_wave_freqs)
+#params = QuantumGateDesign.convert_to_juqbox(
+#    prob,
+#    essential_subsystem_sizes,
+#    subsystem_sizes .- essential_subsystem_sizes,
+#    Cfreq,
+#    200,
+#    CNOT_target_rotating_frame_complex
+#)
+#
