@@ -136,7 +136,7 @@ function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::Carrier
     return grad
 end
 
-function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::CarrierControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
+function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::CarrierControl{T}, t::Real, pcof::AbstractVector{<: Real}, order::Int64) where T
     grad .= 0
 
     for (i, w) in enumerate(control.carrier_frequencies)
