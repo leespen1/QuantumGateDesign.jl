@@ -37,7 +37,9 @@ control2 =  BSplineControl(tf, D1, om2)
 controls = [control1, control2]
 
 N_coeff = get_number_of_control_parameters(controls)
-pcof_init = rand(N_coeff)
+
+amax = 0.04 # Keeping pulse amplitudes below 40 MHz
+pcof0 = rand(N_coeff) .* 0.04 / 10
 
 # Set up target gate
 CNOT_target = create_gate(
@@ -52,6 +54,21 @@ CNOT_target_complex = real_to_complex(CNOT_target)
 CNOT_target_rotating_frame_complex = prod(rot_mat) * CNOT_target_complex
 CNOT_target = complex_to_real(CNOT_target_rotating_frame_complex)
 
-convergence_dict = QuantumGateDesign.get_histories(prob, controls, pcof0, 5, base_nsteps=100, orders=(2,4))
+# Compare stepsize to relative error in solution history
+run_convergence_test = false
+if run_convergence_test
+    convergence_dict = QuantumGateDesign.get_histories(prob, controls, pcof0, 15, base_nsteps=100, orders=(2,4))
+    pl1 = QuantumGateDesign.plot_stepsize_convergence(convergence_dict)
+    pl2 = QuantumGateDesign.plot_timing_convergence(convergence_dict)
+end
 
-#ret = optimize_gate(prob, controls, pcof_init, CNOT_target, order=4, maxIter=50)
+# Use step sizes based on output of above tests
+nsteps_order2 = trunc(Int, tf/10.0^(-3.5))
+nsteps_order4 = trunc(Int, tf/10.0^(-0.5))
+
+#prob.nsteps = nsteps_order2
+prob.nsteps = 100
+return_dict_order2 = optimize_gate(prob, controls, pcof0, CNOT_target, order=2, maxIter=50, pcof_L=-amax, pcof_U=amax)
+
+prob.nsteps = nsteps_order4
+return_dict_order4 = optimize_gate(prob, controls, pcof0, CNOT_target, order=4, maxIter=50, pcof_L=-amax, pcof_U=amax)
