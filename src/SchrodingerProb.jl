@@ -15,9 +15,12 @@ of the problem (the Hamiltonians, initial conditions, number of timesteps, etc).
 - `nsteps::Int64`: number of timesteps to take.
 - `N_ess_levels::Int64`: number of levels in the 'essential' subspace, i.e. the part of the subspace actually used for computation.
 - `guard_subspace_projector::Union{M, missing}=missing`: matrix projecting a state vector in to the 'guard' subspace.
-where `M <: AbstractMatrix{Float64}`
+# Keyword Arguments
+- `gmres_abstol::Float64`: absolute tolerance to use when solving linear systems with GMRES.
+- `gmres_reltol::Float64`: relative tolerance to use when solving linear systems with GMRES.
+- ``preconditioner_type`: the type of preconditioner to use in the algorithm.
 
-TODO: allow different types for each operator, to allow better specializations (e.g. for symmetric or tridiagonal matrices).
+where `M <: AbstractMatrix{Float64}`
 """
 mutable struct SchrodingerProb{M, VM, P} 
     system_sym::M
@@ -36,8 +39,6 @@ mutable struct SchrodingerProb{M, VM, P}
     real_system_size::Int64
     gmres_abstol::Float64
     gmres_reltol::Float64
-    forward_preconditioner::P
-    adjoint_preconditioner::P
     """
     SchrodingerProb inner constructor, for when all necessary information is
     provided to do forward evolution and gradient calculation to any
@@ -56,9 +57,8 @@ mutable struct SchrodingerProb{M, VM, P}
             guard_subspace_projector::Union{M, Missing}=missing;
             gmres_abstol=1e-10,
             gmres_reltol=1e-10,
-            forward_preconditioner::P=IterativeSolvers.Identity(),
-            adjoint_preconditioner::P=IterativeSolvers.Identity(),
-        ) where {M<:AbstractMatrix{Float64}, VM<:AbstractVecOrMat{Float64}, P}
+            preconditioner_type=IdentityPreconditioner
+        ) where {M<:AbstractMatrix{Float64}, VM<:AbstractVecOrMat{Float64}}
 
         N_tot_levels = size(u0, 1)
         N_initial_conditions = size(u0, 2)
@@ -90,7 +90,7 @@ mutable struct SchrodingerProb{M, VM, P}
         @assert isprojection(guard_subspace_projector)
 
         # Copy arrays when creating a Schrodinger problem
-        new{M, VM, P}(
+        new{M, VM, preconditioner_type}(
             system_sym, system_asym,
             sym_operators, asym_operators,
             u0, v0,
@@ -99,8 +99,6 @@ mutable struct SchrodingerProb{M, VM, P}
             N_initial_conditions, N_ess_levels, N_tot_levels,
             N_operators, real_system_size, 
             gmres_abstol, gmres_reltol,
-            forward_preconditioner,
-            adjoint_preconditioner
         )
     end
 end
@@ -117,8 +115,6 @@ function Base.copy(prob::SchrodingerProb)
         prob.N_ess_levels,
         copy(prob.guard_subspace_projector),
         gmres_abstol=prob.gmres_abstol, gmres_reltol=prob.gmres_reltol,
-        forward_preconditioner=prob.forward_preconditioner,
-        adjoint_preconditioner=prob.adjoint_preconditioner
     )
 end
 
@@ -140,8 +136,7 @@ function VectorSchrodingerProb(
         prob.guard_subspace_projector,
         gmres_abstol=prob.gmres_abstol,
         gmres_reltol=prob.gmres_reltol,
-        forward_preconditioner=prob.forward_preconditioner,
-        adjoint_preconditioner=prob.adjoint_preconditioner
+        preconditioner_type=P
     )
 end
 
@@ -159,8 +154,7 @@ function VectorSchrodingerProb2(
         prob.guard_subspace_projector,
         gmres_abstol=prob.gmres_abstol,
         gmres_reltol=prob.gmres_reltol,
-        forward_preconditioner=prob.forward_preconditioner,
-        adjoint_preconditioner=prob.adjoint_preconditioner
+        preconditioner_type=P
     )
 end
 
@@ -210,11 +204,9 @@ function Base.show(io::IO, ::MIME"text/plain", prob::SchrodingerProb{M, VM, P}) 
     println(io, "Number of essential levels: ", prob.N_ess_levels)
     println(io, "Total number of levels: ", prob.N_tot_levels)
     println(io, "Number of control Hamiltonians: ", prob.N_operators)
-    print(io, "Size of real-valued system: ", prob.real_system_size)
-    print(io, "GMRES abstol: ", prob.gmres_abstol)
-    print(io, "GMRES reltol: ", prob.gmres_reltol)
-    print(io, "Forward preconditioner: ", prob.forward_preconditioner)
-    print(io, "Adjoint preconditioner: ", prob.adjoint_preconditioner)
+    println(io, "Size of real-valued system: ", prob.real_system_size)
+    println(io, "GMRES abstol: ", prob.gmres_abstol)
+    println(io, "GMRES reltol: ", prob.gmres_reltol)
 
 
     return nothing
@@ -226,6 +218,7 @@ function isprojection(A::AbstractMatrix)
     return isapprox(A*A, A, rtol=1e-15)
 end
 
+#=
 function change_preconditioners(prob::SchrodingerProb,
         forward_preconditioner=prob.forward_preconditioner,
         adjoint_preconditioner=prob.adjoint_preconditioner,
@@ -247,3 +240,4 @@ function change_preconditioners(prob::SchrodingerProb,
             adjoint_preconditioner=adjoint_preconditioner,
     )
 end
+=#

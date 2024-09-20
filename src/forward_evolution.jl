@@ -13,11 +13,11 @@ vector for each initial condition as a 4D array.
 - `forcing::Union{AbstractArray{Float64}, Missing}`: Optional forcing array, ordered in same format as the returned history.
 """
 function eval_forward(
-        prob::SchrodingerProb{M1, M2}, controls, pcof::AbstractVector{<: Real};
+        prob::SchrodingerProb{M1, M2, P}, controls, pcof::AbstractVector{<: Real};
         order::Int=2, saveEveryNsteps::Int=1,
         forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
         kwargs...
-    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
+    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
 
     N_derivatives = div(order, 2)
     nsteps_save = div(prob.nsteps, saveEveryNsteps)
@@ -32,11 +32,11 @@ end
 
 
 function eval_forward!(uv_history::AbstractArray{Float64, 4},
-        prob::SchrodingerProb{M1, M2}, controls, pcof::AbstractVector{<: Real};
+        prob::SchrodingerProb{M1, M2, P}, controls, pcof::AbstractVector{<: Real};
         order::Int=2, saveEveryNsteps::Int=1,
         forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
         kwargs...
-    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
+    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
 
     N_derivatives = div(order, 2)
 
@@ -86,11 +86,11 @@ like most entries differed by less than 1e-14.
 I plan to make an adjoint version of this.
 """
 function eval_forward!(uv_history::AbstractArray{Float64, 3},
-        prob::SchrodingerProb{M, V}, controls, pcof::AbstractVector{<: Real};
+        prob::SchrodingerProb{M, V, P}, controls, pcof::AbstractVector{<: Real};
         order::Int=2, saveEveryNsteps::Int=1, 
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
         use_taylor_guess=true, verbose=false,
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, P}
 
     if verbose
         println("Verbose output")
@@ -137,10 +137,12 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         ismutating=true
     )
 
+    Pl = P(prob, order, false)
+
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
         abstol=prob.gmres_abstol, reltol=prob.gmres_reltol, restart=prob.real_system_size,
-        initially_zero=false, Pl=prob.forward_preconditioner
+        initially_zero=false, Pl=Pl
     )
 
     # Important to do this after setting up the linear map and gmres_iterable. One of those seems to be overwriting uv_mat
@@ -330,12 +332,12 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
 end
 
 function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
-        prob::SchrodingerProb{M, V}, controls, pcof::AbstractVector{<: Real},
+        prob::SchrodingerProb{M, V, P}, controls, pcof::AbstractVector{<: Real},
         terminal_condition::AbstractVector{Float64};
         forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
         order::Int=2,
         use_taylor_guess=true, verbose=false,
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, P}
 
     
     t = 0.0
@@ -378,10 +380,12 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         ismutating=true
     )
 
+    Pl = P(prob, order, true)
+
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
         abstol=prob.gmres_abstol, reltol=prob.gmres_reltol, restart=prob.real_system_size,
-        initially_zero=false, Pl=prob.adjoint_preconditioner
+        initially_zero=false, Pl=Pl
     )
 
     # Important to do this after setting up the linear map and gmres_iterable. One of those seems to be overwriting uv_mat
@@ -692,12 +696,12 @@ function (self::LHSHolderAdjoint)(out_vec, in_vec)
 end
 
 
-function form_LHS_no_control(prob::SchrodingerProb, order::Int; adjoint=false)
+function form_LHS_no_control(prob::SchrodingerProb, order::Int, adjoint=false)
     dt = prob.tf/prob.nsteps
-    return form_LHS_no_control(prob.system_sym, prob.system_asym, order, dt; adjoint=adjoint)
+    return form_LHS_no_control(prob.system_sym, prob.system_asym, order, dt, adjoint)
 end
 
-function form_LHS_no_control(system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64}, order::Int, dt; adjoint=false)
+function form_LHS_no_control(system_sym::AbstractMatrix{Float64}, system_asym::AbstractMatrix{Float64}, order::Int, dt, adjoint=false)
     A = [system_asym system_sym; -system_sym system_asym]
 
     if adjoint

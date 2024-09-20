@@ -1,4 +1,67 @@
-struct DiagonalHamiltonianPreconditioner
+"""
+Abstract supertype for preconditioners used in the forward evolution and adjoint
+evolution in the discrete adjoint method.
+
+This will be used as the left preconditioner in GMRES as implemented by the
+`IterativeSolvers` package. Consequently, for a concrete subtype P the
+following operations must be defined:
+- `ldiv!(y, P, x)`
+- `ldiv!(P, x)`
+- `P \\ x`.
+
+By default, it is assumed that an `AbstractQGDPreconditioner` has a parameter
+`P` which has these operations implemented (i.e. the type simply wraps another
+type which can be used as a preconditioner by `IterativeSolvers`).
+
+We must also define the constructor P(prob::SchrodingerProb, order, adjoint),
+which will be called each time a forward simulation or gradient calculation is
+performed to construct the preconditioners used for the forward and adjoint
+linear solves.
+
+This is done so that the preconditioner can easily be changed as the problem
+parameters and order of the method change.
+"""
+abstract type AbstractQGDPreconditioner end
+
+LinearAlgebra.ldiv!(P::AbstractQGDPreconditioner, x) = ldiv!(P.P, x)
+LinearAlgebra.ldiv!(y, P::AbstractQGDPreconditioner, x) = ldiv!(y, P.P, x)
+Base.:\(P::AbstractQGDPreconditioner, b) = Base.:\(P.P, b)
+
+
+
+"""
+Wrapper for the IterativeSolvers.Identity preconditioner.
+"""
+struct IdentityPreconditioner <: AbstractQGDPreconditioner
+    P::IterativeSolvers.Identity
+    IdentityPreconditioner() = new(IterativeSolvers.Identity())
+end
+
+IdentityPreconditioner(prob, order, adjoint=false) = IdentityPreconditioner()
+
+
+
+struct LUPreconditioner{T} <: AbstractQGDPreconditioner
+    P::T
+    function LUPreconditioner(A)
+        P = LinearAlgebra.lu(A)
+        T = typeof(P)
+        new{T}(P)
+    end
+end
+
+function LUPreconditioner(prob, order, adjoint=false)
+    return LUPreconditioner(form_LHS_no_control(prob, order, adjoint))
+end
+
+
+"""
+Preconditioner which solves the linear system exactly when the system
+hamiltonian is diagonal and the control amplitudes are zero.
+
+Assumes the hamiltonian is diagonal and solves using Gaussian elimination.
+"""
+struct DiagonalHamiltonianPreconditioner <: AbstractQGDPreconditioner
     LHS_diagonal::Vector{Float64} 
     LHS_upper_diagonal::Vector{Float64}
     LHS_lower_diagonal::Vector{Float64}
@@ -8,13 +71,9 @@ end
 
 
 
-"""
-Construct preconditioner based on schrodinger prob.
-"""
-function DiagonalHamiltonianPreconditioner(prob::SchrodingerProb, order::Int; adjoint=false)
-    return DiagonalHamiltonianPreconditioner(form_LHS_no_control(prob, order, adjoint=adjoint))
+function DiagonalHamiltonianPreconditioner(prob, order, adjoint=false)
+    return DiagonalHamiltonianPreconditioner(form_LHS_no_control(prob, order, adjoint=false))
 end
-
 
 
 """
@@ -33,20 +92,17 @@ function DiagonalHamiltonianPreconditioner(LHS::AbstractMatrix)
     LHS_upper_diagonal = LinearAlgebra.diag(LHS, complex_system_size)
     LHS_lower_diagonal = LinearAlgebra.diag(LHS, -complex_system_size)
 
-    ## Technically we won't get an error if this is not the case, but still good to check
-    #@assert LHS_upper_diagonal == -LHS_lower_diagonal
-        
-    return DiagonalHamiltonianPreconditioner(LHS_diagonal, LHS_upper_diagonal, LHS_lower_diagonal,
-                            real_system_size, complex_system_size)
+    return DiagonalHamiltonianPreconditioner(
+        LHS_diagonal, LHS_upper_diagonal, LHS_lower_diagonal,
+        real_system_size, complex_system_size
+    )
 end
-
 
 
 function LinearAlgebra.ldiv!(y::AbstractVector, P::DiagonalHamiltonianPreconditioner, x::AbstractVector)
     y .= x
     ldiv!(P, y)
 end
-
 
 
 function LinearAlgebra.ldiv!(P::DiagonalHamiltonianPreconditioner, x::AbstractVector)
@@ -69,14 +125,12 @@ function LinearAlgebra.ldiv!(P::DiagonalHamiltonianPreconditioner, x::AbstractVe
     return x
 end
 
-
-
 function Base.:\(P::DiagonalHamiltonianPreconditioner, b::AbstractVector)
     x = similar(b)
     ldiv!(x, P, b)
 end
 
-function lu_preconditioner(prob::SchrodingerProb, order; adjoint=false)
+function lu_preconditioner(prob, order, adjoint=false)
     LHS = form_LHS_no_control(prob, order, adjoint=adjoint)
     preconditioner = lu(LHS)
     return preconditioner
