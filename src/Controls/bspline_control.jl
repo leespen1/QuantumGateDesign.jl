@@ -10,7 +10,7 @@ struct BSplineControl <: AbstractControl
 end
 
 """
-    BsplineControl(tf, D1, omega)
+    BSplineControl(tf, D1, omega)
 
 Construct a control whose value is the sum of Bspline envelopes multiplied by carrier waves.
 """
@@ -31,7 +31,7 @@ function bspline_controls(tf::Float64, D1::Int, omega::AbstractMatrix{Float64})
     controls = Vector{BSplineControl}()
     for i in 1:N_controls 
         omega_vec = omega[i,:]
-        push!(controls, BsplineControl(tf, D1, omega_vec))
+        push!(controls, BSplineControl(tf, D1, omega_vec))
     end
 
     return controls
