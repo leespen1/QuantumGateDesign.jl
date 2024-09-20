@@ -75,3 +75,9 @@ function Base.:\(P::DiagonalHamiltonianPreconditioner, b::AbstractVector)
     x = similar(b)
     ldiv!(x, P, b)
 end
+
+function lu_preconditioner(prob::SchrodingerProb, order; adjoint=false)
+    LHS = form_LHS_no_control(prob, order, adjoint=adjoint)
+    preconditioner = lu(LHS)
+    return preconditioner
+end
