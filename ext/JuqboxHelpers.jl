@@ -15,7 +15,7 @@ Juqbox Version
 """
 function QuantumGateDesign.get_histories(params::Juqbox.objparams,
         wa::Juqbox.Working_Arrays, pcof, N_iterations;
-        min_error_limit=-Inf, max_error_limit=Inf, base_nsteps=missing, 
+        min_error_limit=-Inf, max_error_limit=-Inf, base_nsteps=missing, 
         nsteps_change_factor=2, start_iteration=1, jld2_filename=missing
     )
 

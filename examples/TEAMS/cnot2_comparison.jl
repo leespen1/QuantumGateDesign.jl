@@ -309,27 +309,14 @@ println(
 #pcof_new = QuantumGateDesign.get_control_vector_slice(hermite_pcof, hermite_controls, i)
 #plot(plot_control(controls[i], pcof_old), plot_control(hermite_controls[i], pcof_new))
 
-run_convergence = false
+run_convergence = true
 if run_convergence
     params.nsteps = 5
     prob.nsteps = 5
 
-    ret_qgd = get_history_convergence(prob, hermite_controls, hermite_pcof, 15)
-    ret_juq = get_history_convergence(params, pcof, wa, 15)
-
-    labels = ["Hermite-2" "Hermite-4" "Hermite-6" "Hermite-8"]
-    pls = plot_history_convergence(ret..., include_orderlines=false, labels=labels)
-    QuantumGateDesign.plot_history_convergence!(
-        pls..., ret_juq..., labels="Juqbox", colors=:black, marker=:star
-    )
-
-
-    println(
-        "Runtime Ratios: ",
-        QuantumGateDesign.get_runtime_ratios(ret_qgd[2], ret_qgd[3], ret_juq[2], ret_juq[3])
-    )
-    #  3.7454890210116e+00
-    #  7.7500209338029e-02
-    #  1.4760277802926e-01
-    #  1.7436255934397e-01
+    ret_qgd = QuantumGateDesign.get_histories(prob, hermite_controls, hermite_pcof, 15)
+    ret_juq = QuantumGateDesign.get_histories(params, wa, pcof, 15)
+    full_dict = merge(ret_qgd, ret_juq)
+    pl1 = QuantumGateDesign.plot_stepsize_convergence(full_dict)
+    pl2 = QuantumGateDesign.plot_timing_convergence(full_dict)
 end
