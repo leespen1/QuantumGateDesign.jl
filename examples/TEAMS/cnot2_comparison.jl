@@ -309,7 +309,7 @@ println(
 #pcof_new = QuantumGateDesign.get_control_vector_slice(hermite_pcof, hermite_controls, i)
 #plot(plot_control(controls[i], pcof_old), plot_control(hermite_controls[i], pcof_new))
 
-run_convergence = false
+run_convergence = true
 if run_convergence
     params.nsteps = 5
     prob.nsteps = 5
@@ -318,7 +318,7 @@ if run_convergence
     ret_juq = get_history_convergence(params, pcof, wa, 15)
 
     labels = ["Hermite-2" "Hermite-4" "Hermite-6" "Hermite-8"]
-    pls = plot_history_convergence(ret..., include_orderlines=false, labels=labels)
+    pls = plot_history_convergence(ret_qgd..., include_orderlines=false, labels=labels)
     QuantumGateDesign.plot_history_convergence!(
         pls..., ret_juq..., labels="Juqbox", colors=:black, marker=:star
     )
