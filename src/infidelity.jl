@@ -1,35 +1,46 @@
 """
-Calculates the infidelity for the given state vector 'ψ' and target state
+Calculates the infidelity for the given state 'ψ' and target state
 'target.'
 
 Returns: Infidelity
 """
-function infidelity(ψ::AbstractVector{Float64}, target::AbstractVector{Float64}, N_ess::Int64)
+function infidelity_real(
+        ψ::AbstractVecOrMat{<: Real},
+        target::AbstractVecOrMat{<: Real},
+        N_ess::Integer
+    )
+
     R = copy(target)
     N_tot = div(size(target,1), 2)
-    T = vcat(R[1+N_tot:end], -R[1:N_tot])
+    # Could be more efficient by just taking dot of the real and imaginary parts directly 
+    T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
     return 1 - (dot(ψ,R)^2 + dot(ψ,T)^2)/(N_ess^2)
 end
 
+function infidelity(
+        ψ::AbstractVecOrMat{<: Number},
+        target::AbstractVecOrMat{<: Number},
+        N_ess::Integer
+    )
 
-
-"""
-Calculates the infidelity for the given matrix of state vectors 'Q' and matrix
-of target states 'target.'
-
-Returns: Infidelity
-"""
-function infidelity(Q::AbstractMatrix{Float64}, target::AbstractMatrix{Float64}, N_ess::Int64)
-    R = copy(target)
-    N_tot = div(size(target,1), 2)
-    T = vcat(R[1+N_tot:end,:], -R[1:N_tot,:])
-    return 1 - (dot(Q, R)^2 + dot(Q, T)^2)/(N_ess^2)
+    ψ_real_valued = vcat(real(ψ), imag(ψ))
+    target_real_valued = vcat(real(target), imag(target))
+    return infidelity_real(ψ_real_valued, target_real_valued, N_ess)
 end
 
 
-function infidelity(prob, controls, pcof, target; order=2, forcing=missing)
+
+function infidelity(
+        prob::SchrodingerProb,
+        controls,
+        pcof::AbstractVector{<: Real},
+        target::AbstractVecOrMat{<: Number};
+        order::Integer=2,
+        forcing=missing
+    )
+
     history = eval_forward(prob, controls, pcof, order=order, forcing=forcing)
-    final_state = history[:,1,end,:]
+    final_state = history[:,end,:]
     N_ess = prob.N_ess_levels
 
     return infidelity(final_state, target, N_ess)
@@ -41,9 +52,14 @@ T is the total time
 W projects a state vector onto the guard subspace 
 (should decide whether W should have dimensions of real or complex system
 if complex, just take I₂×₂ * W.)
-
 """
-function guard_penalty(history::AbstractArray{Float64, 3}, dt, T, W)
+function guard_penalty_real(
+        history::AbstractArray{Float64, 3},
+        dt::Real,
+        T::Real,
+        W::AbstractMatrix{<: Real}
+    )
+
     penalty_value = 0.0
 
     N = size(history, 3)
@@ -62,20 +78,83 @@ function guard_penalty(history::AbstractArray{Float64, 3}, dt, T, W)
     return penalty_value
 end
 
-function guard_penalty(history::AbstractArray{Float64, 4}, dt, T, W)
+function guard_penalty_real(
+        history::AbstractArray{Float64, 4},
+        dt::Real,
+        T::Real,
+        W::AbstractMatrix{<: Real}
+    )
+
     penalty_value = 0.0
 
     for initial_condition_index in 1:size(history, 4)
         history_local = view(history, :, :, :, initial_condition_index)
-        penalty_value += guard_penalty(history_local, dt, T, W)
+        penalty_value += guard_penalty_real(history_local, dt, T, W)
     end
 
     return penalty_value
 end
 
-function infidelity_plus_guard(prob::SchrodingerProb, controls, pcof, target; order=2, kwargs...)
-    history = eval_forward(prob, controls, pcof; order=order, kwargs...)
-    final_state = history[:,1,end,:]
+"""
+Should update this. It's weird when W is the real-valued projector but the
+history is complex-valued.
+"""
+function guard_penalty(
+        history::AbstractArray{<: Number, 2},
+        dt::Real,
+        T::Real,
+        W::AbstractMatrix{<: Real}
+    )
+
+    history_real_valued = vcat(real(history), imag(history))
+
+    real_system_size = size(history_real_valued, 1)
+    nsteps = size(history, 2)
+
+    history_w_derivatives = reshape(
+        real_system_size,
+        N_tot_levels,
+        1,
+        nsteps
+    )
+
+    return guard_penalty_real(history_w_derivatives, dt, T, W)
+end
+
+function guard_penalty(
+        history::AbstractArray{<: Number, 3},
+        dt::Real,
+        T::Real,
+        W::AbstractMatrix{<: Real}
+    )
+
+    history_real_valued = vcat(real(history), imag(history))
+
+    real_system_size = size(history_real_valued, 1)
+    nsteps = size(history, 2)
+    N_initial_conditions = size(history, 3)
+
+    history_w_derivatives = reshape(
+        history_real_valued,
+        real_system_size,
+        1,
+        nsteps,
+        N_initial_conditions
+    )
+
+    return guard_penalty_real(history_w_derivatives, dt, T, W)
+end
+
+function infidelity_plus_guard(
+        prob::SchrodingerProb,
+        controls,
+        pcof::AbstractVector{<: Real},
+        target::AbstractVecOrMat{<: Number};
+        order::Integer=2
+    )
+
+    history = eval_forward(prob, controls, pcof; order=order)
+    final_state = history[:,end,:]
     N_ess = prob.N_ess_levels
 
     T = prob.tf

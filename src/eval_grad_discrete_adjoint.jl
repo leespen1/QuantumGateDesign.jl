@@ -1,6 +1,12 @@
 function compute_terminal_condition(
-        prob, controls, pcof, target, final_state;
-        order=2, cost_type=:Infidelity, forcing=missing
+        prob::SchrodingerProb,
+        controls,
+        pcof::AbstractVector{<: Real},
+        target::AbstractVecOrMat{<: Real}, # This should be the real-valued one
+        final_state::AbstractVecOrMat{<: Real};
+        order::Integer=2,
+        cost_type=:Infidelity,
+        forcing=missing
     )
 
     terminal_condition = zeros(size(target))
@@ -76,13 +82,18 @@ Compute the gradient using the discrete adjoint method. Return the gradient.
 """
 function discrete_adjoint(
         prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}, P},
-        controls, pcof::AbstractVector{Float64},
-        target::AbstractMatrix{Float64}; 
+        controls,
+        pcof::AbstractVector{<: Real},
+        target::AbstractMatrix{<: Number}; 
         order=2, cost_type=:Infidelity, return_lambda_history=false,
-        kwargs...
     ) where P
+    target = complex_to_real(target)
 
-    history = eval_forward(prob, controls, pcof; order=order, kwargs...)
+    N_derivatives = div(order, 2)
+
+
+    history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
+    eval_forward!(history, prob, controls, pcof; order=order)
 
     forcing = compute_guard_forcing(prob, history)
 
@@ -96,8 +107,10 @@ function discrete_adjoint(
         forcing=forcing[:,end,:]
     )
 
-    lambda_history = eval_adjoint(prob, controls, pcof, terminal_condition;
-                                  order=order, forcing=forcing, kwargs...)
+    lambda_history = eval_adjoint(
+        prob, controls, pcof, terminal_condition;
+        order=order, forcing=forcing
+    )
 
     grad = zeros(length(pcof))
 
@@ -680,12 +693,12 @@ function recursive_magic!(grad_contrib::AbstractVector,
 end
 
 """
-History should be 4D array
+Should make 3-dim array version for VectorSchrodingerProb case
 """
-function compute_guard_forcing(prob, history)
+function compute_guard_forcing(prob, history::AbstractArray{Float64, 4})
     dt = prob.tf / prob.nsteps
 
-    forcing = zeros(size(history, 1), 1+prob.nsteps, size(history, 4))
+    forcing = zeros(prob.real_system_size, 1+prob.nsteps, prob.N_initial_conditions)
     for n in 1:prob.nsteps+1
         forcing[:, n, :] .= prob.guard_subspace_projector * history[:, 1, n, :] * -2*dt/prob.tf
     end

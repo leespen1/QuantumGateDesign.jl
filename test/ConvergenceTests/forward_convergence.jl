@@ -5,11 +5,11 @@ using UnicodePlots
 using Test
 
 function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
-        orders=(2,4,6,8,10,12), abstol=1e-15, reltol=1e-15
+        orders=(2,4,6,8,10,12)
     )
     histories_dict = QuantumGateDesign.get_histories(
         prob, controls, pcof, N_iterations, orders=orders,
-        min_error_limit=1e-14, abstol=abstol, reltol=reltol
+        min_error_limit=1e-14
     )
 
     for order in orders
@@ -64,18 +64,23 @@ function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
 end
 
 @testset "Checking Forward Evolution Convergence Order" begin
+
     @testset "Rabi Oscillator" begin
         println("-"^40, "\n")
         println("Problem: Rabi Oscillator\n")
         println("-"^40, "\n")
 
-        prob = QuantumGateDesign.construct_rabi_prob(tf=pi)
+        prob = QuantumGateDesign.construct_rabi_prob(
+            tf=pi, gmres_abstol=1e-15, gmres_reltol=1e-15
+        )
+
         prob.nsteps = 10
         control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
         pcof = rand(MersenneTwister(0), control.N_coeff) 
 
         test_order(prob, control, pcof)
     end
+
     @testset "Random Problem" begin
         println("-"^40, "\n")
         println("Problem: Random\n")
@@ -86,7 +91,9 @@ end
             complex_system_size,
             N_operators,
             tf = 1.0,
-            nsteps = 10
+            nsteps = 10,
+            gmres_abstol=1e-15,
+            gmres_reltol=1e-15
         )
         control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
         pcof = rand(MersenneTwister(0), control.N_coeff) 

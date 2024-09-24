@@ -50,7 +50,7 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
         nsteps_vec = Int64[]
         step_sizes = Float64[]
         elapsed_times = Float64[]
-        histories = Array{Float64, 3}[]
+        histories = Array{ComplexF64, 3}[]
         richardson_errors = Float64[]
 
         summary_dict = Dict(
@@ -91,8 +91,6 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
                 evolution_kwargs...
             )
 
-            # Only compare state, not derivatives
-            history = history[:,1,:,:]
 
             # Compute Richardson Error
             richardson_err = NaN
@@ -104,7 +102,7 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
             push!(nsteps_vec, prob_copy.nsteps)
             push!(step_sizes, prob_copy.tf / prob_copy.nsteps)
             push!(elapsed_times, elapsed_time)
-            push!(histories, history)
+            push!(histories, history[:,:,:])
             push!(richardson_errors, richardson_err)
 
             println("Finished iteration ", k, " at ", Dates.now())

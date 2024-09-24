@@ -15,10 +15,16 @@ parameter (the GOAT method). Return the gradient.
 - `abstol::Float64=1e-10`: Absolute tolerance to use in GMRES.
 - `reltol::Float64=1e-10`: Relative tolerance to use in GMRES.
 """
-function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
-        pcof::AbstractVector{Float64}, target::VM; order=2, 
-        cost_type=:Infidelity, return_forcing=false, kwargs...
+function eval_grad_forced(
+        prob::SchrodingerProb{M, VM},
+        controls,
+        pcof::AbstractVector{Float64},
+        target::AbstractVecOrMat{<: Number};
+        order::Integer=2, 
+        cost_type=:Infidelity,
+        return_forcing=false
     ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
+    target = complex_to_real(target)
 
     # Allocate space for gradient
     gradient = zeros(length(pcof))
@@ -36,7 +42,17 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
     T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
 
     # Get state vector history
-    history = eval_forward(prob, controls, pcof; order=order, kwargs...)
+    history = zeros(
+        prob.real_system_size,
+        1+N_derivatives,
+        1+prob.nsteps,
+        prob.N_initial_conditions
+    )
+
+    history_partial_derivative = zeros(size(history))
+
+    eval_forward!(history, prob, controls, pcof; order=order)
+
     final_state = history[:, 1, end, :]
 
 
@@ -113,9 +129,13 @@ function eval_grad_forced(prob::SchrodingerProb{M, VM}, controls,
 
 
             # Compute the state history of ∂ψ/∂θₖ
-            history_partial_derivative = eval_forward(
-                diff_prob, controls, pcof; forcing=forcing_ary,
-                order=order, kwargs...
+            eval_forward!(
+                history_partial_derivative,
+                diff_prob,
+                controls,
+                pcof;
+                order=order,
+                forcing=forcing_ary,
             )
 
             #=

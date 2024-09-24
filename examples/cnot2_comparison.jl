@@ -251,7 +251,12 @@ println("Initial coefficient vector stored in 'pcof0'")
 
 
 
-prob = QuantumGateDesign.convert_juqbox(params)
+prob = QuantumGateDesign.convert_juqbox(
+    params,
+    gmres_abstol=1e-15,
+    gmres_reltol=1e-15,
+    preconditioner_type=QuantumGateDesign.LUPreconditioner
+)
 
 # (degree + N_knots)
 bspline_degree = 2
@@ -268,12 +273,12 @@ if run_convergence
     #params.nsteps = 5
     #prob.nsteps = 5
 
-    ret_qgd = get_histories(prob, controls, pcof0, 5, base_nsteps=10)
-    ret_juq = get_histories(params, wa, pcof0, 5, base_nsteps=10)
+    ret_qgd = get_histories(prob, controls, pcof0, 5, base_nsteps=100)
+    ret_juq = get_histories(params, wa, pcof0, 5, base_nsteps=100)
     ret_full = merge(ret_qgd, ret_juq)
 
     labels = ["Order 2" "Order 4" "Order 6" "Order 8" "Order 10" "Juqbox"]
-    pl = QuantumGateDesign.plot_stepsize_convergence(ret_full)
+    pl1 = QuantumGateDesign.plot_stepsize_convergence(ret_full)
     #QuantumGateDesign.plot_stepsize_convergence!(
     #    pl, ret_juq..., label="Juqbox",
     #)

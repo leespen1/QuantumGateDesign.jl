@@ -2,32 +2,34 @@ using QuantumGateDesign
 using Test: @test, @testset
 using Random: rand, MersenneTwister
 
+# NOTE: Use 1e-15 gmres tolerance so that gradients don't differ due to different
+# gmres results.
 function test_gradient_agreement(prob, control, pcof, target; 
         orders=(2,4,6,8,10), cost_type=:Infidelity,
-        print_results=true, gmres_abstol=1e-15, gmres_reltol=1e-15
+        print_results=true
     )
 
     for order in orders
         @testset "Order $order" begin
-            # Use 1e-15 gmres tolerance so that gradients don't differ due to different
-            # gmres results.
 
             # Check that gradients calculated using discrete adjoint and finite difference
             # methods agree to reasonable precision
             grad_disc_adj = discrete_adjoint(
                 prob, control, pcof, target, order=order,
-                cost_type=cost_type, abstol=gmres_abstol, reltol=gmres_reltol
+                cost_type=cost_type
             )
 
             grad_forced = eval_grad_forced(
                 prob, control, pcof, target, order=order,
-                cost_type=cost_type, abstol=gmres_abstol, reltol=gmres_reltol
+                cost_type=cost_type
             )
 
+            println("Finished Forced Method")
             grad_fin_diff = eval_grad_finite_difference(
                 prob, control, pcof, target, order=order,
-                cost_type=cost_type, abstol=gmres_abstol, reltol=gmres_reltol
+                cost_type=cost_type
             )
+            println("Finished Finite Difference")
 
             forced_atol = 1e-14
             fin_diff_atol = 1e-9
@@ -85,11 +87,17 @@ println("#"^40, "\n")
     println("Problem: Rabi Oscillator\n")
     println("-"^40, "\n")
 
-    prob = QuantumGateDesign.construct_rabi_prob(tf=pi)
+    prob = QuantumGateDesign.construct_rabi_prob(
+        tf=pi,
+        gmres_abstol=1e-15,
+        gmres_reltol=1e-15
+    )
     prob.nsteps = 10
+
     control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
     pcof = rand(MersenneTwister(0), control.N_coeff) 
-    target = rand(MersenneTwister(0), prob.real_system_size, prob.N_initial_conditions)
+
+    target = rand(MersenneTwister(0), ComplexF64, prob.N_tot_levels, prob.N_initial_conditions)
 
     test_gradient_agreement(prob, control, pcof, target)
 end
@@ -99,16 +107,19 @@ end
     println("-"^40, "\n")
     complex_system_size = 4
     N_operators = 1
+
     prob = QuantumGateDesign.construct_rand_prob(
         complex_system_size,
         N_operators,
         tf = 1.0,
-        nsteps = 10
+        nsteps = 10,
+        gmres_abstol=1e-15, gmres_reltol=1e-15
     )
+
     control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
     pcof = rand(MersenneTwister(0), control.N_coeff) 
 
-    target = rand(MersenneTwister(0), prob.real_system_size, prob.N_initial_conditions)
+    target = rand(MersenneTwister(0), ComplexF64, prob.N_tot_levels, prob.N_initial_conditions)
 
     test_gradient_agreement(prob, control, pcof, target)
 end

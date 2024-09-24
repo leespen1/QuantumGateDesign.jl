@@ -100,19 +100,31 @@ function optimize_gate(
     iter_objective_history = []
     iter_cpu_time_history = []
 
+    N_derivatives = div(order, 2)
+    state_history =  zeros(
+        schro_prob.real_system_size,
+        1+N_derivatives,
+        1+schro_prob.nsteps,
+        schro_prob.N_initial_conditions
+    )
+
+    target_real_valued = vcat(real(target), imag(target))
+
+
+
 
     # Right now I am unnecessarily doing a full forward evolution to compute the
     # infidelity, when this should be done already in the gradient computation.
     function eval_f(pcof::Vector{Float64})
-        history = eval_forward(schro_prob, controls, pcof, order=order)
+        eval_forward!(state_history, schro_prob, controls, pcof, order=order)
 
         # Infidelity Term
-        QN = @view history[:,1,end,:]
-        infidelity_val = infidelity(QN, target, schro_prob.N_ess_levels) 
+        QN = @view state_history[:,1,end,:]
+        infidelity_val = infidelity_real(QN, target_real_valued, schro_prob.N_ess_levels) 
 
         # Guard Penalty Term
         dt = schro_prob.tf / schro_prob.nsteps
-        guard_pen_val = guard_penalty(history, dt, schro_prob.tf, schro_prob.guard_subspace_projector)
+        guard_pen_val = guard_penalty_real(state_history, dt, schro_prob.tf, schro_prob.guard_subspace_projector)
 
         # Ridge/L2 Penalty Term
         ridge_pen_val = dot(pcof, pcof)*ridge_penalty_strength / length(pcof)
@@ -240,6 +252,8 @@ function optimize_gate(
 
     return_dict = OrderedCollections.OrderedDict(
         "ipopt_prob" => ipopt_prob,
+        "final_objective_value" => ipopt_prob.obj_val,
+        "optimal_pcof" => copy(ipopt_prob.x),
         "full_objective_history" => full_objective_history,
         "pcof_history" => pcof_history,
         "pcof_grad_history" => pcof_grad_history,

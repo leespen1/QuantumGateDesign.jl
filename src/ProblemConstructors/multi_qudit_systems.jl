@@ -35,27 +35,26 @@ function multi_qudit_hamiltonian_dispersive(
 
     Q = length(subsystem_sizes)
     full_system_size = prod(subsystem_sizes)
-    H_sym = zeros(full_system_size, full_system_size)
-    H_asym = zeros(full_system_size, full_system_size)
+    H = zeros(ComplexF64, full_system_size, full_system_size)
 
     lowering_ops = QuantumGateDesign.lowering_operators_system(subsystem_sizes)
 
     for q in 1:Q
         a_q = lowering_ops[q]
-        H_sym .+= (transition_freqs[q] - rotation_freqs[q]) .* (a_q' * a_q)
-        H_sym .-= 0.5*kerr_coeffs[q,q] .* (a_q' * a_q' * a_q * a_q)
+        H .+= (transition_freqs[q] - rotation_freqs[q]) .* (a_q' * a_q)
+        H .-= 0.5*kerr_coeffs[q,q] .* (a_q' * a_q' * a_q * a_q)
         for p in (q+1):Q
             a_p = lowering_ops[p]
-            H_sym .-= kerr_coeffs[p,q] .* (a_p' * a_p* a_q' * a_q)
+            H .-= kerr_coeffs[p,q] .* (a_p' * a_p* a_q' * a_q)
             # Ignore Jaynes-Cummings coupling for now
         end
     end
 
     if sparse_rep
-        return SparseArrays.sparse(H_sym), SparseArrays.sparse(H_asym)
+        return SparseArrays.sparse(H)
     end
 
-    return H_sym, H_asym
+    return H
 end
 
 function control_ops(subsystem_sizes; sparse_rep=true)
@@ -93,28 +92,27 @@ function multi_qudit_hamiltonian_jayne(
 
     Q = length(subsystem_sizes)
     full_system_size = prod(subsystem_sizes)
-    H_sym = SparseArrays.spzeros(Float64, full_system_size, full_system_size)
-    H_asym = SparseArrays.spzeros(Float64, full_system_size, full_system_size)
+    H = SparseArrays.spzeros(ComplexF64, full_system_size, full_system_size)
 
     lowering_ops = lowering_operators_system(subsystem_sizes)
 
     for q in 1:Q
         a_q = lowering_ops[q]
-        H_sym .+= (transition_freqs[q] - rotation_freq) .* (a_q' * a_q)
-        H_sym .-= 0.5*kerr_coeffs[q,q] .* (a_q' * a_q' * a_q * a_q)
+        H .+= (transition_freqs[q] - rotation_freq) .* (a_q' * a_q)
+        H .-= 0.5*kerr_coeffs[q,q] .* (a_q' * a_q' * a_q * a_q)
         for p in (q+1):Q
             a_p = lowering_ops[p]
-            H_sym .-= kerr_coeffs[p,q] .* (a_p' * a_p* a_q' * a_q)
+            H .-= kerr_coeffs[p,q] .* (a_p' * a_p* a_q' * a_q)
             # No time dependence in Jayne-Cummings because we use the same rotational frequency in all subsystems
-            H_sym .+= jayne_cummings_coeffs[p,q]*(a_q'*a_p + a_q*a_p')
+            H .+= jayne_cummings_coeffs[p,q]*(a_q'*a_p + a_q*a_p')
         end
     end
 
     if sparse_rep
-        return SparseArrays.sparse(H_sym), SparseArrays.sparse(H_asym)
+        return SparseArrays.sparse(H)
     end
 
-    return H_sym, H_asym
+    return H
 end
 
 function DispersiveProblem(
@@ -123,15 +121,16 @@ function DispersiveProblem(
         transition_freqs::AbstractVector{<: Real},
         rotation_freqs::AbstractVector{<: Real},
         kerr_coeffs::AbstractMatrix{<: Real},
-        tf,
-        nsteps;
-        sparse_rep=true,
-        bitstring_ordered=true,
-        gmres_abstol=1e-10,
-        gmres_reltol=1e-10,
+        tf::Real,
+        nsteps::Integer;
+        sparse_rep::Bool=true,
+        bitstring_ordered::Bool=true,
+        gmres_abstol::Real=1e-10,
+        gmres_reltol::Real=1e-10,
+        preconditioner_type::Type=LUPreconditioner,
     )
 
-    system_sym, system_asym = multi_qudit_hamiltonian_dispersive(
+    system_hamiltonian = multi_qudit_hamiltonian_dispersive(
         subsystem_sizes,
         transition_freqs,
         rotation_freqs,
@@ -145,19 +144,20 @@ function DispersiveProblem(
 
     N_ess_levels = prod(essential_subsystem_sizes)
 
-    u0, v0 = create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, bitstring_ordered)
+    U0 = create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, bitstring_ordered)
 
     return SchrodingerProb(
-        system_sym,
-        system_asym,
+        system_hamiltonian,
         sym_ops,
         asym_ops,
-        u0,
-        v0,
+        U0,
         tf,
         nsteps,
         N_ess_levels,
         guard_subspace_projector,
+        gmres_abstol=gmres_abstol,
+        gmres_reltol=gmres_reltol,
+        preconditioner_type=preconditioner_type
     )
 end
 
@@ -173,18 +173,18 @@ function JaynesCummingsProblem(
         rotation_freq::Real,
         kerr_coeffs::AbstractMatrix{<: Real},
         jayne_cummings_coeffs::AbstractMatrix{<: Real},
-        tf,
-        nsteps;
-        sparse_rep=true,
-        bitstring_ordered=true,
-        preconditioner_type=LUPreconditioner,
-        gmres_abstol=1e-10,
-        gmres_reltol=1e-10,
+        tf::Real,
+        nsteps::Integer;
+        sparse_rep::Bool=true,
+        bitstring_ordered::Bool=true,
+        preconditioner_type::Type=LUPreconditioner,
+        gmres_abstol::Real=1e-10,
+        gmres_reltol::Real=1e-10,
         # What else do I need? Final time? Guard penalty? Preconditioner?
         # (it would be good to have the preconditioner determined here)
     )
 
-    system_sym, system_asym = multi_qudit_hamiltonian_jayne(
+    system_hamiltonian = multi_qudit_hamiltonian_jayne(
         subsystem_sizes,
         transition_freqs,
         rotation_freq,
@@ -198,11 +198,10 @@ function JaynesCummingsProblem(
 
     N_ess_levels = prod(essential_subsystem_sizes)
 
-    u0, v0 = create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, bitstring_ordered)
+    U0 = create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, bitstring_ordered)
 
     return SchrodingerProb(
-        system_sym,
-        system_asym,
+        system_hamiltonian,
         sym_ops,
         asym_ops,
         u0,
@@ -257,8 +256,7 @@ function create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, b
     system_size = prod(subsystem_sizes)
     essential_system_size = prod(essential_subsystem_sizes)
 
-    u0 = zeros(system_size, essential_system_size)
-    v0 = zeros(system_size, essential_system_size)
+    U0 = zeros(ComplexF64, system_size, essential_system_size)
     
     # E.g. if essential_subsystem_sizes is (2,3,4), get (0:1, 0:2, 0:4)
     essential_index_ranges = ntuple(
@@ -274,10 +272,10 @@ function create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, b
         if bitstring_ordered
             subsystem_indices = reverse(subsystem_indices)
         end
-        u0[:,i] .= basis_state(subsystem_sizes, subsystem_indices, bitstring_ordered)
+        U0[:,i] .= basis_state(subsystem_sizes, subsystem_indices, bitstring_ordered)
     end
 
-    return u0, v0
+    return U0
 end
 
 """
@@ -391,7 +389,7 @@ function lowering_operators_system(subsystem_sizes, bitstring_ordered=true)
 end
 
 function create_gate(subsystem_sizes, essential_subsystem_sizes, initial_final_pairs, bitstring_ordered=true)
-    u0, v0 = create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, bitstring_ordered)
+    G = create_initial_conditions(subsystem_sizes, essential_subsystem_sizes, bitstring_ordered)
     system_size = prod(subsystem_sizes)
     essential_system_size = prod(essential_subsystem_sizes)
 
@@ -406,9 +404,9 @@ function create_gate(subsystem_sizes, essential_subsystem_sizes, initial_final_p
     ordered_essential_states = reshape(collect(product(essential_index_ranges...)), :)
     for pair in initial_final_pairs
         i = findfirst(x -> x == reverse(pair.first), ordered_essential_states)
-        u0[:, i] .= basis_state(subsystem_sizes, pair.second)
+        G[:, i] .= basis_state(subsystem_sizes, pair.second)
     end
-    return vcat(u0, v0)
+    return G
 end
 
 function rotation_matrix(subsystem_sizes, rotation_frequencies, t)

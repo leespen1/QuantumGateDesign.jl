@@ -14,9 +14,13 @@ parameter. Return the gradient.
 - `order::Int64=2`: Which order of the method to use.
 """
 function eval_grad_finite_difference(
-        prob::SchrodingerProb, controls,
-        pcof::AbstractVector{Float64}, target::AbstractMatrix{Float64};
-        dpcof=1e-5, order=2, cost_type=:Infidelity, kwargs...
+        prob::SchrodingerProb,
+        controls,
+        pcof::AbstractVector{<: Real},
+        target::AbstractVecOrMat{<: Number};
+        dpcof::Real=1e-5,
+        order::Integer=2,
+        cost_type=:Infidelity
     )
 
     N_coeff = length(pcof)
@@ -32,14 +36,15 @@ function eval_grad_finite_difference(
         pcof_l .= pcof
         pcof_l[i] -= dpcof
 
-        history_r = eval_forward(prob, controls, pcof_r; order=order, kwargs...)
-        history_l = eval_forward(prob, controls, pcof_l; order=order, kwargs...)
+        history_r = eval_forward(prob, controls, pcof_r; order=order)
+        history_l = eval_forward(prob, controls, pcof_l; order=order)
 
         cost_r = 0.0
         cost_l = 0.0
 
-        ψf_r = history_r[:,1,end,:]
-        ψf_l = history_l[:,1,end,:]
+        ψf_r = history_r[:, end, :]
+        ψf_l = history_l[:, end, :]
+
         if cost_type == :Infidelity
             cost_r += infidelity(ψf_r, target, prob.N_ess_levels)
             cost_l += infidelity(ψf_l, target, prob.N_ess_levels)
@@ -50,7 +55,7 @@ function eval_grad_finite_difference(
             cost_r += 0.5*norm(ψf_r)^2
             cost_l += 0.5*norm(ψf_l)^2
         else
-            throw("Invalid cost type: $cost_type")
+            throw(ArgumentError("Invalid cost type: $cost_type"))
         end
 
         # Guard penalty

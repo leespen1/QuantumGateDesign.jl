@@ -16,7 +16,6 @@ function eval_forward(
         prob::SchrodingerProb{M1, M2, P}, controls, pcof::AbstractVector{<: Real};
         order::Int=2, saveEveryNsteps::Int=1,
         forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
-        kwargs...
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
 
     N_derivatives = div(order, 2)
@@ -24,9 +23,9 @@ function eval_forward(
     uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_save, prob.N_initial_conditions)
 
     eval_forward!(uv_history, prob, controls, pcof, order=order,
-                  saveEveryNsteps=saveEveryNsteps; forcing=forcing, kwargs...)
+                  saveEveryNsteps=saveEveryNsteps; forcing=forcing)
 
-    return uv_history
+    return real_to_complex(uv_history[:,1,:,:])
 end
 
 
@@ -34,8 +33,7 @@ end
 function eval_forward!(uv_history::AbstractArray{Float64, 4},
         prob::SchrodingerProb{M1, M2, P}, controls, pcof::AbstractVector{<: Real};
         order::Int=2, saveEveryNsteps::Int=1,
-        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
-        kwargs...
+        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
 
     N_derivatives = div(order, 2)
@@ -59,7 +57,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
 
         avg_N_gmres_iterations += eval_forward!(
             this_uv_history, vector_prob, controls, pcof; order=order, 
-            saveEveryNsteps=saveEveryNsteps, forcing=this_forcing, kwargs...
+            saveEveryNsteps=saveEveryNsteps, forcing=this_forcing
         )
     end
 
@@ -237,7 +235,6 @@ function eval_forward(
         prob::SchrodingerProb{M, V}, controls, pcof::AbstractVector{<: Real};
         order::Int=2, saveEveryNsteps::Int=1,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
-        kwargs...
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     N_derivatives = div(order, 2)
@@ -246,9 +243,9 @@ function eval_forward(
     uv_history = Array{Float64, 3}(undef, prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
 
     eval_forward!(uv_history, prob, controls, pcof, order=order;
-                  saveEveryNsteps=saveEveryNsteps, forcing=forcing, kwargs...)
+                  saveEveryNsteps=saveEveryNsteps, forcing=forcing)
 
-    return uv_history
+    return real_to_complex(uv_history[:,1,:])
 end
 
 
@@ -262,7 +259,7 @@ function eval_adjoint(prob::SchrodingerProb{M, V}, controls,
         pcof::AbstractVector{<: Real},
         terminal_condition::AbstractVector{Float64}; 
         forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
-        order::Int=2, kwargs...
+        order::Int=2
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
 
     N_derivatives = div(order, 2)
@@ -272,7 +269,7 @@ function eval_adjoint(prob::SchrodingerProb{M, V}, controls,
     uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
 
     eval_adjoint!(uv_history, prob, controls, pcof, terminal_condition;
-                  order=order, forcing=forcing, kwargs...)
+                  order=order, forcing=forcing)
 
     return uv_history
 end
@@ -284,14 +281,14 @@ function eval_adjoint(
         prob::SchrodingerProb{M1, M2}, controls,
         pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64};
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
-        order::Int=2, kwargs...
+        order::Int=2
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_derivatives = div(order, 2)
     uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
 
     eval_adjoint!(uv_history, prob, controls, pcof, terminal_condition;
-        order=order, forcing=forcing, kwargs...
+        order=order, forcing=forcing
     )
 
     return uv_history
@@ -303,7 +300,6 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
         pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64}
         ; order::Int=2,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
-        kwargs...
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_derivatives = div(order, 2)
@@ -326,7 +322,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
 
         eval_adjoint!(
             this_uv_history, vector_prob, controls, pcof, terminal_condition_vec;
-            order=order, forcing=this_forcing, kwargs...
+            order=order, forcing=this_forcing
         )
     end
 end
