@@ -255,14 +255,15 @@ prob = QuantumGateDesign.convert_juqbox(
     params,
     gmres_abstol=1e-15,
     gmres_reltol=1e-15,
-    preconditioner_type=QuantumGateDesign.LUPreconditioner
+    preconditioner_type=QuantumGateDesign.DiagonalHamiltonianPreconditioner
 )
 
 # (degree + N_knots)
-bspline_degree = 2
-N_knots = D1 - bspline_degree + 1
-base_control = GeneralBSplineControl(bspline_degree, N_knots, Tmax)
-controls = [CarrierControl(base_control, om[i,:]) for i in 1:size(om, 1)]
+#bspline_degree = 2
+#N_knots = D1 - bspline_degree + 1
+#base_control = GeneralBSplineControl(bspline_degree, N_knots, Tmax)
+#controls = [CarrierControl(base_control, om[i,:]) for i in 1:size(om, 1)]
+controls = QuantumGateDesign.my_bspline_controls(Tmax, D1, om)
 
 target = vcat(params.Utarget_r, params.Utarget_i)
 
@@ -279,6 +280,7 @@ if run_convergence
 
     labels = ["Order 2" "Order 4" "Order 6" "Order 8" "Order 10" "Juqbox"]
     pl1 = QuantumGateDesign.plot_stepsize_convergence(ret_full)
+    pl2 = QuantumGateDesign.plot_timing_convergence(ret_full)
     #QuantumGateDesign.plot_stepsize_convergence!(
     #    pl, ret_juq..., label="Juqbox",
     #)

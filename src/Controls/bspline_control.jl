@@ -3,6 +3,189 @@
 # Bspline/Bcarrier 
 #
 =================================================#
+"""
+    spar = splineparams(T, D1, Nseg, pcof)
+
+Constructor for struct splineparams, which sets up the parameters for a regular B-spline function
+(without carrier waves).
+
+# Arguments
+- `T:: Float64`: Duration of spline function
+- `D1:: Int64`: Number of basis functions in each spline
+- `Nseg:: Int64`:  Number of splines (real, imaginary, different ctrl func)
+- `pcof:: Array{Float64, 1}`: Coefficient vector. Must have D1*Nseg elements
+
+# External links
+* [Spline Wavelet](https://en.wikipedia.org/wiki/Spline_wavelet#Quadratic_B-spline) on Wikipedia.
+"""
+struct MySplineControl 
+    N_coeff:: Int64 # Total number of coefficients
+    tf::Float64
+    D1::Int64 # Number of coefficients per spline (e.g. per control function, and in our case we have 2, p and q)
+    Nseg::Int64 # Number of segments (real, imaginary, different ctrl func)
+    tcenter::Vector{Float64}
+    dtknot::Float64
+
+# new, simplified constructor
+    function MySplineControl(tf, D1)
+        if (D1 < 3)
+            throw(ArgumentError("Number of coefficients per spline (D1 = $D1) must be ≥ 3."))
+        end
+
+        Nseg = 2 # real and imaginary
+        N_coeff = D1*Nseg
+
+        dtknot = tf/(D1 -2)
+        tcenter = dtknot.*(collect(1:D1) .- 1.5)
+
+        new(N_coeff, tf, D1, Nseg, tcenter, dtknot)
+    end
+end
+
+"""
+I should make a general function like this in CarrierControl.jl
+"""
+function my_bspline_controls(tf::Float64, D1::Int, omega::AbstractMatrix{Float64})
+    N_controls = size(omega, 1)
+    N_freq = size(omega, 2)
+    base_control = MySplineControl(tf, D1)
+    controls = Vector{CarrierControl{MySplineControl}}()
+    for i in 1:N_controls 
+        omega_vec = omega[i,:]
+
+        push!(controls, CarrierControl(base_control, omega_vec))
+    end
+
+    return controls
+end
+
+
+function eval_p_derivative(
+        control::MySplineControl,
+        t::Real,
+        pcof::AbstractVector{<: Real},
+        derivative_order::Integer,
+    )
+    return bspline2(
+        control, t, view(pcof, 1:control.D1),
+        derivative_order
+    )
+end
+
+function eval_q_derivative(
+        control::MySplineControl,
+        t::Real,
+        pcof::AbstractVector{<: Real},
+        derivative_order::Integer,
+    )
+    return bspline2(
+        control, t, view(pcof, 1+control.D1:control.N_coeff),
+        derivative_order
+    )
+end
+
+function eval_p(
+        control::MySplineControl, t::Real, pcof::AbstractVector{<: Real}
+    )
+    derivative_order = 0
+    return eval_p_derivative(control, t, pcof, derivative_order)
+end
+
+function eval_q(
+        control::MySplineControl, t::Real, pcof::AbstractVector{<: Real}
+    )
+    derivative_order = 0
+    return eval_q_derivative(control, t, pcof, derivative_order)
+end
+
+
+
+
+# bspline2: Evaluate quadratic bspline function
+"""
+    f = bspline2(t, splineparam, splinefunc)
+
+Evaluate a B-spline function. See also the `splineparams` constructor.
+
+# Arguments
+- `t::Real`: Evaluate spline at parameter t ∈ [0, param.T]
+- `param::splineparams`: Parameters for the spline
+- `splinefunc::Int64`: Spline function index ∈ [0, param.Nseg-1]
+"""
+@inline function bspline2(
+        control::MySplineControl,
+        t::Real,
+        pcof::AbstractVector{<: Real},
+        derivative_order::Integer,
+    )
+
+    f = 0.0
+
+    dtknot = control.dtknot
+    width = 3*dtknot
+
+    k = max(3, ceil(Int64, (t/dtknot) + 2)) # Unsure if this line does what it is supposed to
+    k = min(k, control.D1)
+
+    if (derivative_order == 0)
+        # 1st segment of nurb k
+        tc = control.tcenter[k]
+        tau = (t - tc) / width
+        f += pcof[k] * (9/8 + 4.5*tau + 4.5*tau^2) # test to remove square for extra speed
+
+        # 2nd segment of nurb k-1
+        tc = control.tcenter[k-1]
+        tau = (t - tc) / width
+        f += pcof[k-1] * (0.75 - 9*tau^2)
+
+        # 3rd segment of nurb k-2
+        tc = control.tcenter[k-2]
+        tau = (t - tc) / width
+        f += pcof[k-2] * (9/8 - 4.5*tau + 4.5*tau^2)
+    elseif (derivative_order == 1)
+        # 1st segment of nurb k
+        tc = control.tcenter[k]
+        tau = (t - tc) / width
+        f += pcof[k] * (4.5 + 9*tau) / width # test to remove square for extra speed
+
+        # 2nd segment of nurb k-1
+        tc = control.tcenter[k-1]
+        tau = (t - tc) / width
+        f += pcof[k-1] * (-18*tau) / width
+
+        # 3rd segment of nurb k-2
+        tc = control.tcenter[k-2]
+        tau = (t - tc) / width
+        f += pcof[k-2] * (-4.5 + 9*tau) / width
+    elseif (derivative_order == 2)
+        # 1st segment of nurb k
+        tc = control.tcenter[k]
+        tau = (t - tc) / width
+        f += pcof[k] * 9 / width^2 # test to remove square for extra speed
+
+        # 2nd segment of nurb k-1
+        tc = control.tcenter[k-1]
+        tau = (t - tc) / width
+        f += pcof[k-1] * -18 / width^2
+
+        # 3rd segment of nurb k-2
+        tc = control.tcenter[k-2]
+        tau = (t - tc) / width
+        f += pcof[k-2] * 9 / width^2
+    end
+    # If derivative order higher than 2, value is zero
+
+    return f
+end
+
+##############################################################################
+#
+# Old version
+# Uses Bcarriers. Now I am just going to use Bsplines with the CarrierControl
+# interface.
+#
+##############################################################################
+
 struct BSplineControl <: AbstractControl
     N_coeff::Int64
     tf::Float64

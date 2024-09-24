@@ -60,6 +60,8 @@ export hermite_interp_poly
 
 export convert_juqbox
 
+export MySplineControl
+
 include("preconditioners.jl")
 include("SchrodingerProb.jl")
 include("../Daniel/hermite_map.jl")
