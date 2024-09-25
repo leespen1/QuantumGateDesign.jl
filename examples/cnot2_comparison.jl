@@ -267,35 +267,103 @@ controls = QuantumGateDesign.my_bspline_controls(Tmax, D1, om)
 
 target = vcat(params.Utarget_r, params.Utarget_i)
 
+pcof = [
+  -3.6384863795557e-02,
+  -3.9983775787025e-02,
+  -3.9990569458691e-02,
+  -8.5039154057075e-03,
+   3.9987527649540e-02,
+   3.9989441822834e-02,
+   3.9990584666858e-02,
+   3.9994065973602e-02,
+   3.9980608769458e-02,
+  -5.6435963706237e-03,
+   1.8578728705105e-02,
+  -3.9893839039129e-02,
+  -3.9981960010414e-02,
+  -3.9979880248326e-02,
+  -3.9996226180249e-02,
+  -3.9978062127283e-02,
+   8.0943454575614e-04,
+   3.9963467342644e-02,
+   3.9980541843756e-02,
+   3.8294168263682e-02,
+  -9.7599410939897e-03,
+   3.6434264057748e-02,
+   2.2127531365058e-03,
+   1.3430730393960e-02,
+   3.9991117699967e-02,
+   1.0450290339500e-02,
+   9.5168262983943e-03,
+   3.9993478783246e-02,
+  -5.0109648192038e-03,
+   5.0071509040162e-03,
+  -3.3531599661426e-04,
+  -4.4799711373417e-03,
+  -3.9994687788598e-02,
+  -2.3962338180824e-02,
+  -2.1914727373668e-02,
+  -3.9990614302471e-02,
+  -1.9105613160616e-02,
+  -1.3634217122003e-02,
+  -3.6978522420907e-02,
+   4.6703113314177e-03,
+  -9.2085227518026e-04,
+  -3.7511926415729e-03,
+  -5.3203709999099e-04,
+   3.7715221649731e-03,
+   8.1689992139041e-03,
+   2.0588736199835e-03,
+  -3.7494933465369e-03,
+  -8.0158007531321e-03,
+   2.5478141557258e-03,
+   2.2408511240192e-03,
+   2.2623766381738e-03,
+   2.9676489753257e-03,
+  -7.0921221858003e-03,
+  -4.0243035800670e-03,
+   6.8022668926764e-05,
+   8.7647663408242e-03,
+   5.3166641208284e-03,
+   5.0422756886708e-06,
+  -5.2451882135046e-03,
+  -1.2431738411180e-03,
+  -4.1038834896327e-04,
+   8.7869928240765e-05,
+   6.9832280720498e-05,
+   3.0889914198858e-03,
+   3.8036364248522e-03,
+   1.9354378593572e-03,
+  -1.3927544998632e-03,
+  -4.0978304907120e-03,
+  -3.8510631839536e-03,
+   2.0294168601541e-03,
+   2.1549131835891e-03,
+  -3.9083728577326e-03,
+  -4.2132554567554e-03,
+  -2.3244880250017e-03,
+   4.5741485206764e-04,
+   3.2346626803337e-03,
+   3.5530906858192e-03,
+   1.1977510772989e-03,
+   1.0630926920100e-03,
+  -6.1679589946097e-04,
+]
 
 
 run_convergence = true
 if run_convergence
+    N_iter = 10
+    base_nsteps = 5
     #params.nsteps = 5
     #prob.nsteps = 5
 
-    ret_qgd = get_histories(prob, controls, pcof0, 5, base_nsteps=100)
-    ret_juq = get_histories(params, wa, pcof0, 5, base_nsteps=100)
+    ret_qgd = get_histories(prob, controls, pcof, N_iter, base_nsteps=base_nsteps)
+    ret_juq = get_histories(params, wa, pcof, N_iter, base_nsteps=base_nsteps)
     ret_full = merge(ret_qgd, ret_juq)
 
-    labels = ["Order 2" "Order 4" "Order 6" "Order 8" "Order 10" "Juqbox"]
     pl1 = QuantumGateDesign.plot_stepsize_convergence(ret_full)
     pl2 = QuantumGateDesign.plot_timing_convergence(ret_full)
-    #QuantumGateDesign.plot_stepsize_convergence!(
-    #    pl, ret_juq..., label="Juqbox",
-    #)
-
-    #labels = ["Order 2" "Order 4" "Order 6" "Order 8" "Order 10"]
-    #pl = QuantumGateDesign.plot_stepsize_convergence(ret_qgd)
-    #QuantumGateDesign.plot_stepsize_convergence!(
-    #    pl, ret_juq..., label="Juqbox",
-    #)
-
-
-    #println(
-    #    "Runtime Ratios: ",
-    #    QuantumGateDesign.get_runtime_ratios(ret_qgd[2], ret_qgd[3], ret_juq[2], ret_juq[3])
-    #)
 end
 
 ## For plotting controls
