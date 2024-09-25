@@ -72,7 +72,7 @@ end
 
 
 function DiagonalHamiltonianPreconditioner(prob, order, adjoint=false)
-    return DiagonalHamiltonianPreconditioner(form_LHS_no_control(prob, order, adjoint=false))
+    return DiagonalHamiltonianPreconditioner(form_LHS_no_control(prob, order, adjoint))
 end
 
 
@@ -131,7 +131,7 @@ function Base.:\(P::DiagonalHamiltonianPreconditioner, b::AbstractVector)
 end
 
 function lu_preconditioner(prob, order, adjoint=false)
-    LHS = form_LHS_no_control(prob, order, adjoint=adjoint)
+    LHS = form_LHS_no_control(prob, order, adjoint)
     preconditioner = lu(LHS)
     return preconditioner
 end
