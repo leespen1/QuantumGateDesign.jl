@@ -61,9 +61,7 @@ end
 
 
 function eval_p_derivative(
-        control::MySplineControl,
-        t::Real,
-        pcof::AbstractVector{<: Real},
+        control::MySplineControl, t::Real, pcof::AbstractVector{<: Real},
         derivative_order::Integer,
     )
     return bspline2(
@@ -72,10 +70,9 @@ function eval_p_derivative(
     )
 end
 
+
 function eval_q_derivative(
-        control::MySplineControl,
-        t::Real,
-        pcof::AbstractVector{<: Real},
+        control::MySplineControl, t::Real, pcof::AbstractVector{<: Real},
         derivative_order::Integer,
     )
     return bspline2(
@@ -84,12 +81,14 @@ function eval_q_derivative(
     )
 end
 
+
 function eval_p(
         control::MySplineControl, t::Real, pcof::AbstractVector{<: Real}
     )
     derivative_order = 0
     return eval_p_derivative(control, t, pcof, derivative_order)
 end
+
 
 function eval_q(
         control::MySplineControl, t::Real, pcof::AbstractVector{<: Real}
@@ -98,6 +97,28 @@ function eval_q(
     return eval_q_derivative(control, t, pcof, derivative_order)
 end
 
+
+function eval_grad_p_derivative!(
+        grad::AbstractVector{<: Real}, control::MySplineControl, t::Real,
+        pcof::AbstractVector{<: Real}, derivative_order::Integer
+    )
+    return gradbspline2!(
+        view(grad, 1:control.D1),
+        control, t, view(pcof, 1:control.D1),
+        derivative_order
+    )
+end
+
+function eval_grad_q_derivative!(
+        grad::AbstractVector{<: Real}, control::MySplineControl, t::Real,
+        pcof::AbstractVector{<: Real}, derivative_order::Integer
+    )
+    return gradbspline2!(
+        view(grad, 1+control.D1:control.N_coeff),
+        control, t, view(pcof, 1+control.D1:control.N_coeff),
+        derivative_order
+    )
+end
 
 
 
@@ -146,7 +167,7 @@ Evaluate a B-spline function. See also the `splineparams` constructor.
         # 1st segment of nurb k
         tc = control.tcenter[k]
         tau = (t - tc) / width
-        f += pcof[k] * (4.5 + 9*tau) / width # test to remove square for extra speed
+        f += pcof[k] * (4.5 + 9*tau) / width
 
         # 2nd segment of nurb k-1
         tc = control.tcenter[k-1]
@@ -176,6 +197,72 @@ Evaluate a B-spline function. See also the `splineparams` constructor.
     # If derivative order higher than 2, value is zero
 
     return f
+end
+
+
+@inline function gradbspline2!(
+        grad::AbstractVector{<: Real},
+        control::MySplineControl,
+        t::Real,
+        pcof::AbstractVector{<: Real},
+        derivative_order::Integer,
+    )
+    grad .= 0
+
+    dtknot = control.dtknot
+    width = 3*dtknot
+
+    k = max(3, ceil(Int64, (t / dtknot) + 2)) # t_knot(k-1) < t <= t_knot(k), but t=0 needs to give k=3
+    k = min(k, control.D1) # protect agains roundoff that sometimes makes t/dt > N_nurbs-2
+
+    if (derivative_order == 0)
+        #1st segment of nurb k
+        tc = control.tcenter[k]
+        tau = (t - tc) / width
+        grad[k] = (9/8 + 4.5*tau + 4.5*tau^2);
+
+        #2nd segment of nurb k-1
+        tc = control.tcenter[k-1]
+        tau = (t - tc) / width
+        grad[k-1] = (0.75 - 9*tau^2)
+
+        # 3rd segment og nurb k-2
+        tc = control.tcenter[k-2]
+        tau = (t - tc) / width
+        grad[k-2] = (9/8 - 4.5*tau + 4.5*tau^2);
+    elseif (derivative_order == 1)
+        # 1st segment of nurb k
+        tc = control.tcenter[k]
+        tau = (t - tc) / width
+        grad[k] = (4.5 + 9*tau) / width
+
+        # 2nd segment of nurb k-1
+        tc = control.tcenter[k-1]
+        tau = (t - tc) / width
+        grad[k-1] = (-18*tau) / width
+
+        # 3rd segment of nurb k-2
+        tc = control.tcenter[k-2]
+        tau = (t - tc) / width
+        grad[k-2] = (-4.5 + 9*tau) / width
+    elseif (derivative_order == 2)
+        # 1st segment of nurb k
+        tc = control.tcenter[k]
+        tau = (t - tc) / width
+        grad[k] = 9 / width^2 # test to remove square for extra speed
+
+        # 2nd segment of nurb k-1
+        tc = control.tcenter[k-1]
+        tau = (t - tc) / width
+        grad[k-1] = -18 / width^2
+
+        # 3rd segment of nurb k-2
+        tc = control.tcenter[k-2]
+        tau = (t - tc) / width
+        grad[k-2] = 9 / width^2
+    end
+
+    return grad
 end
 
 ##############################################################################
