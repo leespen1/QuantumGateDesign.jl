@@ -133,11 +133,12 @@ mutable struct SchrodingerProb{M, VM, P}
             throw(ArgumentError("Number of symmetric operators $N_sym does not match number of anti-symmetric operators $N_asym."))
         end
 
-        # Check size of guard subspace projector, and check that it is really a projection
-        if !isprojection(guard_subspace_projector)
-            throw(ArgumentError("Guard subspace projector is not a projector (A*A != A)."))
-        end
+        # The projector actually doesn't need to be a projector. 
+        #if !isprojection(guard_subspace_projector)
+        #    throw(ArgumentError("Guard subspace projector is not a projector (A*A != A)."))
+        #end
 
+        # Check size of guard subspace projector, and check that it is really a projection
         guard_subspace_projector_size = size(guard_subspace_projector)
         if guard_subspace_projector_size != (real_system_size, real_system_size)
             throw(ArgumentError("Guard subspace projector size $guard_subspace_projector_size should be twice the size $complex_system_size of the complex-valued system."))
@@ -203,16 +204,13 @@ function SchrodingerProb(
     real_system_size = 2*size(system_sym, 1)
 
     if ismissing(guard_subspace_projector)
-        guard_subspace_projector = similar(
-            system_sym,
+        guard_subspace_projector = zeros(
             real_system_size,
             real_system_size
         )
-        guard_subspace_projector .= 0
-        if SparseArrays.issparse(guard_subspace_projector)
-            SparseArrays.dropzeros!(guard_subspace_projector) 
-        end
     end
+    guard_subspace_projector = convert(OpType, guard_subspace_projector)
+
 
 
     # Convert other arguments to the correct type for storage in SchrodingerProb

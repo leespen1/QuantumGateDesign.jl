@@ -21,9 +21,16 @@ function convert_juqbox(
 
     subsystem_sizes = juqbox_params.Ne .+ juqbox_params.Ng
     essential_subsystem_sizes = juqbox_params.Ne
-    guard_subspace_projector = guard_projector(
-        subsystem_sizes, essential_subsystem_sizes
-    )
+
+    W_r = juqbox_params.wmat_real
+    Z = zeros(size(W_r))
+    W_i = juqbox_params.wmat_imag
+
+    guard_subspace_projector = [W_r Z; Z W_r]
+
+    #guard_subspace_projector = guard_projector(
+    #    subsystem_sizes, essential_subsystem_sizes
+    #)
 
     prob = SchrodingerProb(
         system_hamiltonian,
