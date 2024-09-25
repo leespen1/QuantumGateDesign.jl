@@ -83,14 +83,14 @@ the IPOPT API.
 """
 function optimize_gate(
         schro_prob::SchrodingerProb{M, VM}, controls,
-        pcof_init::AbstractVector{Float64}, target::VM;
+        pcof_init::AbstractVector{Float64}, target::AbstractMatrix{<: Number};
         order=4,
         pcof_L=missing,
         pcof_U=missing,
         maxIter=50,
         print_level=5, # Default is 5, goes from 0 to 12
         ridge_penalty_strength=1e-2,
-        max_cpu_time = 300.0 # 5 minutes
+        max_cpu_time = 60.0*60*24 # 24 hours
     ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
 
