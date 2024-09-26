@@ -45,7 +45,7 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
         nsteps_vec = Int64[]
         step_sizes = Float64[]
         elapsed_times = Float64[]
-        histories = Array{Float64, 3}[]
+        histories = Array{ComplexF64, 3}[]
         richardson_errors = Float64[]
 
         summary_dict = Dict(
@@ -80,8 +80,6 @@ function QuantumGateDesign.get_histories(params::Juqbox.objparams,
             history = ret[2]
             # Reorder Juqbox indices to match QuantumGateDesign
             history = permutedims(history, (1,3,2))
-            # Convert from complex to real valued
-            history = QuantumGateDesign.complex_to_real(history)
 
             # Compute Richardson Error
             richardson_err = NaN
