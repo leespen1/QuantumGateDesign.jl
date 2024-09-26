@@ -161,6 +161,7 @@ function plot_stepsize_convergence(dict_of_summary_dicts=Dict(); fontsize=16,
 
     plot_xlims = collect(Plots.xlims(pl))
     Plots.plot!(pl, plot_xlims, [-7, -7], linecolor=:red, label="Target Error")
+    Plots.plot!(pl, ylims=(-15, 2))
     return pl
 end
 
@@ -182,6 +183,7 @@ function plot_timing_convergence(dict_of_summary_dicts=Dict(); fontsize=16,
 
     plot_xlims = collect(Plots.xlims(pl))
     Plots.plot!(pl, plot_xlims, [-7, -7], linecolor=:red, label="Target Error")
+    Plots.plot!(pl, ylims=(-15, 2))
     return pl
 end
 
