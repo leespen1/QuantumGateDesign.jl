@@ -40,7 +40,7 @@ if use_juqbox
 end
 
 # Run setup
-include("cnot2_setup.jl")
+include("cnot3_setup.jl")
 
 # Compute nsteps based on command line input
 nsteps = ceil(Int, prob.tf / stepsize)
