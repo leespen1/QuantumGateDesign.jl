@@ -189,8 +189,8 @@ startFromScratch = true
 startFile = "drives/cnot2-pcof-opt-t50.jld2"
 
 # dimensions for the parameter vector
-#D1 = 10 # number of B-spline coeff per oscillator, freq and sin/cos
-D1 = 30 # number of B-spline coeff per oscillator, freq and sin/cos
+D1 = 10 # number of B-spline coeff per oscillator, freq and sin/cos
+#D1 = 30 # number of B-spline coeff per oscillator, freq and sin/cos
 
 nCoeff = 2*Nctrl*Nfreq*D1 # Total number of parameters.
 
@@ -279,5 +279,12 @@ prob = QuantumGateDesign.convert_juqbox(
     preconditioner_type=QuantumGateDesign.DiagonalHamiltonianPreconditioner
 )
 
-controls = QuantumGateDesign.my_bspline_controls(Tmax, D1, om)
-target = params.Utarget_r  + im*params.Utarget_i # Is this correct, or should it be negative?
+# Set up BCarrier Controls 
+bspline_controls = QuantumGateDesign.my_bspline_controls(Tmax, D1, om)
+
+# Set up Hermite Controls
+N_hermite_derivatives = 3
+N_hermite_points = div(D1, N_hermite_derivatives)
+hermite_controls = [HermiteCarrierControl(N_hermite_points, prob.tf, N_hermite_derivatives, control.carrier_frequencies) for control in bspline_controls]
+
+target = params.Utarget_r  + im*params.Utarget_i
