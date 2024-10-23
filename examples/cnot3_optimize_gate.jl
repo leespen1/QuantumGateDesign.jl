@@ -1,3 +1,6 @@
+import Pkg
+Pkg.instantiate()
+
 using JLD2, Dates, ArgParse, Printf
 
 s = ArgParseSettings()
