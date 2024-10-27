@@ -169,7 +169,11 @@ end
 
 """
 Recenters a polynomial from 0 to z.
-That is, rewrite `a0 + a1*x + a2*x^2 + ...` as `b0 + b1*(x-z) + b2*(x-z)^2 + ...`
+That is, rewrite `p(x) = a0 + a1*x + a2*x^2 + ...` as `p(x) = b0 + b1*(x-z) + b2*(x-z)^2 + ...`
+
+The usefulness of this is that p^(j)(0)/j!= a_j, and p^(j)(z)/j! = b_j. So
+recentering the polynomial gives us the value and derivatives of the polynomial
+at different point.
 """
 function extrapolate2!(poly_z, poly_0, z)
     #=
