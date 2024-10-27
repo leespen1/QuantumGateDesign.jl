@@ -137,10 +137,15 @@ function binomial!(coeffs,m)
     end
 end
 
+"""
+Recenters a polynomial from 0 to z.
+That is, rewrite `a0 + a1*x + a2*x^2 + ...` as `b0 + b1*(x-z) + b2*(x-z)^2 + ...`
+"""
 function extrapolate!(p,z,q,ploc)
     #=
     !
-    ! recenters a polynomial from 0 to z
+    ! recenters a polynomial from 0 to z.
+    ! 
     !
     INTEGER, INTENT(IN) :: q
     DOUBLE PRECISION, DIMENSION(0:q), INTENT(INOUT) :: p
@@ -157,5 +162,36 @@ function extrapolate!(p,z,q,ploc)
         end
         ploc[1+0] = z*ploc[1+0]+p[1+j]
     end
+    # So the computation is all done to place the result in ploc, but then it is 
+    # finally copied to p. I think it would be better to just keep it in ploc.
     p .= ploc
+end
+
+"""
+Recenters a polynomial from 0 to z.
+That is, rewrite `a0 + a1*x + a2*x^2 + ...` as `b0 + b1*(x-z) + b2*(x-z)^2 + ...`
+"""
+function extrapolate2!(poly_z, poly_0, z)
+    #=
+    !
+    ! recenters a polynomial from 0 to z.
+    ! 
+    !
+    INTEGER, INTENT(IN) :: q
+    DOUBLE PRECISION, DIMENSION(0:q), INTENT(INOUT) :: p
+    DOUBLE PRECISION, INTENT(IN) :: z
+    DOUBLE PRECISION, DIMENSION(0:q) :: ploc
+    INTEGER :: j,k
+    !
+    =#
+    q = length(p)
+    poly_z .= 0.0
+    poly_z[1+0] = poly_0[1+q]
+    for j=q-1:-1:0
+        for k=q-j:-1:1
+            poly_z[1+k] = z*poly_z[1+k]+poly_z[1+k-1]
+        end
+        poly_z[1+0] = z*poly_z[1+0]+poly_0[1+j]
+    end
+    return poly_z
 end
