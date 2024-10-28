@@ -106,6 +106,8 @@ lambda_in = Λ₀
 Returns Λ_(derivative_index)
 
 Need to describe the recursion better.
+
+And should add a working array so I don't have to allocate memory (this could be a big performance impact)
 """
 function compute_single_adjoint_derivative(lambda_in::AbstractVector{Float64},
         prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{<: Real},

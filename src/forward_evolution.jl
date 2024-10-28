@@ -109,10 +109,6 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
     # Allocate memory for storing the right hand side (explicit part) of each timestep (to use as RHS of GMRES)
     RHS = Vector{Float64}(undef, prob.real_system_size)
 
-    # Allocate memory for storing control function values at tₙ (tₙ₊₁ are in LHS_holder)
-    control_vals_real_tn = zeros(1+N_derivatives, prob.N_operators)
-    control_vals_imag_tn = zeros(1+N_derivatives, prob.N_operators)
-
     uv_mat .= 0
     uv_vec .= 0
     RHS .= 0
@@ -156,6 +152,11 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
     min_N_gmres_iterations = 100000
     avg_N_gmres_iterations = 0
 
+    # Get control function values for the initial time
+    t = 0.0
+    fill_p_mat!(lhs_holder.control_vals_real, controls, t, pcof) 
+    fill_q_mat!(lhs_holder.control_vals_imag, controls, t, pcof) 
+
     # Perform the timesteps
     for n in 0:prob.nsteps-1
 
@@ -165,11 +166,9 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
             forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n)
         end
 
-        fill_p_mat!(control_vals_real_tn, controls, t, pcof) 
-        fill_q_mat!(control_vals_imag_tn, controls, t, pcof) 
-
+        # Reuse the control function values from the implicit part of the previous timestep
         compute_derivatives!(
-            uv_mat, prob, control_vals_real_tn, control_vals_imag_tn,
+            uv_mat, prob, lhs_holder.control_vals_real, lhs_holder.control_vals_imag,
             N_derivatives, forcing_matrix=forcing_mat
         )
 
@@ -187,6 +186,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
 
         # Use GMRES to perform the timestep (implicit part)
         t = (n+1)*dt
+        # Get control function values for the next time (the implicit evaluation)
         fill_p_mat!(lhs_holder.control_vals_real, controls, t, pcof) 
         fill_q_mat!(lhs_holder.control_vals_imag, controls, t, pcof) 
 
@@ -232,6 +232,8 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+prob.nsteps)
     end
     compute_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives)
+    ## Should it actually be the following instead?
+    #compute_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives, forcing_matrix=forcing_mat)
 
     if ((prob.nsteps % saveEveryNsteps) == 0)
         uv_history[:, :, 1+div(prob.nsteps, saveEveryNsteps)] .= uv_mat
@@ -572,7 +574,40 @@ function (self::LHSHolder)(out_vec, in_vec)
     return nothing
 end
 
-#=
+
+
+struct LHSHolderAdjoint{T}
+    N_derivatives::Int64
+    dt::Float64
+    uv_mat::Matrix{Float64}
+    control_vals_real::Matrix{Float64}
+    control_vals_imag::Matrix{Float64}
+    prob::T
+    function LHSHolderAdjoint(prob, N_derivatives, dt)
+        uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
+        control_vals_real = zeros(1+N_derivatives, prob.N_operators)
+        control_vals_imag = zeros(1+N_derivatives, prob.N_operators)
+        tnext=NaN
+        new{typeof(prob)}(
+            N_derivatives, dt, uv_mat, control_vals_real,
+            control_vals_imag, prob
+        )
+    end
+end
+
+"""
+Work in progress, callable struct
+"""
+function (self::LHSHolderAdjoint)(out_vec, in_vec)
+    self.uv_mat[:,1] .= in_vec
+    compute_adjoint_derivatives!(self.uv_mat, self.prob, self.controls, self.tnext, self.pcof, self.N_derivatives)
+    build_LHS!(out_vec, self.uv_mat, self.dt, self.N_derivatives)
+
+    return nothing
+end
+#= Old work, from when I was trying to have an object that could be iterated
+#over to perform timesteps. Decided to abandon it and just let eval_forward be
+#a pretty long function.
 
 """
 Work in progress, trying to change from inline function
@@ -703,26 +738,9 @@ end
 =#
 
 
-mutable struct LHSHolderAdjoint{T1, T2}
-    tnext::Float64
-    dt::Float64
-    N_derivatives::Int64
-    uv_mat::Matrix{Float64}
-    pcof::Vector{Float64}
-    controls::T1
-    prob::T2
-end
 
-"""
-Work in progress, callable struct
-"""
-function (self::LHSHolderAdjoint)(out_vec, in_vec)
-    self.uv_mat[:,1] .= in_vec
-    compute_adjoint_derivatives!(self.uv_mat, self.prob, self.controls, self.tnext, self.pcof, self.N_derivatives)
-    build_LHS!(out_vec, self.uv_mat, self.dt, self.N_derivatives)
 
-    return nothing
-end
+
 
 
 function form_LHS_no_control(prob::SchrodingerProb, order::Int, adjoint=false)

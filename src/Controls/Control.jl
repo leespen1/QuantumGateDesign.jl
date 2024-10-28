@@ -98,7 +98,7 @@ function fill_p_mat!(
     for (i, control) in enumerate(controls)
         local_pcof = get_control_vector_slice(pcof, controls, i)
         vals_vec = view(vals_mat, :, i)
-        fill_p_vec!(vals_vec, control, t, pcof)
+        fill_p_vec!(vals_vec, control, t, local_pcof)
     end
     return vals_mat
 end
@@ -111,7 +111,7 @@ function fill_q_mat!(
     for (i, control) in enumerate(controls)
         local_pcof = get_control_vector_slice(pcof, controls, i)
         vals_vec = view(vals_mat, :, i)
-        fill_q_vec!(vals_vec, control, t, pcof)
+        fill_q_vec!(vals_vec, control, t, local_pcof)
     end
     return vals_mat
 end
