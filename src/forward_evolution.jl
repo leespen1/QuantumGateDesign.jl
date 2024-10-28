@@ -385,7 +385,8 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         forcing_helper_vec = zeros(prob.real_system_size) # For subtracting LHS forcing terms from the RHS (since they are explicit)
     end
 
-    lhs_holder = LHSHolderAdjoint(t, dt, N_derivatives, uv_mat, pcof, controls, prob)
+
+    lhs_holder = LHSHolderAdjoint(prob, N_derivatives, dt)
 
     # Create linear map out of LHS_func_wrapper, to use in GMRES
     LHS_map = LinearMaps.LinearMap(
@@ -416,7 +417,13 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
     for n in prob.nsteps:-1:2
         # Compute the RHS (explicit part)
         t = (n-1)*dt
-        compute_adjoint_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives)
+        fill_p_mat!(lhs_holder.control_vals_real, controls, t, pcof) 
+        fill_q_mat!(lhs_holder.control_vals_imag, controls, t, pcof) 
+
+        compute_adjoint_derivatives!(
+            uv_mat, prob, lhs_holder.control_vals_real,
+            lhs_holder.control_vals_imag, N_derivatives
+        )
         uv_history[:, :, 1+n] .= uv_mat
         build_RHS!(RHS, uv_mat, dt, N_derivatives)
 
@@ -434,8 +441,6 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         end
 
         # Use GMRES to perform the timestep (implicit part)
-        lhs_holder.tnext = t # Should rename tnext to t_imp, since it's not necessarily 'next'
-
         uv_vec .= view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
         update_gmres_iterable!(gmres_iterable, uv_vec, RHS)
 
@@ -600,7 +605,10 @@ Work in progress, callable struct
 """
 function (self::LHSHolderAdjoint)(out_vec, in_vec)
     self.uv_mat[:,1] .= in_vec
-    compute_adjoint_derivatives!(self.uv_mat, self.prob, self.controls, self.tnext, self.pcof, self.N_derivatives)
+    compute_adjoint_derivatives!(
+        self.uv_mat, self.prob, self.control_vals_real, self.control_vals_imag,
+        self.N_derivatives
+    )
     build_LHS!(out_vec, self.uv_mat, self.dt, self.N_derivatives)
 
     return nothing

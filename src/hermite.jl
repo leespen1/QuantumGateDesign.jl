@@ -170,6 +170,80 @@ function compute_adjoint_derivatives!(
     return nothing
 end
 
+"""
+lambda_in = Λ₀
+
+Returns Λ_(derivative_index)
+
+Need to describe the recursion better.
+
+And should add a working array so I don't have to allocate memory (this could be a big performance impact)
+
+Alternative version with control value array
+"""
+function compute_single_adjoint_derivative(lambda_in::AbstractVector{Float64},
+        prob::SchrodingerProb, control_vals_real::AbstractMatrix{Float64},
+        control_vals_imag::AbstractMatrix{Float64}, derivative_index::Int64
+    )
+
+    if (derivative_index == 0)
+        return lambda_in
+    end
+
+    lambda_out = zeros(length(lambda_in))
+
+    lambda_in_u = view(lambda_in, 1:prob.N_tot_levels)
+    lambda_in_v = view(lambda_in, 1+prob.N_tot_levels:prob.real_system_size)
+
+    lambda_in_temp = copy(lambda_in)
+    lambda_in_temp_u = view(lambda_in_temp, 1:prob.N_tot_levels)
+    lambda_in_temp_v = view(lambda_in_temp, 1+prob.N_tot_levels:prob.real_system_size)
+
+    # Iterate over derivative orders lower than the one we are trying to calculate
+    for derivative_order=(derivative_index-1):-1:0
+
+        lambda_in_temp_u .= 0
+        lambda_in_temp_v .= 0
+        
+        # Apply A_(derivative_i) to Λ₀, to get our "new Λ₀"
+        apply_hamiltonian!(lambda_in_temp_u, lambda_in_temp_v, 
+            lambda_in_u, lambda_in_v,
+            prob, control_vals_real, control_vals_imag,
+            derivative_order=derivative_order,
+            use_adjoint=true
+        )
+        
+        lambda_out .+= compute_single_adjoint_derivative(
+            lambda_in_temp, prob, control_vals_real, control_vals_imag,
+            (derivative_index-1)-derivative_order
+        )
+    end
+
+    return lambda_out ./ derivative_index
+end
+
+"""
+WIP : Fixing the math, canrt just add an adjoint factor into uv_derivative
+
+I don't think the input should have 0 in the first column.
+
+Alternate version with control value arrays
+"""
+function compute_adjoint_derivatives!(
+        uv_matrix::AbstractMatrix{Float64},
+        prob::SchrodingerProb, control_vals_real::AbstractMatrix{Float64},
+        control_vals_imag::AbstractMatrix{Float64}, N_derivatives::Int64
+    )
+
+    lambda_in = uv_matrix[:,1]
+    for derivative_i in 1:N_derivatives
+        uv_matrix[:,1+derivative_i] .= compute_single_adjoint_derivative(
+            lambda_in, prob, control_vals_real, control_vals_imag, derivative_i
+        )
+    end
+
+    return nothing
+end
 
 
 """
