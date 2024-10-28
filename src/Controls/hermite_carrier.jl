@@ -139,12 +139,13 @@ function eval_derivative(control::HermiteCarrierControl, t::Real,
     # order derivatives have the same impact as the parameters
     # corresponding to lower order derivatives.
     for i in 0:control.N_derivatives
-        if (control.scaling_type == :Taylor)
+        if (control.scaling_type == :Taylor) # pcof elements are the taylor coefficients
             scaling_factor = 1
-        elseif (control.scaling_type == :Derivative)
+        elseif (control.scaling_type == :Derivative) # pcof elements are the derivative values
             scaling_factor = dt^i / factorial(i)
-        elseif (control.scaling_type == :Heuristic)
+        elseif (control.scaling_type == :Heuristic) # pcof elements chosen based on experimentation
             scaling_factor = factorial(i+1)*2^i
+            #scaling_factor = factorial(i)
         else
             throw(ArgumentError(string(control.scaling_type)))
         end

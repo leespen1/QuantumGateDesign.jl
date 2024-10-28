@@ -126,7 +126,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         forcing_helper_vec = zeros(prob.real_system_size) # For subtracting LHS forcing terms from the RHS (since they are explicit)
     end
 
-    lhs_holder = LHSHolder(t, dt, N_derivatives, uv_mat, pcof, controls, prob)
+    lhs_holder = LHSHolder(prob, N_derivatives, dt)
 
     # Create linear map out of LHS_func_wrapper, to use in GMRES
     LHS_map = LinearMaps.LinearMap(
@@ -152,6 +152,11 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
     min_N_gmres_iterations = 100000
     avg_N_gmres_iterations = 0
 
+    # Get control function values for the initial time
+    t = 0.0
+    fill_p_mat!(lhs_holder.control_vals_real, controls, t, pcof) 
+    fill_q_mat!(lhs_holder.control_vals_imag, controls, t, pcof) 
+
     # Perform the timesteps
     for n in 0:prob.nsteps-1
 
@@ -160,7 +165,12 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         if !ismissing(forcing_mat)
             forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n)
         end
-        compute_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives, forcing_matrix=forcing_mat)
+
+        # Reuse the control function values from the implicit part of the previous timestep
+        compute_derivatives!(
+            uv_mat, prob, lhs_holder.control_vals_real, lhs_holder.control_vals_imag,
+            N_derivatives, forcing_matrix=forcing_mat
+        )
 
         if ((n % saveEveryNsteps) == 0)
             uv_history[:, :, 1+div(n, saveEveryNsteps)] .= uv_mat
@@ -176,13 +186,19 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
 
         # Use GMRES to perform the timestep (implicit part)
         t = (n+1)*dt
-        lhs_holder.tnext = t
+        # Get control function values for the next time (the implicit evaluation)
+        fill_p_mat!(lhs_holder.control_vals_real, controls, t, pcof) 
+        fill_q_mat!(lhs_holder.control_vals_imag, controls, t, pcof) 
 
         # Account for forcing from next timestep (which is still explicit)
         if !ismissing(forcing_next_time_mat)
             forcing_next_time_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+n+1)
             forcing_helper_mat .= 0
-            compute_derivatives!(forcing_helper_mat, prob, controls, t, pcof, N_derivatives, forcing_matrix=forcing_next_time_mat)
+            compute_derivatives!(
+                forcing_helper_mat, prob, lhs_holder.control_vals_real,
+                lhs_holder.control_vals_imag, N_derivatives,
+                forcing_matrix=forcing_next_time_mat
+            )
             build_LHS!(forcing_helper_vec, forcing_helper_mat, dt, N_derivatives)
             axpy!(-1.0, forcing_helper_vec, RHS)
         end
@@ -216,6 +232,8 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         forcing_mat .= view(forcing, 1:prob.real_system_size, 1:N_derivatives, 1+prob.nsteps)
     end
     compute_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives)
+    ## Should it actually be the following instead?
+    #compute_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives, forcing_matrix=forcing_mat)
 
     if ((prob.nsteps % saveEveryNsteps) == 0)
         uv_history[:, :, 1+div(prob.nsteps, saveEveryNsteps)] .= uv_mat
@@ -367,7 +385,8 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         forcing_helper_vec = zeros(prob.real_system_size) # For subtracting LHS forcing terms from the RHS (since they are explicit)
     end
 
-    lhs_holder = LHSHolderAdjoint(t, dt, N_derivatives, uv_mat, pcof, controls, prob)
+
+    lhs_holder = LHSHolderAdjoint(prob, N_derivatives, dt)
 
     # Create linear map out of LHS_func_wrapper, to use in GMRES
     LHS_map = LinearMaps.LinearMap(
@@ -398,7 +417,15 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
     for n in prob.nsteps:-1:2
         # Compute the RHS (explicit part)
         t = (n-1)*dt
-        compute_adjoint_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives)
+        fill_p_mat!(lhs_holder.control_vals_real, controls, t, pcof) 
+        fill_q_mat!(lhs_holder.control_vals_imag, controls, t, pcof) 
+
+        compute_adjoint_derivatives!(
+            uv_mat, prob, lhs_holder.control_vals_real,
+            lhs_holder.control_vals_imag, N_derivatives,
+            lhs_holder.working_vec,
+            lhs_holder.working_matrix, lhs_holder.working_matrix2
+        )
         uv_history[:, :, 1+n] .= uv_mat
         build_RHS!(RHS, uv_mat, dt, N_derivatives)
 
@@ -416,8 +443,6 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         end
 
         # Use GMRES to perform the timestep (implicit part)
-        lhs_holder.tnext = t # Should rename tnext to t_imp, since it's not necessarily 'next'
-
         uv_vec .= view(uv_mat, 1:prob.real_system_size, 1) # Use current timestep as initial guess for gmres
         update_gmres_iterable!(gmres_iterable, uv_vec, RHS)
 
@@ -441,7 +466,13 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
 
     # Compute the derivatives of uv at n=1 and store them
     t = dt
-    compute_adjoint_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives)
+    fill_p_mat!(lhs_holder.control_vals_real, controls, t, pcof) 
+    fill_q_mat!(lhs_holder.control_vals_imag, controls, t, pcof) 
+    compute_adjoint_derivatives!(
+        uv_mat, prob, lhs_holder.control_vals_real, lhs_holder.control_vals_imag,
+        N_derivatives, lhs_holder.working_vec, lhs_holder.working_matrix,
+        lhs_holder.working_matrix2
+    )
     uv_history[:, :, 2] .= uv_mat
 
     return nothing
@@ -523,6 +554,83 @@ function eval_forward_new!(uv_history::AbstractArray{Float64, 3},
     return nothing
 end
 
+struct LHSHolder{T}
+    N_derivatives::Int64
+    dt::Float64
+    uv_mat::Matrix{Float64}
+    control_vals_real::Matrix{Float64}
+    control_vals_imag::Matrix{Float64}
+    prob::T
+    function LHSHolder(prob, N_derivatives, dt)
+        uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
+        control_vals_real = zeros(1+N_derivatives, prob.N_operators)
+        control_vals_imag = zeros(1+N_derivatives, prob.N_operators)
+        tnext=NaN
+        new{typeof(prob)}(
+            N_derivatives, dt, uv_mat, control_vals_real,
+            control_vals_imag, prob
+        )
+    end
+end
+
+"""
+Work in progress, callable struct
+"""
+function (self::LHSHolder)(out_vec, in_vec)
+    self.uv_mat[:,1] .= in_vec
+    compute_derivatives!(
+        self.uv_mat, self.prob, self.control_vals_real, self.control_vals_imag,
+        self.N_derivatives
+    )
+    build_LHS!(out_vec, self.uv_mat, self.dt, self.N_derivatives)
+
+    return nothing
+end
+
+
+
+struct LHSHolderAdjoint{T}
+    N_derivatives::Int64
+    dt::Float64
+    uv_mat::Matrix{Float64}
+    working_vec::Vector{Float64}
+    working_matrix::Matrix{Float64}
+    working_matrix2::Matrix{Float64}
+    control_vals_real::Matrix{Float64}
+    control_vals_imag::Matrix{Float64}
+    prob::T
+    function LHSHolderAdjoint(prob, N_derivatives, dt)
+        uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
+        working_vec = zeros(prob.real_system_size)
+        working_matrix = zeros(prob.real_system_size, 1+N_derivatives)
+        working_matrix2 = zeros(prob.real_system_size, 1+N_derivatives)
+        control_vals_real = zeros(1+N_derivatives, prob.N_operators)
+        control_vals_imag = zeros(1+N_derivatives, prob.N_operators)
+        tnext=NaN
+        new{typeof(prob)}(
+            N_derivatives, dt, uv_mat, working_vec, working_matrix, working_matrix2,
+            control_vals_real, control_vals_imag, prob
+        )
+    end
+end
+
+"""
+Work in progress, callable struct
+"""
+function (self::LHSHolderAdjoint)(out_vec, in_vec)
+    self.uv_mat[:,1] .= in_vec
+    compute_adjoint_derivatives!(
+        self.uv_mat, self.prob, self.control_vals_real, self.control_vals_imag,
+        self.N_derivatives, self.working_vec, self.working_matrix, self.working_matrix2
+    )
+    build_LHS!(out_vec, self.uv_mat, self.dt, self.N_derivatives)
+
+    return nothing
+end
+#= Old work, from when I was trying to have an object that could be iterated
+#over to perform timesteps. Decided to abandon it and just let eval_forward be
+#a pretty long function.
+
 """
 Work in progress, trying to change from inline function
 """
@@ -580,26 +688,7 @@ mutable struct TimestepHolder{T1, T2, T3, T4}
 end
 
 
-mutable struct LHSHolder{T1, T2}
-    tnext::Float64
-    dt::Float64
-    N_derivatives::Int64
-    uv_mat::Matrix{Float64}
-    pcof::Vector{Float64}
-    controls::T1
-    prob::T2
-end
 
-"""
-Work in progress, callable struct
-"""
-function (self::LHSHolder)(out_vec, in_vec)
-    self.uv_mat[:,1] .= in_vec
-    compute_derivatives!(self.uv_mat, self.prob, self.controls, self.tnext, self.pcof, self.N_derivatives)
-    build_LHS!(out_vec, self.uv_mat, self.dt, self.N_derivatives)
-
-    return nothing
-end
 
 function compute_derivatives!(timestep_holder::TimestepHolder, t; forcing_matrix=missing)
     # Set first column to value of uv
@@ -668,28 +757,12 @@ function perform_timestep!(timestep_holder::TimestepHolder, t, dt,
 
     return nothing
 end
+=#
 
 
-mutable struct LHSHolderAdjoint{T1, T2}
-    tnext::Float64
-    dt::Float64
-    N_derivatives::Int64
-    uv_mat::Matrix{Float64}
-    pcof::Vector{Float64}
-    controls::T1
-    prob::T2
-end
 
-"""
-Work in progress, callable struct
-"""
-function (self::LHSHolderAdjoint)(out_vec, in_vec)
-    self.uv_mat[:,1] .= in_vec
-    compute_adjoint_derivatives!(self.uv_mat, self.prob, self.controls, self.tnext, self.pcof, self.N_derivatives)
-    build_LHS!(out_vec, self.uv_mat, self.dt, self.N_derivatives)
 
-    return nothing
-end
+
 
 
 function form_LHS_no_control(prob::SchrodingerProb, order::Int, adjoint=false)

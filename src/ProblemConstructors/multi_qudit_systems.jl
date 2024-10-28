@@ -127,7 +127,7 @@ function DispersiveProblem(
         bitstring_ordered::Bool=true,
         gmres_abstol::Real=1e-10,
         gmres_reltol::Real=1e-10,
-        preconditioner_type::Type=LUPreconditioner,
+        preconditioner_type::Type=DiagonalHamiltonianPreconditioner,
     )
 
     system_hamiltonian = multi_qudit_hamiltonian_dispersive(

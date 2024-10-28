@@ -51,6 +51,10 @@ function Base.length(control::AbstractControl)
     return 1
 end
 
+function Base.copy(control::AbstractControl)
+    return control
+end
+
 
 """
 Get the slice (view) of the control vector which corresponds to the given control index.
@@ -86,6 +90,56 @@ function get_number_of_control_parameters(controls)
     return sum(control.N_coeff for control in controls)
 end
 
+function fill_p_mat!(
+        vals_mat::AbstractMatrix{<: Real}, controls, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+
+    for (i, control) in enumerate(controls)
+        local_pcof = get_control_vector_slice(pcof, controls, i)
+        vals_vec = view(vals_mat, :, i)
+        fill_p_vec!(vals_vec, control, t, local_pcof)
+    end
+    return vals_mat
+end
+
+function fill_q_mat!(
+        vals_mat::AbstractMatrix{<: Real}, controls, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+
+    for (i, control) in enumerate(controls)
+        local_pcof = get_control_vector_slice(pcof, controls, i)
+        vals_vec = view(vals_mat, :, i)
+        fill_q_vec!(vals_vec, control, t, local_pcof)
+    end
+    return vals_mat
+end
+
+function fill_p_vec!(
+        vals_vec::AbstractVector{<: Real}, control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+
+    for i in 1:length(vals_vec)
+        derivative_order = i-1
+        vals_vec[i] = eval_p_derivative(control, t, pcof, derivative_order) / factorial(derivative_order)
+    end
+    return vals_vec
+end
+
+function fill_q_vec!(
+        vals_vec::AbstractVector{<: Real}, control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+
+    for i in 1:length(vals_vec)
+        derivative_order = i-1
+        vals_vec[i] = eval_q_derivative(control, t, pcof, derivative_order) / factorial(derivative_order)
+    end
+    return vals_vec
+end
+
 """
 For human readable display of control objects.
 """
@@ -108,6 +162,7 @@ function Base.iterate(control::AbstractControl, state=missing)
 end
 
 
+#= Automatic Differentiation Stuff, Abandoning For Now
 """
 Arbitrary order version, only ever uses automatic differentiation to get high
 order derivatives.
@@ -179,6 +234,7 @@ function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::Abstrac
     grad .= ForwardDiff.gradient(pcof_dummy -> eval_q_derivative_untyped(control, t, pcof_dummy, order), pcof)
     return grad
 end
+=#
 
 """
 Mutating version. The default is to call the allocating version and copy that.

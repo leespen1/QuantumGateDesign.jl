@@ -53,12 +53,61 @@ function compute_derivatives!(uv_matrix::AbstractMatrix{Float64},
     return nothing
 end
 
+function compute_derivatives!(uv_matrix::AbstractMatrix{Float64},
+        prob::SchrodingerProb, control_vals_real::AbstractMatrix{Float64},
+        control_vals_imag::AbstractMatrix{Float64}, N_derivatives::Int64;
+        use_adjoint::Bool=false,
+        forcing_matrix::Union{AbstractMatrix{Float64}, Missing}=missing
+    )
+
+    if (N_derivatives < 1)
+        throw(ArgumentError("Non positive N_derivatives supplied."))
+    end
+
+    # Calculate each derivative
+    for j = 0:(N_derivatives-1)
+        # Get views of the current derivative we are trying to compute (the j+1th derivative)
+        u_derivative = view(uv_matrix, 1:prob.N_tot_levels,                       1+j+1)
+        v_derivative = view(uv_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+j+1)
+
+        u_derivative .= 0
+        v_derivative .= 0
+
+        # Perform the summation
+        for i = j:-1:0
+            derivative_order = j-i
+
+            u_derivative_prev = view(uv_matrix, 1:prob.N_tot_levels,                       1+i)
+            v_derivative_prev = view(uv_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+i)
+
+            apply_hamiltonian!(u_derivative, v_derivative, u_derivative_prev,
+                v_derivative_prev, prob, control_vals_real, control_vals_imag,
+                derivative_order=derivative_order
+            )
+        end
+
+        # Apply forcing
+        if !ismissing(forcing_matrix)
+            axpy!(1.0, view(forcing_matrix, 1:prob.N_tot_levels,                       1+j), u_derivative)
+            axpy!(1.0, view(forcing_matrix, prob.N_tot_levels+1:prob.real_system_size, 1+j), v_derivative)
+        end
+
+        # Complete the 1/(j+1)! factor
+        u_derivative ./= j+1
+        v_derivative ./= j+1
+    end
+    
+    return nothing
+end
+
 """
 lambda_in = Λ₀
 
 Returns Λ_(derivative_index)
 
 Need to describe the recursion better.
+
+And should add a working array so I don't have to allocate memory (this could be a big performance impact)
 """
 function compute_single_adjoint_derivative(lambda_in::AbstractVector{Float64},
         prob::SchrodingerProb, controls, t::Float64, pcof::AbstractVector{<: Real},
@@ -121,6 +170,139 @@ function compute_adjoint_derivatives!(
     return nothing
 end
 
+"""
+lambda_in = Λ₀
+
+Returns Λ_(derivative_index)
+
+Need to describe the recursion better.
+
+And should add a working array so I don't have to allocate memory (this could be a big performance impact)
+
+Alternative version with control value array
+"""
+function compute_single_adjoint_derivative(lambda_in::AbstractVector{Float64},
+        prob::SchrodingerProb, control_vals_real::AbstractMatrix{Float64},
+        control_vals_imag::AbstractMatrix{Float64}, derivative_index::Int64
+    )
+
+    if (derivative_index == 0)
+        return lambda_in
+    end
+
+    lambda_out = zeros(length(lambda_in))
+
+    lambda_in_u = view(lambda_in, 1:prob.N_tot_levels)
+    lambda_in_v = view(lambda_in, 1+prob.N_tot_levels:prob.real_system_size)
+
+    lambda_in_temp = copy(lambda_in)
+    lambda_in_temp_u = view(lambda_in_temp, 1:prob.N_tot_levels)
+    lambda_in_temp_v = view(lambda_in_temp, 1+prob.N_tot_levels:prob.real_system_size)
+
+    # Iterate over derivative orders lower than the one we are trying to calculate
+    for derivative_order=(derivative_index-1):-1:0
+
+        lambda_in_temp_u .= 0
+        lambda_in_temp_v .= 0
+        
+        # Apply A_(derivative_i) to Λ₀, to get our "new Λ₀"
+        apply_hamiltonian!(lambda_in_temp_u, lambda_in_temp_v, 
+            lambda_in_u, lambda_in_v,
+            prob, control_vals_real, control_vals_imag,
+            derivative_order=derivative_order,
+            use_adjoint=true
+        )
+        
+        lambda_out .+= compute_single_adjoint_derivative(
+            lambda_in_temp, prob, control_vals_real, control_vals_imag,
+            (derivative_index-1)-derivative_order
+        )
+    end
+
+    return lambda_out ./ derivative_index
+end
+
+function compute_single_adjoint_derivative!(
+        lambda_in::AbstractVector{Float64}, prob::SchrodingerProb,
+        control_vals_real::AbstractMatrix{Float64},
+        control_vals_imag::AbstractMatrix{Float64}, derivative_index::Int64,
+        working_matrix::AbstractMatrix{Float64}, working_matrix2::AbstractMatrix{Float64}
+    )
+
+    if (derivative_index == 0)
+        working_matrix[:,1+derivative_index] .= lambda_in
+        return nothing
+    end
+
+    working_matrix[:,1+derivative_index] .= 0
+    working_matrix2[:,1+derivative_index] .= lambda_in
+    lambda_in_temp = view(working_matrix2, :, 1+derivative_index)
+
+
+
+    # Iterate over derivative orders lower than the one we are trying to calculate
+    for derivative_order=(derivative_index-1):-1:0
+
+        lambda_in_temp .= 0
+        
+        # Apply A_(derivative_i) to Λ₀, to get our "new Λ₀"
+        apply_hamiltonian!(lambda_in_temp, lambda_in,
+            prob, control_vals_real, control_vals_imag,
+            derivative_order=derivative_order,
+            use_adjoint=true
+        )
+        
+        inner_derivative_index = (derivative_index-1)-derivative_order
+        compute_single_adjoint_derivative!(
+            lambda_in_temp, prob, control_vals_real, control_vals_imag,
+            inner_derivative_index, working_matrix, working_matrix2
+        )
+
+        ## For some reason, the below line allocates the vecotor, so I do an explicit for-loop.
+        #working_matrix[:,1+derivative_index] .+= view(working_matrix, :, 1+inner_derivative_index)
+        for i in 1:size(working_matrix, 1)
+            working_matrix[i,1+derivative_index] += working_matrix[i, 1+inner_derivative_index]
+        end
+    end
+
+    ## For some reason, the below line allocates the vecotor, so I do an explicit for-loop.
+    #working_matrix[:,1+derivative_index] ./= derivative_index
+    for i in 1:size(working_matrix, 1)
+        working_matrix[i,1+derivative_index] /= derivative_index
+    end
+
+    return nothing
+end
+
+"""
+WIP : Fixing the math, canrt just add an adjoint factor into uv_derivative
+
+I don't think the input should have 0 in the first column.
+
+Alternate version with control value arrays
+"""
+function compute_adjoint_derivatives!(
+        uv_matrix::AbstractMatrix{Float64},
+        prob::SchrodingerProb, control_vals_real::AbstractMatrix{Float64},
+        control_vals_imag::AbstractMatrix{Float64}, N_derivatives::Int64,
+        working_vec::AbstractVector{Float64},
+        working_matrix::AbstractMatrix{Float64}, working_matrix2::AbstractMatrix{Float64}
+    )
+
+    working_vec .= view(uv_matrix, :,1)
+    for derivative_i in 1:N_derivatives
+        #uv_matrix[:,1+derivative_i] .= compute_single_adjoint_derivative(
+        #    lambda_in, prob, control_vals_real, control_vals_imag, derivative_i
+        #)
+        compute_single_adjoint_derivative!(
+            working_vec, prob, control_vals_real, control_vals_imag, derivative_i,
+            working_matrix, working_matrix2
+        )
+        uv_matrix[:,1+derivative_i] .= view(working_matrix, :, 1+derivative_i)
+    end
+
+    return nothing
+end
 
 
 """
@@ -339,6 +521,71 @@ function apply_hamiltonian!(
     )
 end
 
+"""
+Alternate call, where stacked real/complex vectors are provided,
+and the control function values are given directly
+"""
+function apply_hamiltonian!(
+        out_vec::AbstractVector{Float64}, in_vec::AbstractVector{Float64},
+        prob::SchrodingerProb, control_vals_real::AbstractMatrix{Float64},
+        control_vals_imag::AbstractMatrix{Float64}; 
+        derivative_order::Int=0, use_adjoint::Bool=false
+    )
+    @assert length(out_vec) == length(in_vec) == prob.real_system_size
+    complex_system_size = div(prob.real_system_size, 2)
+    out_real = view(out_vec, 1:complex_system_size)
+    out_imag = view(out_vec, 1+complex_system_size:prob.real_system_size)
+    in_real = view(in_vec, 1:complex_system_size)
+    in_imag = view(in_vec, 1+complex_system_size:prob.real_system_size)
+
+    return apply_hamiltonian!(
+        out_real, out_imag, in_real, in_imag,
+        prob, control_vals_real, control_vals_imag;
+        derivative_order=derivative_order,
+        use_adjoint=use_adjoint
+    )
+end
+
+"""
+Apply hamiltonian to 'in', *add* result to out.
+
+For derivatives, apply Hamiltonian divided by the factorial of the derivative order.
+
+control_vals_real/imag[i,j] should correspond to the i-th derivative of the j-th control, divided by i!
+"""
+function apply_hamiltonian!(out_real::AbstractVector{Float64}, out_imag::AbstractVector{Float64},
+        in_real::AbstractVector{Float64}, in_imag::AbstractVector{Float64},
+        prob::SchrodingerProb, control_vals_real::AbstractMatrix{Float64},
+        control_vals_imag::AbstractMatrix{Float64}; derivative_order::Int=0,
+        use_adjoint::Bool=false
+    )
+
+    adjoint_factor = use_adjoint ? -1 : 1
+
+    # Apply system hamiltonian if we aren't taking the derivative of the hamiltonian
+    if (derivative_order == 0)
+        mul!(out_real, prob.system_asym, in_real, adjoint_factor, 1)
+        mul!(out_real, prob.system_sym,  in_imag, adjoint_factor, 1)
+
+        mul!(out_imag, prob.system_asym, in_imag, adjoint_factor, 1)
+        mul!(out_imag, prob.system_sym,  in_real, -adjoint_factor, 1)
+    end
+
+    # Apply the control hamiltonian(s)
+    for k in 1:prob.N_operators
+        sym_op = prob.sym_operators[k]
+        asym_op = prob.asym_operators[k]
+
+        p_val = control_vals_real[1+derivative_order,k]
+        q_val = control_vals_imag[1+derivative_order,k]
+
+        mul!(out_real, asym_op, in_real, adjoint_factor*q_val, 1)
+        mul!(out_real, sym_op,  in_imag, adjoint_factor*p_val, 1)
+
+        mul!(out_imag, asym_op, in_imag, adjoint_factor*q_val,  1)
+        mul!(out_imag, sym_op,  in_real, -adjoint_factor*p_val, 1)
+    end
+end
 
 """
 Construct the LHS matrix from the timestep. Not used in the actual algorithm,

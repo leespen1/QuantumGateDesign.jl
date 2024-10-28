@@ -18,7 +18,7 @@ Constructor for struct splineparams, which sets up the parameters for a regular 
 # External links
 * [Spline Wavelet](https://en.wikipedia.org/wiki/Spline_wavelet#Quadratic_B-spline) on Wikipedia.
 """
-struct MySplineControl 
+struct MySplineControl <: AbstractControl
     N_coeff:: Int64 # Total number of coefficients
     tf::Float64
     D1::Int64 # Number of coefficients per spline (e.g. per control function, and in our case we have 2, p and q)
