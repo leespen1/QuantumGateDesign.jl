@@ -422,7 +422,9 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
 
         compute_adjoint_derivatives!(
             uv_mat, prob, lhs_holder.control_vals_real,
-            lhs_holder.control_vals_imag, N_derivatives
+            lhs_holder.control_vals_imag, N_derivatives,
+            lhs_holder.working_vec,
+            lhs_holder.working_matrix, lhs_holder.working_matrix2
         )
         uv_history[:, :, 1+n] .= uv_mat
         build_RHS!(RHS, uv_mat, dt, N_derivatives)
@@ -464,7 +466,13 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
 
     # Compute the derivatives of uv at n=1 and store them
     t = dt
-    compute_adjoint_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives)
+    fill_p_mat!(lhs_holder.control_vals_real, controls, t, pcof) 
+    fill_q_mat!(lhs_holder.control_vals_imag, controls, t, pcof) 
+    compute_adjoint_derivatives!(
+        uv_mat, prob, lhs_holder.control_vals_real, lhs_holder.control_vals_imag,
+        N_derivatives, lhs_holder.working_vec, lhs_holder.working_matrix,
+        lhs_holder.working_matrix2
+    )
     uv_history[:, :, 2] .= uv_mat
 
     return nothing
@@ -585,17 +593,23 @@ struct LHSHolderAdjoint{T}
     N_derivatives::Int64
     dt::Float64
     uv_mat::Matrix{Float64}
+    working_vec::Vector{Float64}
+    working_matrix::Matrix{Float64}
+    working_matrix2::Matrix{Float64}
     control_vals_real::Matrix{Float64}
     control_vals_imag::Matrix{Float64}
     prob::T
     function LHSHolderAdjoint(prob, N_derivatives, dt)
         uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
+        working_vec = zeros(prob.real_system_size)
+        working_matrix = zeros(prob.real_system_size, 1+N_derivatives)
+        working_matrix2 = zeros(prob.real_system_size, 1+N_derivatives)
         control_vals_real = zeros(1+N_derivatives, prob.N_operators)
         control_vals_imag = zeros(1+N_derivatives, prob.N_operators)
         tnext=NaN
         new{typeof(prob)}(
-            N_derivatives, dt, uv_mat, control_vals_real,
-            control_vals_imag, prob
+            N_derivatives, dt, uv_mat, working_vec, working_matrix, working_matrix2,
+            control_vals_real, control_vals_imag, prob
         )
     end
 end
@@ -607,7 +621,7 @@ function (self::LHSHolderAdjoint)(out_vec, in_vec)
     self.uv_mat[:,1] .= in_vec
     compute_adjoint_derivatives!(
         self.uv_mat, self.prob, self.control_vals_real, self.control_vals_imag,
-        self.N_derivatives
+        self.N_derivatives, self.working_vec, self.working_matrix, self.working_matrix2
     )
     build_LHS!(out_vec, self.uv_mat, self.dt, self.N_derivatives)
 
