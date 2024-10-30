@@ -1,18 +1,26 @@
 struct GeneralBSplineControl <: AbstractControl
     N_coeff::Int64
     tf::Float64
+    degree::Int64
+    N_knots::Int64
     bspline_basis::BSplines.BSplineBasis{LinRange{Float64, Int64}}
     storage_vec::Vector{Float64}
+    function GeneralBSplineControl(degree::Integer, N_knots::Integer, tf::Real)
+        degree = convert(Int64, degree)
+        N_knots = convert(Int64, N_knots)
+        order = degree+1
+        ts = LinRange(0, tf, N_knots)
+        bspline_basis = BSplines.BSplineBasis(order, ts)
+        N_coeff = (order + length(ts) - 2)*2
+        storage_vec = zeros(order)
+        new(N_coeff, tf, degree, N_knots, bspline_basis, storage_vec)
+    end
 end
 
-function GeneralBSplineControl(degree, N_knots, tf)
-    order = degree+1
-    ts = LinRange(0, tf, N_knots)
-    bspline_basis = BSplines.BSplineBasis(order, ts)
-    N_coeff = (order + length(ts) - 2)*2
-    storage_vec = zeros(order)
-    return GeneralBSplineControl(N_coeff, tf, bspline_basis, storage_vec)
+function Base.copy(control::GeneralBSplineControl)
+    return GeneralBSplineControl(control.degree, control.N_knots, control.tf)
 end
+
 
 function eval_p(control::GeneralBSplineControl, t::Real, pcof::AbstractVector{<: Real})
     return eval_p_derivative(control, t, pcof, 0)

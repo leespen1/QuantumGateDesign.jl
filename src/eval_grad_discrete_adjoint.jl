@@ -550,14 +550,13 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
     wₙ   = zeros(prob.real_system_size, 1+N_derivatives) 
     wₙ₊₁ = zeros(prob.real_system_size, 1+N_derivatives) 
 
+    working_pcof = zeros(length(pcof))
+    working_state_vector = zeros(prob.real_system_size)
 
 
     for i in 1:prob.N_operators
         control = controls[i]
-
         grad_contrib = zeros(control.N_coeff)
-        grad_p = zeros(control.N_coeff)
-        grad_q = zeros(control.N_coeff)
 
         for n in 0:prob.nsteps-1
             λₙ₊₁ .= @view lambda_history[:, 1, 1+n+1]
@@ -576,8 +575,8 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
                 #println("#"^20, "\nOrder $k Contribution\n", "#"^20)
                 # Handle explicit
                 recursive_magic!(
-                    grad_contrib, wₙ, λₙ₊₁, k, c_explicit,
-                    prob, controls, tₙ, pcof, i
+                    grad_contrib, wₙ, λₙ₊₁, k, c_explicit, prob, controls, tₙ,
+                    pcof, i, working_pcof, working_state_vector
                 )
             end
                 
@@ -591,8 +590,8 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
                 #println("#"^20, "\nOrder $k Contribution\n", "#"^20)
                 # Handle implicit
                 recursive_magic!(
-                    grad_contrib, wₙ₊₁, λₙ₊₁, k, c_implicit,
-                    prob, controls, tₙ₊₁, pcof, i 
+                    grad_contrib, wₙ₊₁, λₙ₊₁, k, c_implicit, prob, controls,
+                    tₙ₊₁, pcof, i, working_pcof, working_state_vector
                 )
             end
         end
@@ -617,25 +616,25 @@ Does the contribution of ⟨coeff*wⱼ₊₁, λ⟩
 #        prob::SchrodingerProb, control::AbstractControl, t::Real,
 #        pcof::AbstractVector, sym_op, asym_op
 #    )
-function recursive_magic!(grad_contrib::AbstractVector,
-        w_mat::AbstractMatrix, lambda::AbstractVector,
-        derivative_order::Int, coeff::Real,
+function recursive_magic!(grad_contrib::AbstractVector{<: Real},
+        w_mat::AbstractMatrix{<: Real}, lambda::AbstractVector{<: Real},
+        derivative_order::Integer, coeff::Real,
         prob::SchrodingerProb, controls, t::Real,
-        pcof::AbstractVector, control_index
+        pcof::AbstractVector{<: Real}, control_index::Integer,
+        working_pcof::AbstractVector{<: Real},
+        working_state_vector::AbstractVector{<: Real}
+
     )
     control = controls[control_index]
     asym_op = prob.asym_operators[control_index]
     sym_op = prob.sym_operators[control_index]
     local_pcof = get_control_vector_slice(pcof, controls, control_index)
+    local_working_pcof = get_control_vector_slice(working_pcof, controls, control_index)
+    #TODO Instead of using a working vector, precompute all the control
+    #function gradiens and pass them in as a big Array{Float64, 3}
 
-    
     j = derivative_order-1
     real_system_size = size(w_mat, 1)
-    working_vector = zeros(real_system_size)
-
-    # Will be better to feed in a matrix of each p/q gradient (one column for each derivative order)
-    grad_p = zeros(length(local_pcof))
-    grad_q = zeros(length(local_pcof))
 
     for i in 0:j
         # i=0,j=0 and i=0,j=1 will be the same except for the broadcasting.
@@ -643,33 +642,22 @@ function recursive_magic!(grad_contrib::AbstractVector,
         # It seems like once I do any i=i',j=j', I should be able to handle all subsequent
         # cases of i=i',j=any at the same time. Investigate this (also only optimize slow things, don't dig
         # into this prematurely).
-        eval_grad_p_derivative!(grad_p, control, t, local_pcof, j-i)
-        eval_grad_q_derivative!(grad_q, control, t, local_pcof, j-i)
-
+        #
         # What I originally had (should work once I use a real history)
         inner_prod_S = compute_inner_prod_S!(
-            view(w_mat, :, 1+i), lambda, asym_op, working_vector, prob.real_system_size
+            view(w_mat, :, 1+i), lambda, asym_op, working_state_vector, prob.real_system_size
         )
         inner_prod_K = compute_inner_prod_K!(
-            view(w_mat, :, 1+i), lambda, sym_op, working_vector, prob.real_system_size
+            view(w_mat, :, 1+i), lambda, sym_op, working_state_vector, prob.real_system_size
         )
 
+        # local_working_pcof = grad_p
+        eval_grad_p_derivative!(local_working_pcof, control, t, local_pcof, j-i) 
+        @. grad_contrib += local_working_pcof * inner_prod_K * coeff / ((j+1)*factorial(j-i))
 
-        @. grad_contrib += grad_q * inner_prod_S * coeff / ((j+1)*factorial(j-i))
-        @. grad_contrib += grad_p * inner_prod_K * coeff / ((j+1)*factorial(j-i))
-
-        #println("i: $i")
-        #println("j: $j")
-        #println("inner_prod_S: $inner_prod_S")
-        #println("inner_prod_K: $inner_prod_K")
-        #println("grad_p: $grad_p")
-        #println("grad_q: $grad_q")
-        #println("coeff: $coeff")
-        #println("other factor: $((j+1)*factorial(j-i))")
-        #if (i == j == 1)
-        #    println(w_mat[:,1+i])
-        #end
-        #println()
+        # local_working_pcof = grad_q
+        eval_grad_q_derivative!(local_working_pcof, control, t, local_pcof, j-i)
+        @. grad_contrib += local_working_pcof * inner_prod_S * coeff / ((j+1)*factorial(j-i))
     end
 
     # Better to do in two loops. Makes it more clear how I can make the first
@@ -678,15 +666,17 @@ function recursive_magic!(grad_contrib::AbstractVector,
     for i in 0:j
         # Take special care about how factors are handled
         # Move this outside the loop
-        right_inner = zeros(real_system_size)
-        apply_hamiltonian!(right_inner, lambda, prob, controls, t, pcof;
+        working_state_vector .= 0
+        apply_hamiltonian!(working_state_vector, lambda, prob, controls, t, pcof;
                            derivative_order=(j-i), use_adjoint=true)
         
         # Maybe following line is needed
         #working_vector ./= factorial(j-i)
 
-        recursive_magic!(grad_contrib, w_mat, right_inner, i, coeff/(j+1),
-                        prob, controls, t, pcof, control_index)
+        recursive_magic!(
+            grad_contrib, w_mat, working_state_vector, i, coeff/(j+1), prob,
+            controls, t, pcof, control_index, working_pcof, working_state_vector
+        )
     end
 
     return grad_contrib
@@ -700,7 +690,14 @@ function compute_guard_forcing(prob, history::AbstractArray{Float64, 4})
 
     forcing = zeros(prob.real_system_size, 1+prob.nsteps, prob.N_initial_conditions)
     for n in 1:prob.nsteps+1
-        forcing[:, n, :] .= prob.guard_subspace_projector * history[:, 1, n, :] * -2*dt/prob.tf
+        for k in 1:prob.N_initial_conditions
+            mul!(
+                 view(forcing, :, n, k),
+                 prob.guard_subspace_projector,
+                 view(history, :, 1, n, k)
+            )
+            @. forcing[:, n, k] *= -2*dt/prob.tf
+        end
     end
     forcing[:, 1,   :] .*= 0.5
     forcing[:, end, :] .*= 0.5

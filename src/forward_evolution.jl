@@ -45,8 +45,10 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
 
     # Handle i-th initial condition (THREADS HERE)
     avg_N_gmres_iterations = 0
-    for initial_condition_index=1:prob.N_initial_conditions
+    Threads.@threads for initial_condition_index=1:prob.N_initial_conditions
         vector_prob = VectorSchrodingerProb(prob, initial_condition_index)
+        controls_copy = deepcopy(controls) # Make copies of control, so that they work with multithreading
+
         this_uv_history = @view uv_history[:, :, :, initial_condition_index]
 
         if ismissing(forcing)
@@ -56,7 +58,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
         end
 
         avg_N_gmres_iterations += eval_forward!(
-            this_uv_history, vector_prob, controls, pcof; order=order, 
+            this_uv_history, vector_prob, controls_copy, pcof; order=order, 
             saveEveryNsteps=saveEveryNsteps, forcing=this_forcing
         )
     end
@@ -327,8 +329,10 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
 
 
     # Handle i-th initial condition (THREADS HERE)
-    for initial_condition_index=1:prob.N_initial_conditions
+    Threads.@threads for initial_condition_index=1:prob.N_initial_conditions
         vector_prob = VectorSchrodingerProb(prob, initial_condition_index)
+        controls_copy = deepcopy(controls)
+
         terminal_condition_vec = @view terminal_condition[:, initial_condition_index]
         this_uv_history = @view uv_history[:, :, :, initial_condition_index]
 
@@ -339,7 +343,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
         end
 
         eval_adjoint!(
-            this_uv_history, vector_prob, controls, pcof, terminal_condition_vec;
+            this_uv_history, vector_prob, controls_copy, pcof, terminal_condition_vec;
             order=order, forcing=this_forcing
         )
     end

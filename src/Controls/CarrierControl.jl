@@ -9,17 +9,23 @@ struct CarrierControl{T} <: AbstractControl
     tf::Float64
     carrier_frequencies::Vector{Float64}
     pcof_storage::Vector{Float64}
+    function CarrierControl(base_control::AbstractControl, carrier_frequencies::AbstractVector{<: Real})
+        carrier_frequencies = convert(Vector{Float64}, carrier_frequencies)
+
+        N_frequencies = length(carrier_frequencies)
+        N_coeffs_per_frequency = base_control.N_coeff
+        N_coeff = N_coeffs_per_frequency * N_frequencies
+        tf = base_control.tf
+        pcof_storage = zeros(N_coeffs_per_frequency)
+        
+        new{typeof(base_control)}(base_control, N_coeffs_per_frequency, N_coeff, tf, carrier_frequencies, pcof_storage)
+    end
 end
 
-function CarrierControl(base_control, carrier_frequencies)
-    N_frequencies = length(carrier_frequencies)
-    N_coeffs_per_frequency = base_control.N_coeff
-    N_coeff = N_coeffs_per_frequency * N_frequencies
-    tf = base_control.tf
-    pcof_storage = zeros(N_coeffs_per_frequency)
-    
-    return CarrierControl(base_control, N_coeffs_per_frequency, N_coeff, tf, carrier_frequencies, pcof_storage)
+function Base.copy(control::CarrierControl)
+    return CarrierControl(copy(control.base_control), copy(control.carrier_frequencies))
 end
+
 
 function eval_p(control::CarrierControl, t::Real, pcof::AbstractVector{<: Real})
     return eval_p_derivative(control, t, pcof, 0)
@@ -114,13 +120,15 @@ function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::Carrier
                 carrier_val2 =  cos(w*t) * (w^k)
             end
 
+            binomial_coeff = binomial(order, k)
+
             control.pcof_storage .= 0
             eval_grad_p_derivative!(
                 control.pcof_storage, control.base_control, t,
                 this_carrier_pcof, order-k
             )
 
-            @. control.pcof_storage *= carrier_val1 * binomial(order, k)
+            control.pcof_storage .*= carrier_val1 * binomial_coeff
             this_carrier_grad .+= control.pcof_storage
 
             control.pcof_storage .= 0
@@ -129,7 +137,7 @@ function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::Carrier
                 this_carrier_pcof, order-k
             )
 
-            @. control.pcof_storage *= carrier_val2 * binomial(order, k)
+            control.pcof_storage .*= carrier_val2 * binomial_coeff
             this_carrier_grad .+= control.pcof_storage
         end 
     end
@@ -159,13 +167,15 @@ function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::Carrier
                 carrier_val2 =  sin(w*t) * (w^k)
             end
 
+            binomial_coeff = binomial(order, k)
+
             control.pcof_storage .= 0
             eval_grad_p_derivative!(
                 control.pcof_storage, control.base_control, t,
                 this_carrier_pcof, order-k
             )
 
-            @. control.pcof_storage *= carrier_val1 * binomial(order, k)
+            control.pcof_storage .*= carrier_val1 * binomial_coeff
             this_carrier_grad .+= control.pcof_storage
 
             control.pcof_storage .= 0
@@ -174,7 +184,7 @@ function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::Carrier
                 this_carrier_pcof, order-k
             )
 
-            @. control.pcof_storage *= carrier_val2 * binomial(order, k)
+            control.pcof_storage .*= carrier_val2 * binomial_coeff
             this_carrier_grad .+= control.pcof_storage
         end 
     end
