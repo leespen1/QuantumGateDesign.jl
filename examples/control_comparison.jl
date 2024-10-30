@@ -1,5 +1,8 @@
 using QuantumGateDesign
 using BenchmarkTools
+using BSplines
+using BasicBSpline
+
 degree = 2
 N_knots = 10
 tf = 1.0
@@ -7,10 +10,19 @@ tf = 1.0
 package_bspline = GeneralBSplineControl(degree, N_knots, tf)
 hardcoded_bspline = MySplineControl(tf, N_knots)
 
+k = KnotVector(knots(package_bspline.bspline_basis))
+P = BSplineSpace{degree}(k)
+P1 = BSplineDerivativeSpace{1}(P)
+P2 = BSplineDerivativeSpace{2}(P)
+P3 = BSplineDerivativeSpace{3}(P)
+
+t = 0.2
+
+
 pcof1 = ones(package_bspline.N_coeff)
 pcof2 = ones(hardcoded_bspline.N_coeff)
-
 t_range = LinRange(0, tf, 1001)
+
 
 
 function sum_control(control, pcof, t_range)
@@ -24,5 +36,18 @@ function sum_control(control, pcof, t_range)
     return result
 end
 
+function sum_BasicBS(P,P1,P2,P3,t_range)
+
+    for t in t_range
+        sm = 0.0
+        i = BasicBSpline.intervalindex(P,t)
+        sm += sum(bsplinebasisall(P,i,t))
+        sm += sum(bsplinebasisall(P1,i,t))
+        sm += sum(bsplinebasisall(P2,i,t))
+        sm += sum(bsplinebasisall(P3,i,t))
+    end
+end
+
 @btime sum_control(package_bspline, pcof1, t_range)
 @btime sum_control(hardcoded_bspline, pcof1, t_range)
+@btime sum_BasicBS(P,P1,P2,P3,t_range)
