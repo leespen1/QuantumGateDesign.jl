@@ -5,6 +5,7 @@ struct GeneralBSplineControl <: AbstractControl
     N_knots::Int64
     bspline_basis::BSplines.BSplineBasis{LinRange{Float64, Int64}}
     storage_vec::Vector{Float64}
+    derivspace::Matrix{Float64}
     function GeneralBSplineControl(degree::Integer, N_knots::Integer, tf::Real)
         degree = convert(Int64, degree)
         N_knots = convert(Int64, N_knots)
@@ -13,7 +14,8 @@ struct GeneralBSplineControl <: AbstractControl
         bspline_basis = BSplines.BSplineBasis(order, ts)
         N_coeff = (order + length(ts) - 2)*2
         storage_vec = zeros(order)
-        new(N_coeff, tf, degree, N_knots, bspline_basis, storage_vec)
+        derivspace = zeros(order, order) # This is a working matrix used only for derivatives
+        new(N_coeff, tf, degree, N_knots, bspline_basis, storage_vec, derivspace)
     end
 end
 
@@ -31,9 +33,17 @@ function eval_q(control::GeneralBSplineControl, t::Real, pcof::AbstractVector{<:
 end
 
 function eval_p_derivative(control::GeneralBSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
-    offset_storage_vec = BSplines.bsplines!(
-        control.storage_vec, control.bspline_basis, t, BSplines.Derivative(order)
-    )
+    if order > 0
+        offset_storage_vec = BSplines.bsplines!(
+            control.storage_vec, control.bspline_basis, t, BSplines.Derivative(order),
+            derivspace=control.derivspace
+        )
+    else
+        offset_storage_vec = BSplines.bsplines!(
+            control.storage_vec, control.bspline_basis, t, BSplines.Derivative(order)
+        )
+    end
+
 
     val = 0.0
     for index in eachindex(offset_storage_vec)
@@ -43,9 +53,16 @@ function eval_p_derivative(control::GeneralBSplineControl, t::Real, pcof::Abstra
 end
 
 function eval_q_derivative(control::GeneralBSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
-    offset_storage_vec = BSplines.bsplines!(
-        control.storage_vec, control.bspline_basis, t, BSplines.Derivative(order)
-    )
+    if order > 0
+        offset_storage_vec = BSplines.bsplines!(
+            control.storage_vec, control.bspline_basis, t, BSplines.Derivative(order),
+            derivspace=control.derivspace
+        )
+    else
+        offset_storage_vec = BSplines.bsplines!(
+            control.storage_vec, control.bspline_basis, t, BSplines.Derivative(order)
+        )
+    end
 
     val = 0.0
     coeff_offset = div(control.N_coeff, 2)
