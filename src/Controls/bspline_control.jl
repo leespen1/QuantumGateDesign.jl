@@ -42,6 +42,10 @@ struct MySplineControl <: AbstractControl
     end
 end
 
+function Base.copy(control::MySplineControl)
+    return MySplineControl(control.tf, control.D1)
+end
+
 """
 I should make a general function like this in CarrierControl.jl
 """
