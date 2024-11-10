@@ -3,12 +3,12 @@ module QuantumGateDesign
 
 import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
 import BenchmarkTools, SparseArrays, Dates, OrderedCollections, JLD2, Random
-import BSplines, BasicBSplines
+import BSplines, BasicBSpline
 using Printf: @printf, @sprintf
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 using Random: rand, MersenneTwister
 using Base.Iterators: product
-using BasicBSplines: BSplineDerivativeSpace, BSplineSpace
+using BasicBSpline: BSplineDerivativeSpace, BSplineSpace
 
 # Export derivative computation functions
 export compute_derivatives!, compute_adjoint_derivatives!, compute_partial_derivative!, apply_hamiltonian!
