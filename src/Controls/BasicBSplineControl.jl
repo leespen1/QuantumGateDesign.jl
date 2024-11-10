@@ -27,7 +27,7 @@ struct BasicBSplineControl{degree} <: AbstractControl
     end
 end
 
-function eval_p(control::BasicBSpline, t::Real, pcof::AbstractVector{<: Real})
+function eval_p(control::BasicBSplineControl, t::Real, pcof::AbstractVector{<: Real})
     # BSpline is scaled on [0,1], rescale t accordingly
     t_scaled = t / control.tf
 
@@ -44,7 +44,7 @@ function eval_p(control::BasicBSpline, t::Real, pcof::AbstractVector{<: Real})
     return bspline_val
 end
 
-function eval_q(control::BasicBSpline, t::Real, pcof::AbstractVector{<: Real})
+function eval_q(control::BasicBSplineControl, t::Real, pcof::AbstractVector{<: Real})
     # BSpline is scaled on [0,1], rescale t accordingly
     t_scaled = t / control.tf
 
@@ -63,7 +63,7 @@ function eval_q(control::BasicBSpline, t::Real, pcof::AbstractVector{<: Real})
 end
 
 function eval_p_derivative(
-        control::BasicBSpline, t::Real, pcof::AbstractVector{<: Real},
+        control::BasicBSplineControl, t::Real, pcof::AbstractVector{<: Real},
         order::Integer
     )
     # BSpline is scaled on [0,1], rescale t accordingly
@@ -87,7 +87,7 @@ function eval_p_derivative(
 end
 
 function eval_q_derivative(
-        control::BasicBSpline, t::Real, pcof::AbstractVector{<: Real},
+        control::BasicBSplineControl, t::Real, pcof::AbstractVector{<: Real},
         order::Integer
     )
     # BSpline is scaled on [0,1], rescale t accordingly
