@@ -7,10 +7,10 @@ struct BasicBSplineControl{degree} <: AbstractControl
     tf::Float64
     N_knots::Int64
     P::BasicBSpline.BSplineSpace{degree, Float64, BasicBSpline.KnotVector{Float64}}
-    P1::BSplineDerivativeSpace{1, BSplineSpace{degree, Float64, KnotVector{Float64}}, Float64}
-    P2::BSplineDerivativeSpace{2, BSplineSpace{degree, Float64, KnotVector{Float64}}, Float64}
-    P3::BSplineDerivativeSpace{3, BSplineSpace{degree, Float64, KnotVector{Float64}}, Float64}
-    P4::BSplineDerivativeSpace{4, BSplineSpace{degree, Float64, KnotVector{Float64}}, Float64}
+    P1::BSplineDerivativeSpace{1, BSplineSpace{degree, Float64, BasicBSpline.KnotVector{Float64}}, Float64}
+    P2::BSplineDerivativeSpace{2, BSplineSpace{degree, Float64, BasicBSpline.KnotVector{Float64}}, Float64}
+    P3::BSplineDerivativeSpace{3, BSplineSpace{degree, Float64, BasicBSpline.KnotVector{Float64}}, Float64}
+    P4::BSplineDerivativeSpace{4, BSplineSpace{degree, Float64, BasicBSpline.KnotVector{Float64}}, Float64}
     function BasicBSplineControl(degree::Integer, tf::Real, N_knots::Integer)
         degree = convert(Int64, degree)
         tf = convert(Float64, tf)
