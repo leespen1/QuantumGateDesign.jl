@@ -6,7 +6,7 @@ struct BasicBSplineControl{degree} <: AbstractControl
     N_coeff::Int64
     tf::Float64
     N_knots::Int64
-    P::BasicBSplines.BSplineSpace{degree, Float64, BasicBSpline.KnotVector{Float64}}
+    P::BasicBSpline.BSplineSpace{degree, Float64, BasicBSpline.KnotVector{Float64}}
     P1::BSplineDerivativeSpace{1, BSplineSpace{degree, Float64, KnotVector{Float64}}, Float64}
     P2::BSplineDerivativeSpace{2, BSplineSpace{degree, Float64, KnotVector{Float64}}, Float64}
     P3::BSplineDerivativeSpace{3, BSplineSpace{degree, Float64, KnotVector{Float64}}, Float64}
