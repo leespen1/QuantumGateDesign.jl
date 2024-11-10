@@ -37,17 +37,19 @@ function sum_control(control, pcof, t_range)
 end
 
 function sum_BasicBS(P,P1,P2,P3,t_range)
-
+    sm = 0.0
     for t in t_range
-        sm = 0.0
         i = BasicBSpline.intervalindex(P,t)
         sm += sum(bsplinebasisall(P,i,t))
         sm += sum(bsplinebasisall(P1,i,t))
         sm += sum(bsplinebasisall(P2,i,t))
         sm += sum(bsplinebasisall(P3,i,t))
     end
+    return sm
 end
 
-@btime sum_control(package_bspline, pcof1, t_range)
-@btime sum_control(hardcoded_bspline, pcof1, t_range)
-@btime sum_BasicBS(P,P1,P2,P3,t_range)
+@btime sum_control($package_bspline, $pcof1, $t_range)
+println("Hardcoded")
+@btime sum_control($hardcoded_bspline, $pcof1, $t_range)
+println("BasicBSplines")
+@btime sum_BasicBS($P,$P1,$P2,$P3,$t_range)
