@@ -66,6 +66,7 @@ export MySplineControl
 include("preconditioners.jl")
 include("SchrodingerProb.jl")
 include("../Daniel/hermite_map.jl")
+include("derivatives.jl")
 
 
 include("Controls/Control.jl")
@@ -115,7 +116,6 @@ include("Plotting/plot_populations.jl")
 include("Plotting/plot_gradient_agreement.jl")
 include("Plotting/plot_states.jl")
 include("calculate_timestep.jl")
-
 
 
 # Define functions without methods, so that extensions can override them
