@@ -2,7 +2,9 @@ using QuantumGateDesign
 using Random
 using Dates
 using JLD2
+using Profile
 using ProfileView
+using PProf
 
 #complex_system_size = 4
 complex_system_size = 64
@@ -19,8 +21,8 @@ base_controls = [GeneralBSplineControl(degree, N_knots, tf) for i in 1:N_operato
 controls = [CarrierControl(MySplineControl(tf, N_knots), rand(MersenneTwister(i), N_frequencies)) for i in 1:N_operators]
 
 pcof = rand(MersenneTwister(0), get_number_of_control_parameters(controls))
-prob.nsteps = 1_000
-#prob.nsteps = 100
+#prob.nsteps = 1_000
+prob.nsteps = 100
 
 dummy_terminal_condition = vcat(prob.u0, prob.v0)
 dummy_target = prob.u0 + im*prob.v0
@@ -45,4 +47,11 @@ println("Lambda agrees: ", lambda_history == dict["lambda_history"])
 println("Gradient agrees: ", grad == dict["grad"])
 =#
 
+history = eval_forward(prob, controls, pcof, order=order)
 @profview history = eval_forward(prob, controls, pcof, order=order)
+
+# Collect a profile
+Profile.clear()
+@profile history = eval_forward(prob, controls, pcof, order=order)
+# Export pprof profile and open interactive profiling web interface.
+pprof()
