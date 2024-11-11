@@ -35,7 +35,7 @@ function eval_p(control::BasicBSplineControl, t::Real, pcof::AbstractVector{<: R
     i = BasicBSpline.intervalindex(control.P, t_scaled)
 
     bspline_val = 0.0
-    bspline_basis_vals = BasicBSpline.bsplinebasisall(control.P, t_scaled)
+    bspline_basis_vals = BasicBSpline.bsplinebasisall(control.P, i, t_scaled)
     for (n, basis_val) in enumerate(bspline_basis_vals)
         # Multiply basis function value by control point value
         bspline_val += pcof[i-1+n] * basis_val
@@ -53,7 +53,7 @@ function eval_q(control::BasicBSplineControl, t::Real, pcof::AbstractVector{<: R
     offset = div(control.N_coeff, 2)
 
     bspline_val = 0.0
-    bspline_basis_vals = BasicBSpline.bsplinebasisall(control.P, t_scaled)
+    bspline_basis_vals = BasicBSpline.bsplinebasisall(control.P, i, t_scaled)
     for (n, basis_val) in enumerate(bspline_basis_vals)
         # Multiply basis function value by control point value
         bspline_val += pcof[offset+i-1+n] * basis_val
@@ -77,7 +77,7 @@ function eval_p_derivative(
     i = BasicBSpline.intervalindex(control.P, t_scaled)
 
     bspline_val = 0.0
-    bspline_basis_vals = BasicBSpline.bsplinebasisall(P_tup[1+order], t_scaled)
+    bspline_basis_vals = BasicBSpline.bsplinebasisall(P_tup[1+order], i, t_scaled)
     for (n, basis_val) in enumerate(bspline_basis_vals)
         # Multiply basis function value by control point value
         bspline_val += pcof[i-1+n] * basis_val
@@ -99,10 +99,10 @@ function eval_q_derivative(
 
     # Get the index of the first BSpline Basis function with support at t
     i = BasicBSpline.intervalindex(control.P, t_scaled)
-    offset = div(control.N_ceoff, 2)
+    offset = div(control.N_coeff, 2)
 
     bspline_val = 0.0
-    bspline_basis_vals = BasicBSpline.bsplinebasisall(P_tup[1+order], t_scaled)
+    bspline_basis_vals = BasicBSpline.bsplinebasisall(P_tup[1+order], i, t_scaled)
     for (n, basis_val) in enumerate(bspline_basis_vals)
         # Multiply basis function value by control point value
         bspline_val += pcof[offset+i-1+n] * basis_val
@@ -132,7 +132,7 @@ function fill_p_vec!(
 
     for k in eachindex(vals_vec)
         bspline_val = 0.0
-        bspline_basis_vals = BasicBSpline.bsplinebasisall(P_tup[k], t_scaled)
+        bspline_basis_vals = BasicBSpline.bsplinebasisall(P_tup[k], i, t_scaled)
 
         for (n, basis_val) in enumerate(bspline_basis_vals)
             # Multiply basis function value by control point value
@@ -160,7 +160,7 @@ function fill_q_vec!(
 
     for k in eachindex(vals_vec)
         bspline_val = 0.0
-        bspline_basis_vals = BasicBSpline.bsplinebasisall(P_tup[k], t_scaled)
+        bspline_basis_vals = BasicBSpline.bsplinebasisall(P_tup[k], i, t_scaled)
 
         for (n, basis_val) in enumerate(bspline_basis_vals)
             # Multiply basis function value by control point value
