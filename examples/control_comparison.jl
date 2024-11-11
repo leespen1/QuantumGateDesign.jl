@@ -17,8 +17,6 @@ P1 = BSplineDerivativeSpace{1}(P)
 P2 = BSplineDerivativeSpace{2}(P)
 P3 = BSplineDerivativeSpace{3}(P)
 
-t = 0.2
-
 
 pcof1 = ones(package_bspline.N_coeff)
 pcof2 = ones(hardcoded_bspline.N_coeff)
@@ -32,8 +30,61 @@ function sum_control(control, pcof, t_range)
     for t in t_range
         for derivative_order in (0,1,2,3)
             result += eval_p_derivative(control, t, pcof, derivative_order)
-            result += eval_q_derivative(control, t, pcof, derivative_order)
+            #result += eval_q_derivative(control, t, pcof, derivative_order)
         end
+    end
+    return result
+end
+
+function sum_control2(control, pcof, t_range)
+    result::Float64 = 0.0
+    for t in t_range
+        for derivative_order in (0,1,2,3)
+            result += eval_p_derivative(control, t, pcof, QuantumGateDesign.Derivative(derivative_order))
+            #result += eval_q_derivative(control, t, pcof, derivative_order)
+        end
+    end
+    return result
+end
+
+function sum_control3(control, pcof, t_range)
+    result = 0.0
+    for t in t_range
+        result += eval_p_derivative(control, t, pcof, QuantumGateDesign.Derivative(0))
+        result += eval_p_derivative(control, t, pcof, QuantumGateDesign.Derivative(1))
+        result += eval_p_derivative(control, t, pcof, QuantumGateDesign.Derivative(2))
+        result += eval_p_derivative(control, t, pcof, QuantumGateDesign.Derivative(3))
+    end
+    return result
+end
+
+
+function sum_control5(control, pcof, t_range)
+    result::Float64 = 0.0
+    for t in t_range
+        drvs = map(QuantumGateDesign.Derivative, ntuple(i -> i-1, 4))
+        vals = map(drv -> eval_p_derivative(control, t, pcof, drv), drvs)
+        result += sum(vals)
+    end
+    return result
+end
+
+function sum_control6(control, pcof, t_range, max_drv::QuantumGateDesign.Derivative{N}) where N
+    result::Float64 = 0.0
+    for t in t_range
+        drvs = map(QuantumGateDesign.Derivative, ntuple(i -> i-1, N+1))
+        vals = map(drv -> eval_p_derivative(control, t, pcof, drv), drvs)
+        result += sum(vals)
+    end
+    return result
+end
+
+function sum_control7(control, pcof, t_range, max_drv::QuantumGateDesign.Derivative{N}) where N
+    result::Float64 = 0.0
+    vals_vec = zeros(1+N)
+    for t in t_range
+        QuantumGateDesign.fill_p_vec!(vals_vec, control, t, pcof, max_drv)
+        result += sum(vals_vec)
     end
     return result
 end
@@ -65,7 +116,6 @@ function sum_BasicBS2(P,P1,P2,P3,t_range)
     return sm
 end
 
-#=
 #println("Package BSplines")
 #@btime sum_control($package_bspline, $pcof1, $t_range)
 println("Hardcoded")
@@ -74,10 +124,14 @@ println("BasicBSplines")
 @btime sum_BasicBS($P,$P1,$P2,$P3,$t_range)
 println("BasicBSplines2")
 @btime sum_BasicBS2($P,$P1,$P2,$P3,$t_range)
-println("QuantumGateDesign BasicBSplines")
-@btime sum_control($package_basic_bspline, $pcof3, $t_range)
-=#
+#println("QuantumGateDesign BasicBSplines")
+#@btime sum_control2($package_basic_bspline, $pcof3, $t_range)
+println("QuantumGateDesign BasicBSplines 2")
+@btime sum_control3($package_basic_bspline, $pcof3, $t_range)
+println("fill_p_vec!")
+@btime sum_control7(package_basic_bspline, pcof3, t_range, QuantumGateDesign.Derivative(3));
 
+#=
 println("Hardcoded")
 sum_control(hardcoded_bspline, pcof2, t_range)
 println("BasicBSplines")
@@ -86,6 +140,7 @@ println("BasicBSplines2")
 sum_BasicBS2(P,P1,P2,P3,t_range)
 println("QuantumGateDesign BasicBSplines")
 sum_control(package_basic_bspline, pcof3, t_range)
+=#
 
 # There are allocations caused by the compiler not being smart enough to
 # realize that although whether P1, P2, P3, ... is used, the SVector is the same
