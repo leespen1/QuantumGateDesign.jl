@@ -79,7 +79,7 @@ include("Controls/generalized_grape_control.jl")
 include("Controls/hermite_carrier.jl")
 include("Controls/GeneralBSplineControl.jl")
 include("Controls/CarrierControl.jl")
-include("Controls/BasicBSplineControl.jl")
+#include("Controls/BasicBSplineControl.jl")
 include("Controls/FortranBSpline.jl")
 
 
