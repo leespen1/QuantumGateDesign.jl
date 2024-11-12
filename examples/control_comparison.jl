@@ -10,6 +10,7 @@ tf = 1.0
 package_bspline = GeneralBSplineControl(degree, N_knots, tf)
 hardcoded_bspline = MySplineControl(tf, N_knots)
 package_basic_bspline = QuantumGateDesign.BasicBSplineControl(degree, tf, N_knots)
+fortran_bspline = FortranBSplineControl(degree, tf, N_knots)
 
 k = KnotVector(knots(package_bspline.bspline_basis))
 P = BSplineSpace{degree}(k)
@@ -21,6 +22,7 @@ P3 = BSplineDerivativeSpace{3}(P)
 pcof1 = ones(package_bspline.N_coeff)
 pcof2 = ones(hardcoded_bspline.N_coeff)
 pcof3 = ones(package_basic_bspline.N_coeff)
+pcof_fortran = ones(fortran_bspline.N_coeff)
 t_range = LinRange(0, tf, 1001)
 
 
@@ -120,6 +122,8 @@ end
 #@btime sum_control($package_bspline, $pcof1, $t_range)
 println("Hardcoded")
 @btime sum_control($hardcoded_bspline, $pcof2, $t_range)
+println("Fortran")
+@btime sum_control($fortran_bspline, $pcof_fortran, $t_range)
 println("BasicBSplines")
 @btime sum_BasicBS($P,$P1,$P2,$P3,$t_range)
 println("BasicBSplines2")

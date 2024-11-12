@@ -81,6 +81,7 @@ include("Controls/hermite_carrier.jl")
 include("Controls/GeneralBSplineControl.jl")
 include("Controls/CarrierControl.jl")
 include("Controls/BasicBSplineControl.jl")
+include("Controls/FortranBSpline.jl")
 
 
 include("hermite.jl")
@@ -130,5 +131,7 @@ export control_ops
 export eval_p_single, eval_q_single
 
 export get_histories
+
+export FortranBSplineControl
 
 end # module QuantumGateDesign
