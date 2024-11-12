@@ -28,7 +28,7 @@ struct FortranBSplineControl <: AbstractControl
         N_knots = convert(Int64, N_knots)
 
         order = degree+1
-        N_basis_functions = N_knots - order
+        N_basis_functions = N_knots + order - 2 #(N_nonrepeating_knots + (order-1) + (order-1) - order)
         N_coeff = 2*N_basis_functions
 
         # Make the knots on the interval [0,1], then scale the inputs t when evaluating
@@ -63,22 +63,13 @@ function eval_p_derivative(control::FortranBSplineControl, t::Real, pcof::Abstra
         val += pcof[left+i] * control.output_array[1+i,1+order]
     end
     return val
-    # 
-
-    #=
-    # Get pcof indices
-    # Index of the knot at the left-hand side of this interval
-    left = floor(Int64, x*(control.N_knots-1) + 1)
-    # Index of the leftmost basis function with support in this interval
-    left_basis_index = max(1, left - control.bspline_order)
-    =#
 end
 
 function fill_p_vec!(
         vals_vec::AbstractVector{<: Real}, control::FortranBSplineControl,
         t::Real, pcof::AbstractVector{<: Real}
     )
-    # calculate derivatives upto (but not including) nderiv
+    # calculate derivatives up to (but not including) nderiv
     nderiv = length(vals_vec)  
     t_scaled::Float64 = t / control.tf
     bsplvd!(control, t_scaled, nderiv)
@@ -96,10 +87,108 @@ function fill_p_vec!(
     return vals_vec
 end
     
+function eval_q_derivative(control::FortranBSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
+    t_scaled::Float64 = t / control.tf
+    bsplvd!(control, t_scaled, order+1)
+    
+    # Get the index of the knot at the left of this interval
+    # (which is also the index of the leftmost basis function with support in
+    # this interval)
+    left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
+    left = min(left, control.N_knots-1)
+    offset = div(control.N_coeff, 2)
+
+    val = 0.0
+    for i in 0:control.bspline_order-1
+        val += pcof[offset+left+i] * control.output_array[1+i,1+order]
+    end
+    return val
+end
+
+function fill_q_vec!(
+        vals_vec::AbstractVector{<: Real}, control::FortranBSplineControl,
+        t::Real, pcof::AbstractVector{<: Real}
+    )
+    # calculate derivatives up to (but not including) nderiv
+    nderiv = length(vals_vec)  
+    t_scaled::Float64 = t / control.tf
+    bsplvd!(control, t_scaled, nderiv)
+
+    left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
+    left = min(left, control.N_knots-1)
+    offset = div(control.N_coeff, 2)
+
+    for derivative_order in 0:nderiv-1
+        val = 0.0
+        for i in 0:control.bspline_order-1
+            val += pcof[offset+left+i] * control.output_array[1+i,1+derivative_order]
+        end
+        vals_vec[1+derivative_order] = val
+    end
+    return vals_vec
+end
+
+function eval_grad_p_derivative!(
+        grad::AbstractVector{Float64}, control::FortranBSplineControl, t::Real,
+        pcof::AbstractVector{<: Real}, order::Integer
+    )
+    # calculate derivatives up to (but not including) nderiv
+    t_scaled::Float64 = t / control.tf
+    bsplvd!(control, t_scaled, order+1)
+
+    left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
+    left = min(left, control.N_knots-1)
+
+    # Control is linear in the pcof coefficients
+    grad .= 0
+    for i in 0:control.bspline_order-1
+        grad[left+i] = control.output_array[1+i,1+order]
+    end
+
+    return grad
+end
+
+function eval_grad_q_derivative!(
+        grad::AbstractVector{Float64}, control::FortranBSplineControl, t::Real,
+        pcof::AbstractVector{<: Real}, order::Integer
+    )
+    t_scaled::Float64 = t / control.tf
+    bsplvd!(control, t_scaled, order+1)
+
+    left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
+    left = min(left, control.N_knots-1)
+
+    offset = div(control.N_coeff, 2)
+
+    # Control is linear in the pcof coefficients
+    grad .= 0
+    for i in 0:control.bspline_order-1
+        grad[offset+left+i] = control.output_array[1+i,1+order]
+    end
+
+    return grad
+end
 
 
+"""
+Bezier degree elevations: 
+    https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node13.html
+B-spline degree elevation description: 
+    https://pages.mtu.edu/~shene/COURSES/cs3621/LAB/curve/elevation.html
+Knot Insertion and Removal for BSplines:
+    https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node18.html
 
-
+Degree elevation of a BSpline can be done by knot insertion:
+1. Insert knots at internal knots until each segment of the B-spline is a bezier curve.
+2. Perform degree elevation of the bezier curves (which also results in new
+   control points, so pcof is updated)
+3. "combining them together back to a single B-spline". Does combining them
+    together mean knot removal? Because I want smoothness. So I can't have
+    internal knots with multiplicity > 1. But I think the knot removal may be exact.
+"""
+function elevate_degree(control::FortranBSplineControl, pcof::AbstractVector{<: Real})
+    
+end
 
 
 
