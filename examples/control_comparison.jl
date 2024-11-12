@@ -38,6 +38,16 @@ function sum_control(control, pcof, t_range)
     return result
 end
 
+function sum_control_fill(control, pcof, t_range, N_deriv)
+    ret = 0.0
+    vals_vec = zeros(1+N_deriv)
+    for t in t_range
+        QuantumGateDesign.fill_p_vec!(vals_vec, control, t, pcof)
+        ret += sum(vals_vec)
+    end
+    return ret
+end
+
 function sum_control2(control, pcof, t_range)
     result::Float64 = 0.0
     for t in t_range
@@ -118,6 +128,10 @@ function sum_BasicBS2(P,P1,P2,P3,t_range)
     return sm
 end
 
+println("Hardcoded (Fill)")
+@btime sum_control_fill($hardcoded_bspline, $pcof2, $t_range, $3)
+println("Fortran (FIll)")
+@btime sum_control_fill($fortran_bspline, $pcof_fortran, $t_range, $3)
 #println("Package BSplines")
 #@btime sum_control($package_bspline, $pcof1, $t_range)
 println("Hardcoded")
@@ -128,8 +142,8 @@ println("BasicBSplines")
 @btime sum_BasicBS($P,$P1,$P2,$P3,$t_range)
 println("BasicBSplines2")
 @btime sum_BasicBS2($P,$P1,$P2,$P3,$t_range)
-#println("QuantumGateDesign BasicBSplines")
-#@btime sum_control2($package_basic_bspline, $pcof3, $t_range)
+println("QuantumGateDesign BasicBSplines (type instability)")
+@btime sum_control2($package_basic_bspline, $pcof3, $t_range)
 println("QuantumGateDesign BasicBSplines 2")
 @btime sum_control3($package_basic_bspline, $pcof3, $t_range)
 println("fill_p_vec!")
