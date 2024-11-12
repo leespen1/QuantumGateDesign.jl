@@ -1,5 +1,5 @@
 FC = gfortran
-FFLAGS = -c -O1 -shared -fPIC -fdefault-real-8
+FFLAGS = -c -O3 -shared -fPIC -fdefault-real-8
 
 OBJ = bsplvb.o bsplvd.o
 bspline_lib: $(OBJ)
