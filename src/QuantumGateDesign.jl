@@ -66,7 +66,6 @@ export MySplineControl
 include("preconditioners.jl")
 include("SchrodingerProb.jl")
 include("../Daniel/hermite_map.jl")
-include("derivatives.jl")
 
 
 include("Controls/Control.jl")
