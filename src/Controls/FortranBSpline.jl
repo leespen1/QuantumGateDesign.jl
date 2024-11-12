@@ -44,12 +44,17 @@ end
 Could do a check for t_scaled = t_current, but first let's see if this is fast or not 
 
 For now, let's just check that results agree with BasicBSplineControl
+
+In general, shouldn't call this this way, since it repeats lower order derivative
+computations. Better to use fill_p_vec!
 """
 function eval_p_derivative(control::FortranBSplineControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     t_scaled::Float64 = t / control.tf
     bsplvd!(control, t_scaled, order+1)
     
     # Get the index of the knot at the left of this interval
+    # (which is also the index of the leftmost basis function with support in
+    # this interval)
     left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
     left = min(left, control.N_knots-1)
 
@@ -67,6 +72,28 @@ function eval_p_derivative(control::FortranBSplineControl, t::Real, pcof::Abstra
     # Index of the leftmost basis function with support in this interval
     left_basis_index = max(1, left - control.bspline_order)
     =#
+end
+
+function fill_p_vec!(
+        vals_vec::AbstractVector{<: Real}, control::FortranBSplineControl,
+        t::Real, pcof::AbstractVector{<: Real}
+    )
+    # calculate derivatives upto (but not including) nderiv
+    nderiv = length(vals_vec)  
+    t_scaled::Float64 = t / control.tf
+    bsplvd!(control, t_scaled, nderiv)
+
+    left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
+    left = min(left, control.N_knots-1)
+
+    for derivative_order in 0:nderiv-1
+        val = 0.0
+        for i in 0:control.bspline_order-1
+            val += pcof[left+i] * control.output_array[1+i,1+derivative_order]
+        end
+        vals_vec[1+derivative_order] = val
+    end
+    return vals_vec
 end
     
 
