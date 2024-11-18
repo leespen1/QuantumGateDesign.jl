@@ -9,7 +9,7 @@ tf = 1.0
 
 package_bspline = GeneralBSplineControl(degree, N_knots, tf)
 hardcoded_bspline = MySplineControl(tf, N_knots)
-package_basic_bspline = QuantumGateDesign.BasicBSplineControl(degree, tf, N_knots)
+#package_basic_bspline = QuantumGateDesign.BasicBSplineControl(degree, tf, N_knots)
 fortran_bspline = FortranBSplineControl(degree, tf, N_knots)
 
 k = KnotVector(knots(package_bspline.bspline_basis))
@@ -21,7 +21,7 @@ P3 = BSplineDerivativeSpace{3}(P)
 
 pcof1 = ones(package_bspline.N_coeff)
 pcof2 = ones(hardcoded_bspline.N_coeff)
-pcof3 = ones(package_basic_bspline.N_coeff)
+#pcof3 = ones(package_basic_bspline.N_coeff)
 pcof_fortran = ones(fortran_bspline.N_coeff)
 t_range = LinRange(0, tf, 1001)
 
@@ -32,6 +32,7 @@ function sum_control(control, pcof, t_range)
     for t in t_range
         for derivative_order in (0,1,2,3)
             result += eval_p_derivative(control, t, pcof, derivative_order)
+            result += eval_q_derivative(control, t, pcof, derivative_order)
             #result += eval_q_derivative(control, t, pcof, derivative_order)
         end
     end
@@ -44,10 +45,13 @@ function sum_control_fill(control, pcof, t_range, N_deriv)
     for t in t_range
         QuantumGateDesign.fill_p_vec!(vals_vec, control, t, pcof)
         ret += sum(vals_vec)
+        QuantumGateDesign.fill_q_vec!(vals_vec, control, t, pcof)
+        ret += sum(vals_vec)
     end
     return ret
 end
 
+#=
 function sum_control2(control, pcof, t_range)
     result::Float64 = 0.0
     for t in t_range
@@ -100,6 +104,7 @@ function sum_control7(control, pcof, t_range, max_drv::QuantumGateDesign.Derivat
     end
     return result
 end
+=#
 
 function sum_BasicBS(P,P1,P2,P3,t_range)
     sm = 0.0
@@ -128,26 +133,54 @@ function sum_BasicBS2(P,P1,P2,P3,t_range)
     return sm
 end
 
+function sum_BasicBS3(P,P1,P2,P3,t_range,pcof)
+    sm = 0.0
+    for t in t_range
+        i = BasicBSpline.intervalindex(P,t)
+        vals = bsplinebasisall(P,i,t)
+        for (i,val) in enumerate(vals)
+            sm += pcof[i]*val
+        end
+        vals = bsplinebasisall(P1,i,t)
+        for (i,val) in enumerate(vals)
+            sm += pcof[i]*val
+        end
+        vals = bsplinebasisall(P2,i,t)
+        for (i,val) in enumerate(vals)
+            sm += pcof[i]*val
+        end
+        vals = bsplinebasisall(P3,i,t)
+        for (i,val) in enumerate(vals)
+            sm += pcof[i]*val
+        end
+    end
+    return sm
+end
+
 println("Hardcoded (Fill)")
 @btime sum_control_fill($hardcoded_bspline, $pcof2, $t_range, $3)
-println("Fortran (FIll)")
+println("Fortran (Fill)")
 @btime sum_control_fill($fortran_bspline, $pcof_fortran, $t_range, $3)
 #println("Package BSplines")
 #@btime sum_control($package_bspline, $pcof1, $t_range)
-println("Hardcoded")
-@btime sum_control($hardcoded_bspline, $pcof2, $t_range)
-println("Fortran")
-@btime sum_control($fortran_bspline, $pcof_fortran, $t_range)
+#println("Hardcoded")
+#@btime sum_control($hardcoded_bspline, $pcof2, $t_range)
+#println("Fortran")
+#@btime sum_control($fortran_bspline, $pcof_fortran, $t_range)
 println("BasicBSplines")
 @btime sum_BasicBS($P,$P1,$P2,$P3,$t_range)
 println("BasicBSplines2")
 @btime sum_BasicBS2($P,$P1,$P2,$P3,$t_range)
+println("BasicBSplines3")
+@btime sum_BasicBS3($P,$P1,$P2,$P3,$t_range, $pcof1)
+#=
 println("QuantumGateDesign BasicBSplines (type instability)")
 @btime sum_control2($package_basic_bspline, $pcof3, $t_range)
 println("QuantumGateDesign BasicBSplines 2")
 @btime sum_control3($package_basic_bspline, $pcof3, $t_range)
 println("fill_p_vec!")
 @btime sum_control7(package_basic_bspline, pcof3, t_range, QuantumGateDesign.Derivative(3));
+=#
 
 #=
 println("Hardcoded")
