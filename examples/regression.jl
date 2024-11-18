@@ -30,28 +30,29 @@ prob = DispersiveProblem(
     sparse_rep=false
 )
 
-degree = 6
-N_knots = 5
-controls = [GeneralBSplineControl(degree, N_knots,tf) for i in 1:prob.N_operators]
+degree = 2
+N_knots = 10
+#controls = [GeneralBSplineControl(degree, N_knots,tf) for i in 1:prob.N_operators]
+controls = [FortranBSplineControl(degree, tf, N_knots) for i in 1:prob.N_operators]
 
-#D1 = 10
+D1 = 10
 #controls = [MySplineControl(tf, D1) for i in 1:prob.N_operators]
 
 pcof = rand(MersenneTwister(0), get_number_of_control_parameters(controls))
 
 # Run once to get compilation out of the way
 history = eval_forward(prob, controls, pcof, order=8)
-display(history[:,end,end])
+#display(history[:,end,end])
 
 dummy_terminal_condition = vcat(prob.u0, prob.v0)
 dummy_target = prob.u0 + im*prob.v0
 
 lambda_history = QuantumGateDesign.eval_adjoint(prob, controls, pcof, dummy_terminal_condition, order=8)
-display(lambda_history[:,1,2,end])
+#display(lambda_history[:,1,2,end])
 
 @time history = eval_forward(prob, controls, pcof, order=8);
 @time lambda_history = QuantumGateDesign.eval_adjoint(prob, controls, pcof, dummy_terminal_condition, order=8);
-@time grad = discrete_adjoint(prob, controls, pcof, dummy_target, order=8)
+@time grad = discrete_adjoint(prob, controls, pcof, dummy_target, order=8);
 
 #=
 # Collect an allocation profile
