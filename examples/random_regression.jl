@@ -11,12 +11,13 @@ complex_system_size = 64
 N_operators = 3
 prob = QuantumGateDesign.construct_rand_prob(complex_system_size, N_operators)
 
-#degree = 16
-degree = 2
+degree = 16
+#degree = 2
 N_knots = 20
 tf = prob.tf
 N_frequencies = 3
-base_controls = [GeneralBSplineControl(degree, N_knots, tf) for i in 1:N_operators]
+#base_controls = [GeneralBSplineControl(degree, N_knots, tf) for i in 1:N_operators]
+base_controls = [FortranBSplineControl(degree, tf, N_knots) for i in 1:N_operators]
 #controls = [CarrierControl(base_controls[i], rand(MersenneTwister(i), N_frequencies)) for i in 1:N_operators]
 controls = [CarrierControl(MySplineControl(tf, N_knots), rand(MersenneTwister(i), N_frequencies)) for i in 1:N_operators]
 
@@ -27,8 +28,8 @@ prob.nsteps = 100
 dummy_terminal_condition = vcat(prob.u0, prob.v0)
 dummy_target = prob.u0 + im*prob.v0
 
-order=12
-#order=4
+#order=12
+order=2
 
 #=
 history = eval_forward(prob, controls, pcof, order=order)
