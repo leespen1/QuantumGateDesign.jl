@@ -111,10 +111,7 @@ include("ProblemConstructors/random_problem.jl")
 
 include("Tests/test_convergence.jl")
 
-include("Plotting/plot_control.jl")
-include("Plotting/plot_populations.jl")
-include("Plotting/plot_gradient_agreement.jl")
-include("Plotting/plot_states.jl")
+include("plotting.jl")
 include("calculate_timestep.jl")
 
 
