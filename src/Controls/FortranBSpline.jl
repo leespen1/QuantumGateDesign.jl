@@ -62,6 +62,7 @@ function eval_p_derivative(control::FortranBSplineControl, t::Real, pcof::Abstra
     for i in 0:control.bspline_order-1
         val += pcof[left+i] * control.output_array[1+i,1+order]
     end
+    val /= control.tf ^ order
     return val
 end
 
@@ -82,7 +83,7 @@ function fill_p_vec!(
         for i in 0:control.bspline_order-1
             val += pcof[left+i] * control.output_array[1+i,1+derivative_order]
         end
-        vals_vec[1+derivative_order] = val
+        vals_vec[1+derivative_order] = val / control.tf ^ derivative_order
     end
     return vals_vec
 end
@@ -102,6 +103,7 @@ function eval_q_derivative(control::FortranBSplineControl, t::Real, pcof::Abstra
     for i in 0:control.bspline_order-1
         val += pcof[offset+left+i] * control.output_array[1+i,1+order]
     end
+    val /= control.tf ^ order
     return val
 end
 
@@ -123,7 +125,7 @@ function fill_q_vec!(
         for i in 0:control.bspline_order-1
             val += pcof[offset+left+i] * control.output_array[1+i,1+derivative_order]
         end
-        vals_vec[1+derivative_order] = val
+        vals_vec[1+derivative_order] = val / control.tf ^ derivative_order
     end
     return vals_vec
 end
@@ -142,7 +144,7 @@ function eval_grad_p_derivative!(
     # Control is linear in the pcof coefficients
     grad .= 0
     for i in 0:control.bspline_order-1
-        grad[left+i] = control.output_array[1+i,1+order]
+        grad[left+i] = control.output_array[1+i,1+order] / control.tf ^ derivative_order
     end
 
     return grad
@@ -163,7 +165,7 @@ function eval_grad_q_derivative!(
     # Control is linear in the pcof coefficients
     grad .= 0
     for i in 0:control.bspline_order-1
-        grad[offset+left+i] = control.output_array[1+i,1+order]
+        grad[offset+left+i] = control.output_array[1+i,1+order] / control.tf ^ derivative_order
     end
 
     return grad
