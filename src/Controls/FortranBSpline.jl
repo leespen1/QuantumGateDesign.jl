@@ -27,6 +27,7 @@ struct FortranBSplineControl <: AbstractControl
         tf = convert(Float64, tf)
         N_knots = convert(Int64, N_knots)
 
+        ##= Original version
         order = degree+1
         N_basis_functions = N_knots + order - 2 #(N_nonrepeating_knots + (order-1) + (order-1) - order)
         N_coeff = 2*N_basis_functions
@@ -35,6 +36,15 @@ struct FortranBSplineControl <: AbstractControl
         knot_vector = Vector(LinRange(0, 1, N_knots))
         work_array = zeros(order, order)
         output_array = zeros(order, 20) # just make it large enough, see if that works
+
+        #= Trying to do repeating knot vecotr, I think that might be the solution
+        order = degree+1
+        # I will treat N_knots as number of intervals, i.e. D1 in Juqbox
+        knot_vector = Vector(LinRange(0, 1, N_knots))
+        =#
+
+        
+
 
         new(N_coeff, tf, N_knots, degree, order, knot_vector, work_array, output_array)
     end
@@ -99,8 +109,12 @@ function eval_q_derivative(control::FortranBSplineControl, t::Real, pcof::Abstra
     left = min(left, control.N_knots-1)
     offset = div(control.N_coeff, 2)
 
+    println("left = $left")
+
     val = 0.0
     for i in 0:control.bspline_order-1
+        println("pcof[offset+left+i] = $(pcof[offset+left+i])")
+        println("control.output_array[1+i,1+order] = $(control.output_array[1+i,1+order])")
         val += pcof[offset+left+i] * control.output_array[1+i,1+order]
     end
     val /= control.tf ^ order
