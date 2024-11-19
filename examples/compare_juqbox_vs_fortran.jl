@@ -17,13 +17,17 @@ order = degree + 1
 N_knots = D1 + 2 - order
 fortran_control = FortranBSplineControl(degree, tf, N_knots)
 
-@assert juqbox_control.N_coeff == fortran_control.N_coeff
-N_coeff = juqbox_control.N_coeff
-pcof = rand(MersenneTwister(0), N_coeff)
-pcof = repeat(pcof, 2)
+package_bspline = GeneralBSplineControl(degree, N_knots, tf)
 
-controls = [juqbox_control, fortran_control]
-QuantumGateDesign.plot_controls(controls, pcof, derivative_orders=0:3)
+@assert juqbox_control.N_coeff == fortran_control.N_coeff == package_bspline.N_coeff
+N_coeff = juqbox_control.N_coeff
+#pcof = rand(MersenneTwister(0), N_coeff)
+pcof = ones(N_coeff)
+pcof[end] = pcof[1] = 0
+pcof = repeat(pcof, 3)
+
+controls = [juqbox_control, fortran_control, package_bspline]
+QuantumGateDesign.plot_controls(controls, pcof, derivative_orders=0:3, control_indices=(2,3))
 
 # Results seem the same, except that the juqbox version differs a little at the
 # endpoints (and the number of knots there might be different)
