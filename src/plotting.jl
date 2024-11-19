@@ -204,3 +204,26 @@ function plot_gradient_agreement(prob, controls, target;
 
     return pl, errors
 end
+
+"""
+"""
+function plot_control_basis_functions(control::AbstractControl)
+    pcof = zeros(control.N_coeff)
+    t_range = LinRange(0.0, control.tf, 1_001)
+
+    # Only do basis functions for "p", not "q"
+    local_N_coeff = div(control.N_coeff, 2)
+
+    control_vals = zeros(length(t_range), local_N_coeff)
+
+    for i in 1:local_N_coeff
+        pcof .= 0
+        pcof[i] = 1
+        for (k, t) in enumerate(t_range)
+            control_vals[k,i] = eval_p_derivative(control, t, pcof, 0)
+        end
+    end
+
+    pl = Plots.plot(t_range, control_vals, label="")
+    return pl
+end
