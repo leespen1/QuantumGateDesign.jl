@@ -17,36 +17,35 @@ struct FortranBSplineControl <: AbstractControl
     N_coeff::Int64
     tf::Float64
     N_knots::Int64
+    N_distinct_knots::Int64
     degree::Int64
     bspline_order::Int64
     knot_vector::Vector{Float64}
     work_array::Matrix{Float64}
     output_array::Matrix{Float64}
-    function FortranBSplineControl(degree::Integer, tf::Real, N_knots::Integer)
+    function FortranBSplineControl(degree::Integer, tf::Real, N_distinct_knots::Integer)
         degree = convert(Int64, degree)
         tf = convert(Float64, tf)
-        N_knots = convert(Int64, N_knots)
+        N_distinct_knots = convert(Int64, N_distinct_knots)
 
-        ##= Original version
         order = degree+1
-        N_basis_functions = N_knots + order - 2 #(N_nonrepeating_knots + (order-1) + (order-1) - order)
+        N_knots = N_distinct_knots + 2*(order-1)
+        N_basis_functions = N_knots - order
         N_coeff = 2*N_basis_functions
 
-        # Make the knots on the interval [0,1], then scale the inputs t when evaluating
-        knot_vector = Vector(LinRange(0, 1, N_knots))
         work_array = zeros(order, order)
         output_array = zeros(order, 20) # just make it large enough, see if that works
 
-        #= Trying to do repeating knot vecotr, I think that might be the solution
         order = degree+1
-        # I will treat N_knots as number of intervals, i.e. D1 in Juqbox
-        knot_vector = Vector(LinRange(0, 1, N_knots))
-        =#
+        knot_vector = Vector(LinRange(0, 1, N_distinct_knots))
+        # First and last knots should be repeated 'order' times
+        knot_vector = vcat(
+            repeat([knot_vector[1]], order-1),
+            knot_vector,
+            repeat([knot_vector[end]], order-1)
+        )
 
-        
-
-
-        new(N_coeff, tf, N_knots, degree, order, knot_vector, work_array, output_array)
+        new(N_coeff, tf, N_knots, N_distinct_knots, degree, order, knot_vector, work_array, output_array)
     end
 end
 
@@ -62,15 +61,12 @@ function eval_p_derivative(control::FortranBSplineControl, t::Real, pcof::Abstra
     t_scaled::Float64 = t / control.tf
     bsplvd!(control, t_scaled, order+1)
     
-    # Get the index of the knot at the left of this interval
-    # (which is also the index of the leftmost basis function with support in
-    # this interval)
-    left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
-    left = min(left, control.N_knots-1)
+    pcof_offset = floor(Int64, t_scaled*(control.N_distinct_knots-1) + 1)
+    pcof_offset = min(pcof_offset, control.N_distinct_knots-1)
 
     val = 0.0
     for i in 0:control.bspline_order-1
-        val += pcof[left+i] * control.output_array[1+i,1+order]
+        val += pcof[pcof_offset+i] * control.output_array[1+i,1+order]
     end
     val /= control.tf ^ order
     return val
@@ -85,13 +81,13 @@ function fill_p_vec!(
     t_scaled::Float64 = t / control.tf
     bsplvd!(control, t_scaled, nderiv)
 
-    left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
-    left = min(left, control.N_knots-1)
+    pcof_offset = floor(Int64, t_scaled*(control.N_distinct_knots-1) + 1)
+    pcof_offset = min(pcof_offset, control.N_distinct_knots-1)
 
     for derivative_order in 0:nderiv-1
         val = 0.0
         for i in 0:control.bspline_order-1
-            val += pcof[left+i] * control.output_array[1+i,1+derivative_order]
+            val += pcof[pcof_offset+i] * control.output_array[1+i,1+derivative_order]
         end
         vals_vec[1+derivative_order] = val / control.tf ^ derivative_order
     end
@@ -102,20 +98,13 @@ function eval_q_derivative(control::FortranBSplineControl, t::Real, pcof::Abstra
     t_scaled::Float64 = t / control.tf
     bsplvd!(control, t_scaled, order+1)
     
-    # Get the index of the knot at the left of this interval
-    # (which is also the index of the leftmost basis function with support in
-    # this interval)
-    left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
-    left = min(left, control.N_knots-1)
-    offset = div(control.N_coeff, 2)
-
-    println("left = $left")
+    pcof_offset = floor(Int64, t_scaled*(control.N_distinct_knots-1) + 1)
+    pcof_offset = min(pcof_offset, control.N_distinct_knots-1)
+    pcof_offset += div(control.N_coeff, 2)
 
     val = 0.0
     for i in 0:control.bspline_order-1
-        println("pcof[offset+left+i] = $(pcof[offset+left+i])")
-        println("control.output_array[1+i,1+order] = $(control.output_array[1+i,1+order])")
-        val += pcof[offset+left+i] * control.output_array[1+i,1+order]
+        val += pcof[pcof_offset+i] * control.output_array[1+i,1+order]
     end
     val /= control.tf ^ order
     return val
@@ -130,14 +119,14 @@ function fill_q_vec!(
     t_scaled::Float64 = t / control.tf
     bsplvd!(control, t_scaled, nderiv)
 
-    left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
-    left = min(left, control.N_knots-1)
-    offset = div(control.N_coeff, 2)
+    pcof_offset = floor(Int64, t_scaled*(control.N_distinct_knots-1) + 1)
+    pcof_offset = min(pcof_offset, control.N_distinct_knots-1)
+    pcof_offset += div(control.N_coeff, 2)
 
     for derivative_order in 0:nderiv-1
         val = 0.0
         for i in 0:control.bspline_order-1
-            val += pcof[offset+left+i] * control.output_array[1+i,1+derivative_order]
+            val += pcof[pcof_offset+i] * control.output_array[1+i,1+derivative_order]
         end
         vals_vec[1+derivative_order] = val / control.tf ^ derivative_order
     end
@@ -152,13 +141,13 @@ function eval_grad_p_derivative!(
     t_scaled::Float64 = t / control.tf
     bsplvd!(control, t_scaled, order+1)
 
-    left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
-    left = min(left, control.N_knots-1)
+    pcof_offset = floor(Int64, t_scaled*(control.N_distinct_knots-1) + 1)
+    pcof_offset = min(pcof_offset, control.N_distinct_knots-1)
 
     # Control is linear in the pcof coefficients
     grad .= 0
     for i in 0:control.bspline_order-1
-        grad[left+i] = control.output_array[1+i,1+order] / control.tf ^ derivative_order
+        grad[pcof_offset+i] = control.output_array[1+i,1+order] / control.tf ^ derivative_order
     end
 
     return grad
@@ -171,15 +160,14 @@ function eval_grad_q_derivative!(
     t_scaled::Float64 = t / control.tf
     bsplvd!(control, t_scaled, order+1)
 
-    left = floor(Int64, t_scaled*(control.N_knots-1) + 1)
-    left = min(left, control.N_knots-1)
-
-    offset = div(control.N_coeff, 2)
+    pcof_offset = floor(Int64, t_scaled*(control.N_distinct_knots-1) + 1)
+    pcof_offset = min(pcof_offset, control.N_distinct_knots-1)
+    pcof_offset += div(control.N_coeff, 2)
 
     # Control is linear in the pcof coefficients
     grad .= 0
     for i in 0:control.bspline_order-1
-        grad[offset+left+i] = control.output_array[1+i,1+order] / control.tf ^ derivative_order
+        grad[pcof_offset+i] = control.output_array[1+i,1+order] / control.tf ^ derivative_order
     end
 
     return grad
@@ -264,9 +252,12 @@ end
 
 function bsplvd!(control::FortranBSplineControl, x::Float64, nderiv::Int64)
     # It is assumed that x ∈ [0,1]
-    left::Int64 = floor(Int64, x*(control.N_knots-1) + 1)
-    left = min(left, control.N_knots-1)
+    #left::Int64 = floor(Int64, x*(control.N_distinct_knots-1) + 1)
+    #left = min(left, control.N_distinct_knots-1)
+    left = floor(Int64, x*(control.N_distinct_knots-1) + control.bspline_order)
+    left = min(left, control.N_knots-control.bspline_order)
+    #@assert control.knot_vector[left] < control.knot_vector[left+1]
 
-    bsplvd!(control.knot_vector, control.bspline_order, x, left, control.work_array, 
-           control.output_array, nderiv)
+    bsplvd!(control.knot_vector, control.bspline_order, x, left,
+            control.work_array, control.output_array, nderiv)
 end
