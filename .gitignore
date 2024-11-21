@@ -3,3 +3,5 @@ Manifest.toml
 *.mem
 *.jld2
 *.tex
+*.so
+*.o
