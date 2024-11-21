@@ -2,15 +2,73 @@ import Ipopt
 
 mutable struct OptimizationTracker
     last_pcof::Vector{Float64}
+    last_grad_pcof::Vector{Float64}
     last_objective::Float64
     last_infidelity::Float64
     last_guard_penalty::Float64
     last_ridge_penalty::Float64
     adjoint_calculated::Bool # Whether the adjoint has been calculated (if not, only forward evolution has been calculated)
-    function ObjectiveTracking(N_params::Integer)
+    function OptimizationTracker(N_params::Integer)
         initial_pcof = fill(NaN, N_params)
-        new(initial_pcof, NaN, NaN, NaN, NaN, true)
+        initial_grad_pcof = fill(NaN, N_params)
+        new(initial_pcof, initial_grad_pcof, NaN, NaN, NaN, NaN, true)
     end
+end
+
+struct OptimizationHistory
+    iter_count::Vector{Int64}
+    ipopt_obj_value::Vector{Float64}
+    wall_time::Vector{Float64}
+    pcof::Vector{Vector{Float64}}
+    analytic_obj_value::Vector{Float64}
+    infidelity::Vector{Float64}
+    guard_penalty::Vector{Float64}
+    ridge_penalty::Vector{Float64}
+end
+function OptimizationHistory()
+    return OptimizationHistory(
+        Int64[],
+        Float64[],
+        Float64[],
+        Vector{Float64}[],
+        Float64[],
+        Float64[],
+        Float64[],
+        Float64[],
+    )
+end
+
+"""
+Write contents of an OptimizationHistory object to a jld2 file.
+"""
+function write(obj::OptimizationHistory, filename)
+    JLD2.jldopen(filename, "w") do file
+        file["iter_count"] = obj.iter_count
+        file["ipopt_obj_value"] = obj.ipopt_obj_value
+        file["wall_time"] = obj.wall_time
+        file["pcof"] = obj.pcof
+        file["analytic_obj_value"] = obj.analytic_obj_value
+        file["infidelity"] = obj.infidelity
+        file["guard_penalty"] = obj.guard_penalty
+        file["ridge_penalty"] = obj.ridge_penalty
+    end
+end
+
+"""
+Read contents of a jld2 file into an OptimizationHistory object.
+"""
+function read_optimization_history(filename)
+    jld2_dict = JLD2.load(filename)
+    return OptimizationHistory(
+        jld2_dict["iter_count"],
+        jld2_dict["ipopt_obj_value"],
+        jld2_dict["wall_time"],
+        jld2_dict["pcof"],
+        jld2_dict["analytic_obj_value"],
+        jld2_dict["infidelity"],
+        jld2_dict["guard_penalty"],
+        jld2_dict["ridge_penalty"],
+    )
 end
 
 # Wrappers for easy parameter adding
@@ -18,7 +76,7 @@ function genericAddOption(ipopt_prob, option, value::String)
     Ipopt.AddIpoptStrOption(ipopt_prob, option, value)
 end
 
-function genericAddOption(ipopt_prob, option, value::Int)
+function genericAddOption(ipopt_prob, option, value::Integer)
     Ipopt.AddIpoptIntOption(ipopt_prob, option, value)
 end
 
@@ -103,17 +161,29 @@ function optimize_gate(
         maxIter=50,
         print_level=5, # Default is 5, goes from 0 to 12
         ridge_penalty_strength=1e-2,
-        max_cpu_time = 60.0*60*24 # 24 hours
+        max_cpu_time = 60.0*60*24, # 24 hours
+        filename=missing,
     ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
-    N_coeff = 1
-    optimization_tracker = OptimizationTracker(1)
+    N_coeff = get_number_of_control_parameters(controls)
+    @assert length(pcof_init) == N_coeff
+    optimization_tracker = OptimizationTracker(N_coeff)
+    optimization_history = OptimizationHistory()
 
-    pcof_history = []
-    pcof_grad_history = []
-    full_objective_history = []
-    iter_objective_history = []
-    iter_cpu_time_history = []
+    # Set up JLD2 file
+    if !ismissing(filename)
+        JLD2.jldopen(filename, "w") do file
+            file["iter_count"] = Int64[]
+            file["ipopt_obj_value"] = Float64[]
+            file["wall_time"] = Float64[]
+            file["pcof"] = Vector{Float64}[]
+            file["analytic_obj_value"] = Float64[]
+            file["infidelity"] = Float64[]
+            file["guard_penalty"] = Float64[]
+            file["ridge_penalty"] = Float64[]
+        end
+    end
+
 
     N_derivatives = div(order, 2)
     state_history =  zeros(
@@ -125,8 +195,7 @@ function optimize_gate(
 
     target_real_valued = vcat(real(target), imag(target))
 
-
-
+    initial_time = NaN # Will overwrite this just before starting the actual optimization
 
     # Right now I am unnecessarily doing a full forward evolution to compute the
     # infidelity, when this should be done already in the gradient computation.
@@ -135,7 +204,8 @@ function optimize_gate(
         # Check if control vector differs from old one before performing computation (maybe use relative error here?)
         # My assumption is that we may compute the objective function many times without computing the gradient,
         # and that whenever we compute the gradient we will also want the objective function
-        if LinearAlgebra.norm(pcof - optimization_tracker.last_pcof) > 1e-15
+        pcof_difference = LinearAlgebra.norm(pcof - optimization_tracker.last_pcof)
+        if (pcof_difference > 1e-15) || !isfinite(pcof_difference)
             eval_forward!(state_history, schro_prob, controls, pcof, order=order)
             QN = @view state_history[:,1,end,:]
             # Infidelity Term
@@ -174,16 +244,48 @@ function optimize_gate(
         # Could make this more efficient by preallocating memory for the lambda history and gradient,
         # and also by reusing the forward evolution state from the objective function
         # DO BOTH THESE THINGS!
-        if (LinearAlgebra.norm(pcof - optimization_tracker.last_pcof) > 1e-15) || !optimization_tracker.adjoint_calculated
-            grad_f .= discrete_adjoint(schro_prob, controls, pcof, target, order=order)
+        pcof_difference = LinearAlgebra.norm(pcof - optimization_tracker.last_pcof)
+        if (pcof_difference > 1e-15) || !isfinite(pcof_difference)  || !optimization_tracker.adjoint_calculated
 
+            optimization_tracker.last_grad_pcof .= discrete_adjoint(
+                schro_prob, controls, pcof, target, order=order
+            )
             # Ridge Regression Penalty (not included in main discrete adjoint, not necessary since nothing depends on the states)
             N_coeff = length(pcof)
-            @. grad_f += 2.0*ridge_penalty_strength*pcof / N_coeff
+            @. optimization_tracker.last_grad_pcof += 2.0*ridge_penalty_strength*pcof / N_coeff
+
             optimization_tracker.last_pcof .= pcof
             optimization_tracker.adjoint_calculated = true
+
+            #
+            # Also calculate objective function, just because it's not expensive, it helps with eval_f
+            #
+            QN = @view state_history[:,1,end,:]
+            # Infidelity Term
+            optimization_tracker.last_infidelity = infidelity_real(
+                QN, target_real_valued, schro_prob.N_ess_levels
+            ) 
+
+            # Guard Penalty Term
+            dt = schro_prob.tf / schro_prob.nsteps
+
+            optimization_tracker.last_guard_penalty = guard_penalty_real(
+                state_history, dt, schro_prob.tf, schro_prob.guard_subspace_projector
+            )
+
+            # Ridge/L2 Penalty Term
+            ridge_pen_val = dot(pcof, pcof)*ridge_penalty_strength / length(pcof)
+            optimization_tracker.last_ridge_penalty = ridge_pen_val
+
+            # Add all objective terms
+            optimization_tracker.last_objective = sum((
+                optimization_tracker.last_infidelity,
+                optimization_tracker.last_guard_penalty,
+                optimization_tracker.last_ridge_penalty,
+            ))
         end
 
+        grad_f .= optimization_tracker.last_grad_pcof
         return nothing
     end
 
@@ -200,32 +302,40 @@ function optimize_gate(
         alpha_pr,
         ls_trials
     )
-
+        elapsed_time = time() - initial_time
         # Open file in append mode and update arrays
-        jldopen("optimization_log.jld2", "a+") do file
-            # Create entries if they don't already exist
-            if !haskey(file, "iterations")
-                file["iter_count"] = Int64[]
-                file["ipopt_obj_value"] = Float64[]
-                file["wall_time"] = Float64[]
-                file["pcof"] = Vector{Float64}[]
-                file["analytic_obj_value"] = Float64[]
-                file["infidelity"] = Float64[]
-                file["guard_penalty"] = Float64[]
-                file["ridge_penalty"] = Float64[]
+        if !ismissing(filename)
+            JLD2.jldopen(filename, "a+") do file
+                # Push new values to each entry
+                push!(file["iter_count"], iter_count)
+                push!(file["ipopt_obj_value"], obj_value)
+                push!(file["wall_time"], elapsed_time)
+                push!(file["pcof"], optimization_tracker.last_pcof)
+                push!(file["analytic_obj_value"], optimization_tracker.last_objective)
+                push!(file["infidelity"], optimization_tracker.last_infidelity)
+                push!(file["guard_penalty"], optimization_tracker.last_guard_penalty)
+                push!(file["ridge_penalty"], optimization_tracker.last_ridge_penalty)
             end
-            # Push new values to each entry
-            push!(file["iter_count"], iter_count)
-            push!(file["ipopt_obj_value"], obj_value)
-            push!(file["wall_time"], time())
-            push!(file["pcof"], optimization_tracker.last_pcof)
-            push!(file["analytic_obj_value"], optimization_tracker.last_objective)
-            push!(file["infidelity"], optimization_tracker.last_infidelity)
-            push!(file["guard_penalty"], optimization_tracker.last_guard_penalty)
-            push!(file["ridge_penalty"], optimization_tracker.last_guard_penalty)
+        end
+        push!(optimization_history.iter_count, iter_count)
+        push!(optimization_history.ipopt_obj_value, obj_value)
+        push!(optimization_history.wall_time, elapsed_time)
+        push!(optimization_history.pcof, optimization_tracker.last_pcof)
+        push!(optimization_history.analytic_obj_value, optimization_tracker.last_objective)
+        push!(optimization_history.infidelity, optimization_tracker.last_infidelity)
+        push!(optimization_history.guard_penalty, optimization_tracker.last_guard_penalty)
+        push!(optimization_history.ridge_penalty, optimization_tracker.last_ridge_penalty)
+
+
+        infidelity = optimization_tracker.last_infidelity
+        if (infidelity < 0) || (infidelity > 1)
+            @warn "Infidelity is outside range the [0,1]. This may indicate that the solution is inaccurate, and a smaller stepsize is needed."
         end
 
-        return true  # continue the optimization (could have an infidelity cutoff here)
+        if obj_value < 1e-7
+            return false # Stop the optimization
+        end
+        return true # continue the optimization
     end
 
     N_parameters = length(pcof_init)
@@ -306,23 +416,11 @@ function optimize_gate(
 
 
     ipopt_prob.x .= pcof_init
+
+    initial_time = time()
+
     solvestat = Ipopt.IpoptSolve(ipopt_prob)
-    # solvestat I think is stored in ipopt_prob as 'status'
-    
-    # Go from system time since epoch to system time since iteration 0.
-    @. iter_cpu_time_history -= iter_cpu_time_history[1]
 
-    return_dict = OrderedCollections.OrderedDict(
-        "ipopt_prob" => ipopt_prob,
-        "final_objective_value" => ipopt_prob.obj_val,
-        "optimal_pcof" => copy(ipopt_prob.x),
-        "full_objective_history" => full_objective_history,
-        "pcof_history" => pcof_history,
-        "pcof_grad_history" => pcof_grad_history,
-        "iter_objective_history" => iter_objective_history,
-        "iter_cpu_time_history" => iter_cpu_time_history,
-    )
-
-    return return_dict
+    return optimization_history
 end
 
