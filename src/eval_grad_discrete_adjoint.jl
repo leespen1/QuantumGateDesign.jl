@@ -97,9 +97,6 @@ function discrete_adjoint(
 
     forcing = compute_guard_forcing(prob, history)
 
-    R = target[:,:] # Copy target, converting to matrix if vector
-    T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
-
     final_state = history[:,1,end,:]
 
     terminal_condition = compute_terminal_condition(
