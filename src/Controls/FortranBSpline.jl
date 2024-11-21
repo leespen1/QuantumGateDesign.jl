@@ -23,7 +23,7 @@ struct FortranBSplineControl <: AbstractControl
     knot_vector::Vector{Float64}
     work_array::Matrix{Float64}
     output_array::Matrix{Float64}
-    function FortranBSplineControl(degree::Integer, tf::Real, N_distinct_knots::Integer)
+    function FortranBSplineControl(degree::Integer, N_distinct_knots::Integer, tf::Real)
         degree = convert(Int64, degree)
         tf = convert(Float64, tf)
         N_distinct_knots = convert(Int64, N_distinct_knots)
@@ -147,7 +147,7 @@ function eval_grad_p_derivative!(
     # Control is linear in the pcof coefficients
     grad .= 0
     for i in 0:control.bspline_order-1
-        grad[pcof_offset+i] = control.output_array[1+i,1+order] / control.tf ^ derivative_order
+        grad[pcof_offset+i] = control.output_array[1+i,1+order] / control.tf ^ order
     end
 
     return grad
@@ -167,7 +167,7 @@ function eval_grad_q_derivative!(
     # Control is linear in the pcof coefficients
     grad .= 0
     for i in 0:control.bspline_order-1
-        grad[pcof_offset+i] = control.output_array[1+i,1+order] / control.tf ^ derivative_order
+        grad[pcof_offset+i] = control.output_array[1+i,1+order] / control.tf ^ order
     end
 
     return grad
