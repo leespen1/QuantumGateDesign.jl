@@ -1,5 +1,18 @@
 import Ipopt
 
+mutable struct OptimizationTracker
+    last_pcof::Vector{Float64}
+    last_objective::Float64
+    last_infidelity::Float64
+    last_guard_penalty::Float64
+    last_ridge_penalty::Float64
+    adjoint_calculated::Bool # Whether the adjoint has been calculated (if not, only forward evolution has been calculated)
+    function ObjectiveTracking(N_params::Integer)
+        initial_pcof = fill(NaN, N_params)
+        new(initial_pcof, NaN, NaN, NaN, NaN, true)
+    end
+end
+
 # Wrappers for easy parameter adding
 function genericAddOption(ipopt_prob, option, value::String)
     Ipopt.AddIpoptStrOption(ipopt_prob, option, value)
@@ -93,6 +106,8 @@ function optimize_gate(
         max_cpu_time = 60.0*60*24 # 24 hours
     ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
+    N_coeff = 1
+    optimization_tracker = OptimizationTracker(1)
 
     pcof_history = []
     pcof_grad_history = []
@@ -116,35 +131,60 @@ function optimize_gate(
     # Right now I am unnecessarily doing a full forward evolution to compute the
     # infidelity, when this should be done already in the gradient computation.
     function eval_f(pcof::Vector{Float64})
-        eval_forward!(state_history, schro_prob, controls, pcof, order=order)
 
-        # Infidelity Term
-        QN = @view state_history[:,1,end,:]
-        infidelity_val = infidelity_real(QN, target_real_valued, schro_prob.N_ess_levels) 
+        # Check if control vector differs from old one before performing computation (maybe use relative error here?)
+        # My assumption is that we may compute the objective function many times without computing the gradient,
+        # and that whenever we compute the gradient we will also want the objective function
+        if LinearAlgebra.norm(pcof - optimization_tracker.last_pcof) > 1e-15
+            eval_forward!(state_history, schro_prob, controls, pcof, order=order)
+            QN = @view state_history[:,1,end,:]
+            # Infidelity Term
+            optimization_tracker.last_infidelity = infidelity_real(
+                QN, target_real_valued, schro_prob.N_ess_levels
+            ) 
 
-        # Guard Penalty Term
-        dt = schro_prob.tf / schro_prob.nsteps
-        guard_pen_val = guard_penalty_real(state_history, dt, schro_prob.tf, schro_prob.guard_subspace_projector)
+            # Guard Penalty Term
+            dt = schro_prob.tf / schro_prob.nsteps
 
-        # Ridge/L2 Penalty Term
-        ridge_pen_val = dot(pcof, pcof)*ridge_penalty_strength / length(pcof)
-        
-        objective_val = infidelity_val + guard_pen_val + ridge_pen_val
+            optimization_tracker.last_guard_penalty = guard_penalty_real(
+                state_history, dt, schro_prob.tf, schro_prob.guard_subspace_projector
+            )
 
-        push!(full_objective_history, objective_val)
+            # Ridge/L2 Penalty Term
+            ridge_pen_val = dot(pcof, pcof)*ridge_penalty_strength / length(pcof)
+            optimization_tracker.last_ridge_penalty = ridge_pen_val
 
-        return objective_val
+            # Add all objective terms
+            optimization_tracker.last_objective = sum((
+                optimization_tracker.last_infidelity,
+                optimization_tracker.last_guard_penalty,
+                optimization_tracker.last_ridge_penalty,
+            ))
+            optimization_tracker.last_pcof .= pcof
+            optimization_tracker.adjoint_calculated = false
+        end
+
+        return optimization_tracker.last_objective
     end
 
+    
     function eval_grad_f!(pcof::Vector{Float64}, grad_f::Vector{Float64})
-        grad_f .= discrete_adjoint(schro_prob, controls, pcof, target, order=order)
+        
+        # Only update gradient if pcof has changed, or if pcof is the same but last time we only computed the objective function
+        # Could make this more efficient by preallocating memory for the lambda history and gradient,
+        # and also by reusing the forward evolution state from the objective function
+        # DO BOTH THESE THINGS!
+        if (LinearAlgebra.norm(pcof - optimization_tracker.last_pcof) > 1e-15) || !optimization_tracker.adjoint_calculated
+            grad_f .= discrete_adjoint(schro_prob, controls, pcof, target, order=order)
 
-        # Ridge Regression Penalty
-        N_coeff = length(pcof)
-        @. grad_f += 2.0*ridge_penalty_strength*pcof / N_coeff
+            # Ridge Regression Penalty (not included in main discrete adjoint, not necessary since nothing depends on the states)
+            N_coeff = length(pcof)
+            @. grad_f += 2.0*ridge_penalty_strength*pcof / N_coeff
+            optimization_tracker.last_pcof .= pcof
+            optimization_tracker.adjoint_calculated = true
+        end
 
-        push!(pcof_history, copy(pcof))
-        push!(pcof_grad_history, copy(grad_f))
+        return nothing
     end
 
     function my_callback(
@@ -161,9 +201,31 @@ function optimize_gate(
         ls_trials
     )
 
-        push!(iter_objective_history, obj_value)
-        push!(iter_cpu_time_history, time())
-        return true  # continue the optimization
+        # Open file in append mode and update arrays
+        jldopen("optimization_log.jld2", "a+") do file
+            # Create entries if they don't already exist
+            if !haskey(file, "iterations")
+                file["iter_count"] = Int64[]
+                file["ipopt_obj_value"] = Float64[]
+                file["wall_time"] = Float64[]
+                file["pcof"] = Vector{Float64}[]
+                file["analytic_obj_value"] = Float64[]
+                file["infidelity"] = Float64[]
+                file["guard_penalty"] = Float64[]
+                file["ridge_penalty"] = Float64[]
+            end
+            # Push new values to each entry
+            push!(file["iter_count"], iter_count)
+            push!(file["ipopt_obj_value"], obj_value)
+            push!(file["wall_time"], time())
+            push!(file["pcof"], optimization_tracker.last_pcof)
+            push!(file["analytic_obj_value"], optimization_tracker.last_objective)
+            push!(file["infidelity"], optimization_tracker.last_infidelity)
+            push!(file["guard_penalty"], optimization_tracker.last_guard_penalty)
+            push!(file["ridge_penalty"], optimization_tracker.last_guard_penalty)
+        end
+
+        return true  # continue the optimization (could have an infidelity cutoff here)
     end
 
     N_parameters = length(pcof_init)
