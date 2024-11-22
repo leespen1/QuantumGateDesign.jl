@@ -25,6 +25,30 @@ struct OptimizationHistory
     guard_penalty::Vector{Float64}
     ridge_penalty::Vector{Float64}
 end
+
+function Base.length(obj::OptimizationHistory)
+    return length(obj.iter_count)
+end
+
+function Base.show(io::IO, ::MIME"text/plain", obj::OptimizationHistory)
+    println(io, typeof(obj))
+    println(io, length(obj), " iterations performed.")
+
+    if (length(obj) > 0)
+        println(io, obj.wall_time[end], " seconds elapsed.")
+
+        min_obj_val_index = argmin(obj.ipopt_obj_value)
+        min_obj_val = obj.ipopt_obj_value[min_obj_val_index]
+        println(io, "Minimum objective function was ", min_obj_val, ", at iteration ", min_obj_val_index, ".")
+
+        min_infidelity_index = argmin(obj.infidelity)
+        min_infidelity = obj.infidelity[min_infidelity_index]
+        println(io, "Minimum infidelity was ", min_infidelity, ", at iteration ", min_infidelity_index, ".")
+    end
+
+    return nothing
+end
+
 function OptimizationHistory()
     return OptimizationHistory(
         Int64[],
@@ -42,7 +66,7 @@ end
 Write contents of an OptimizationHistory object to a jld2 file.
 """
 function write(obj::OptimizationHistory, filename)
-    JLD2.jldopen(filename, "w") do file
+    JLD2.jldopen(filename, "a+") do file
         file["iter_count"] = obj.iter_count
         file["ipopt_obj_value"] = obj.ipopt_obj_value
         file["wall_time"] = obj.wall_time
@@ -170,19 +194,6 @@ function optimize_gate(
     optimization_tracker = OptimizationTracker(N_coeff)
     optimization_history = OptimizationHistory()
 
-    # Set up JLD2 file
-    if !ismissing(filename)
-        JLD2.jldopen(filename, "w") do file
-            file["iter_count"] = Int64[]
-            file["ipopt_obj_value"] = Float64[]
-            file["wall_time"] = Float64[]
-            file["pcof"] = Vector{Float64}[]
-            file["analytic_obj_value"] = Float64[]
-            file["infidelity"] = Float64[]
-            file["guard_penalty"] = Float64[]
-            file["ridge_penalty"] = Float64[]
-        end
-    end
 
 
     N_derivatives = div(order, 2)
@@ -196,6 +207,27 @@ function optimize_gate(
     target_real_valued = vcat(real(target), imag(target))
 
     initial_time = NaN # Will overwrite this just before starting the actual optimization
+
+    # Set up JLD2 file
+    function update_jld2()
+        if !ismissing(filename)
+            JLD2.jldopen(filename, "w") do file
+                # Also save SchrodingerProb, Controls, and Target, Optimization Parameters (one-time things that won't be updated)
+                file["Setup/schrodinger_prob"] = schro_prob
+                file["Setup/controls"] = controls
+                file["Setup/target"] = target
+                file["Setup/ridge_penalty_strength"] = ridge_penalty_strength
+                file["Setup/max_cpu_time"] = max_cpu_time
+                file["Setup/pcof_init"] = pcof_init
+                file["Setup/pcof_L"] = pcof_L
+                file["Setup/pcof_U"] = pcof_U
+                file["Setup/order"] = order
+            end
+            write(optimization_history, filename)
+        end
+    end
+
+    update_jld2()
 
     # Right now I am unnecessarily doing a full forward evolution to compute the
     # infidelity, when this should be done already in the gradient computation.
@@ -304,19 +336,6 @@ function optimize_gate(
     )
         elapsed_time = time() - initial_time
         # Open file in append mode and update arrays
-        if !ismissing(filename)
-            JLD2.jldopen(filename, "a+") do file
-                # Push new values to each entry
-                push!(file["iter_count"], iter_count)
-                push!(file["ipopt_obj_value"], obj_value)
-                push!(file["wall_time"], elapsed_time)
-                push!(file["pcof"], optimization_tracker.last_pcof)
-                push!(file["analytic_obj_value"], optimization_tracker.last_objective)
-                push!(file["infidelity"], optimization_tracker.last_infidelity)
-                push!(file["guard_penalty"], optimization_tracker.last_guard_penalty)
-                push!(file["ridge_penalty"], optimization_tracker.last_ridge_penalty)
-            end
-        end
         push!(optimization_history.iter_count, iter_count)
         push!(optimization_history.ipopt_obj_value, obj_value)
         push!(optimization_history.wall_time, elapsed_time)
@@ -325,6 +344,8 @@ function optimize_gate(
         push!(optimization_history.infidelity, optimization_tracker.last_infidelity)
         push!(optimization_history.guard_penalty, optimization_tracker.last_guard_penalty)
         push!(optimization_history.ridge_penalty, optimization_tracker.last_ridge_penalty)
+
+        update_jld2()
 
 
         infidelity = optimization_tracker.last_infidelity
