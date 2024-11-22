@@ -1,5 +1,3 @@
-import Ipopt
-
 mutable struct OptimizationTracker
     last_pcof::Vector{Float64}
     last_grad_pcof::Vector{Float64}
