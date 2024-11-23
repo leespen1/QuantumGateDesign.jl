@@ -2,17 +2,19 @@ mutable struct OptimizationTracker
     last_pcof::Vector{Float64}
     last_grad_pcof::Vector{Float64}
     last_forward_evolution_pcof::Vector{Float64}
+    last_discrete_adjoint_pcof::Vector{Float64}
     last_objective::Float64
     last_infidelity::Float64
     last_guard_penalty::Float64
     last_ridge_penalty::Float64
-    adjoint_calculated::Bool # Whether the adjoint has been calculated (if not, only forward evolution has been calculated)
     function OptimizationTracker(N_params::Integer)
         initial_pcof = fill(NaN, N_params)
         initial_grad_pcof = fill(NaN, N_params)
         initial_forward_evolution_pcof = fill(NaN, N_params)
+        initial_discrete_adjoint_pcof = fill(NaN, N_params)
 
-        new(initial_pcof, initial_grad_pcof, initial_forward_evolution_pcof, NaN, NaN, NaN, NaN, true)
+        new(initial_pcof, initial_grad_pcof, initial_forward_evolution_pcof, 
+            initial_discrete_adjoint_pcof, NaN, NaN, NaN, NaN)
     end
 end
 
@@ -21,10 +23,25 @@ struct OptimizationHistory
     ipopt_obj_value::Vector{Float64}
     wall_time::Vector{Float64}
     pcof::Vector{Vector{Float64}}
+    grad_pcof::Vector{Vector{Float64}}
     analytic_obj_value::Vector{Float64}
     infidelity::Vector{Float64}
     guard_penalty::Vector{Float64}
     ridge_penalty::Vector{Float64}
+end
+
+function OptimizationHistory()
+    return OptimizationHistory(
+        Int64[],
+        Float64[],
+        Float64[],
+        Vector{Float64}[],
+        Vector{Float64}[],
+        Float64[],
+        Float64[],
+        Float64[],
+        Float64[],
+    )
 end
 
 function Base.length(obj::OptimizationHistory)
@@ -50,18 +67,6 @@ function Base.show(io::IO, ::MIME"text/plain", obj::OptimizationHistory)
     return nothing
 end
 
-function OptimizationHistory()
-    return OptimizationHistory(
-        Int64[],
-        Float64[],
-        Float64[],
-        Vector{Float64}[],
-        Float64[],
-        Float64[],
-        Float64[],
-        Float64[],
-    )
-end
 
 """
 Write contents of an OptimizationHistory object to a jld2 file.
@@ -72,6 +77,7 @@ function write(obj::OptimizationHistory, filename)
         file["ipopt_obj_value"] = obj.ipopt_obj_value
         file["wall_time"] = obj.wall_time
         file["pcof"] = obj.pcof
+        file["grad_pcof"] = obj.grad_pcof
         file["analytic_obj_value"] = obj.analytic_obj_value
         file["infidelity"] = obj.infidelity
         file["guard_penalty"] = obj.guard_penalty
@@ -89,6 +95,7 @@ function read_optimization_history(filename)
         jld2_dict["ipopt_obj_value"],
         jld2_dict["wall_time"],
         jld2_dict["pcof"],
+        jld2_dict["grad_pcof"],
         jld2_dict["analytic_obj_value"],
         jld2_dict["infidelity"],
         jld2_dict["guard_penalty"],
@@ -242,6 +249,10 @@ function optimize_gate(
         #pcof_difference = LinearAlgebra.norm(pcof - optimization_tracker.last_pcof)
         #if (pcof_difference > 1e-15) || !isfinite(pcof_difference)
 
+        # If pcof has changed, need to recalculate objective function
+        # (if it stayed the same but eval_grad_f! was called before eval_f,
+        # don't need to do anything since eval_grad_f! also computes the
+        # objective function)
         if (pcof != optimization_tracker.last_pcof)
             eval_forward!(state_history, schro_prob, controls, pcof, order=order)
             QN = @view state_history[:,1,end,:]
@@ -269,7 +280,6 @@ function optimize_gate(
             ))
             optimization_tracker.last_pcof .= pcof
             optimization_tracker.last_forward_evolution_pcof .= pcof
-            optimization_tracker.adjoint_calculated = false
         end
 
         return optimization_tracker.last_objective
@@ -284,7 +294,7 @@ function optimize_gate(
 
         ## Cover case where pcof changes and we immediate eval_grad_f!, and case
         ## where we run eval_f, don't change pcof, and then run eval_grad_f!
-        if (pcof != optimization_tracker.last_pcof) || !optimization_tracker.adjoint_calculated
+        if (pcof != optimization_tracker.last_discrete_adjoint_pcof)
 
             # If we already ran the objective evaluation, then we can reuse the state history from the forward evolution 
             # (but we may also have run eval_grad_f! for a brand new pcof, so I am being careful of that)
@@ -301,7 +311,7 @@ function optimize_gate(
             @. optimization_tracker.last_grad_pcof += 2.0*ridge_penalty_strength*pcof / N_coeff
 
             optimization_tracker.last_pcof .= pcof
-            optimization_tracker.adjoint_calculated = true
+            optimization_tracker.last_discrete_adjoint_pcof .= pcof
 
             #
             # Also calculate objective function, just because it's not expensive, it helps with eval_f
@@ -354,6 +364,7 @@ function optimize_gate(
         push!(optimization_history.ipopt_obj_value, obj_value)
         push!(optimization_history.wall_time, elapsed_time)
         push!(optimization_history.pcof, optimization_tracker.last_pcof)
+        push!(optimization_history.grad_pcof, optimization_tracker.last_grad_pcof)
         push!(optimization_history.analytic_obj_value, optimization_tracker.last_objective)
         push!(optimization_history.infidelity, optimization_tracker.last_infidelity)
         push!(optimization_history.guard_penalty, optimization_tracker.last_guard_penalty)
