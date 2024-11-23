@@ -114,6 +114,13 @@ function discrete_adjoint!(
         order=2, cost_type=:Infidelity, history_precomputed=false 
     ) where P
 
+    # Set pre-allocated arrays equal to zero (may not be necessary, but being safe)
+    if !history_precomputed
+        history .= 0
+    end
+    lambda_history .= 0
+    adjoint_forcing .= 0
+
 
     N_derivatives = div(order, 2)
     target = complex_to_real(target)
