@@ -85,32 +85,61 @@ function discrete_adjoint(
         controls,
         pcof::AbstractVector{<: Real},
         target::AbstractMatrix{<: Number}; 
-        order=2, cost_type=:Infidelity, return_lambda_history=false,
+        order=2, cost_type=:Infidelity,
     ) where P
-    target = complex_to_real(target)
-
     N_derivatives = div(order, 2)
-
-
-    history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
-    eval_forward!(history, prob, controls, pcof; order=order)
-
-    forcing = compute_guard_forcing(prob, history)
-
-    final_state = history[:,1,end,:]
-
-    terminal_condition = compute_terminal_condition(
-        prob, controls, pcof, target, final_state, order=order, cost_type=cost_type,
-        forcing=forcing[:,end,:]
-    )
-
-    lambda_history = eval_adjoint(
-        prob, controls, pcof, terminal_condition;
-        order=order, forcing=forcing
-    )
 
     grad = zeros(length(pcof))
 
+    history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
+    lambda_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
+    adjoint_forcing = zeros(prob.real_system_size, 1+prob.nsteps, prob.N_initial_conditions)
+
+    discrete_adjoint!(
+        grad, history, lambda_history, adjoint_forcing, prob, controls, pcof,
+        target, order=order, cost_type=cost_type
+    )
+end
+
+"""
+Mutating version, arrays pre-allocated
+"""
+function discrete_adjoint!(
+        grad::AbstractVector{Float64}, history::AbstractArray{Float64, 4},
+        lambda_history::AbstractArray{Float64, 4}, adjoint_forcing::AbstractArray{Float64, 3},
+        prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}, P},
+        controls,
+        pcof::AbstractVector{<: Real},
+        target::AbstractMatrix{<: Number}; 
+        order=2, cost_type=:Infidelity, history_precomputed=false 
+    ) where P
+
+
+    N_derivatives = div(order, 2)
+    target = complex_to_real(target)
+
+    # FORWARD EVOLUTION (if needed)
+    if !history_precomputed
+        eval_forward!(history, prob, controls, pcof; order=order)
+    end
+
+    # COMPUTE FORCING
+    compute_guard_forcing!(adjoint_forcing, prob, history)
+
+    # COMPUTE TERMINAL CONDITION
+    final_state = history[:,1,end,:]
+    terminal_condition = compute_terminal_condition(
+        prob, controls, pcof, target, final_state, order=order, cost_type=cost_type,
+        forcing=adjoint_forcing[:,end,:]
+    )
+
+    # ADJOINT EVOLUTION
+    eval_adjoint!(lambda_history, prob, controls, pcof, terminal_condition;
+        order=order, forcing=adjoint_forcing
+    )
+
+    # GRADIENT ACCUMULATION (Could be multithreaded)
+    grad .= 0
     for initial_condition_index = 1:size(prob.u0,2)
         this_history = view(history, :, :, :, initial_condition_index)
         this_lambda_history = view(lambda_history, :, :, :, initial_condition_index)
@@ -118,15 +147,23 @@ function discrete_adjoint(
         accumulate_gradient!(
             grad, prob, controls, pcof, this_history, this_lambda_history, order=order
         )
-
-    end
-
-    if return_lambda_history
-        return grad, history, lambda_history
     end
 
     return grad
 end
+
+    
+
+
+#=
+function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
+        prob::SchrodingerProb{M, V, P}, controls, pcof::AbstractVector{<: Real},
+        terminal_condition::AbstractVector{Float64};
+        forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
+        order::Int=2,
+        use_taylor_guess=true, verbose=false,
+    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, P}
+=#
 
 """
 Change name to 'accumulate gradient' or something
@@ -679,26 +716,35 @@ function recursive_magic!(grad_contrib::AbstractVector{<: Real},
     return grad_contrib
 end
 
+
 """
 Should make 3-dim array version for VectorSchrodingerProb case
 """
-function compute_guard_forcing(prob, history::AbstractArray{Float64, 4})
+function compute_guard_forcing!(forcing_out::AbstractArray{Float64, 3}, 
+        prob, history::AbstractArray{Float64, 4}
+    )
+    forcing_out .= 0 # Maybe unnecessary, since each mul! overwrites
     dt = prob.tf / prob.nsteps
 
-    forcing = zeros(prob.real_system_size, 1+prob.nsteps, prob.N_initial_conditions)
     for n in 1:prob.nsteps+1
         for k in 1:prob.N_initial_conditions
             mul!(
-                 view(forcing, :, n, k),
+                 view(forcing_out, :, n, k),
                  prob.guard_subspace_projector,
                  view(history, :, 1, n, k)
             )
-            @. forcing[:, n, k] *= -2*dt/prob.tf
+            @. forcing_out[:, n, k] *= -2*dt/prob.tf
         end
     end
-    forcing[:, 1,   :] .*= 0.5
-    forcing[:, end, :] .*= 0.5
+    forcing_out[:, 1,   :] .*= 0.5
+    forcing_out[:, end, :] .*= 0.5
 
+    return forcing_out
+end
+
+function compute_guard_forcing(prob, history::AbstractArray{Float64, 4})
+    forcing = zeros(prob.real_system_size, 1+prob.nsteps, prob.N_initial_conditions)
+    compute_guard_forcing!(forcing, prob, history)
     return forcing
 end
 
