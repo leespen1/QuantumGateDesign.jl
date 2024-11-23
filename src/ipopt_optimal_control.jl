@@ -1,6 +1,7 @@
 mutable struct OptimizationTracker
     last_pcof::Vector{Float64}
     last_grad_pcof::Vector{Float64}
+    last_forward_evolution_pcof::Vector{Float64}
     last_objective::Float64
     last_infidelity::Float64
     last_guard_penalty::Float64
@@ -9,7 +10,9 @@ mutable struct OptimizationTracker
     function OptimizationTracker(N_params::Integer)
         initial_pcof = fill(NaN, N_params)
         initial_grad_pcof = fill(NaN, N_params)
-        new(initial_pcof, initial_grad_pcof, NaN, NaN, NaN, NaN, true)
+        initial_forward_evolution_pcof = fill(NaN, N_params)
+
+        new(initial_pcof, initial_grad_pcof, initial_forward_evolution_pcof, NaN, NaN, NaN, NaN, true)
     end
 end
 
@@ -195,12 +198,15 @@ function optimize_gate(
 
 
     N_derivatives = div(order, 2)
+    # Pre-allocate arrays
     state_history =  zeros(
         schro_prob.real_system_size,
         1+N_derivatives,
         1+schro_prob.nsteps,
         schro_prob.N_initial_conditions
     )
+    lambda_history = similar(state_history)
+    adjoint_forcing = zeros(schro_prob.real_system_size, 1+schro_prob.nsteps, schro_prob.N_initial_conditions)
 
     target_real_valued = vcat(real(target), imag(target))
 
@@ -227,15 +233,16 @@ function optimize_gate(
 
     update_jld2()
 
-    # Right now I am unnecessarily doing a full forward evolution to compute the
-    # infidelity, when this should be done already in the gradient computation.
     function eval_f(pcof::Vector{Float64})
 
-        # Check if control vector differs from old one before performing computation (maybe use relative error here?)
-        # My assumption is that we may compute the objective function many times without computing the gradient,
-        # and that whenever we compute the gradient we will also want the objective function
-        pcof_difference = LinearAlgebra.norm(pcof - optimization_tracker.last_pcof)
-        if (pcof_difference > 1e-15) || !isfinite(pcof_difference)
+        ## Check if control vector differs from old one before performing computation (maybe use relative error here?)
+        ## My assumption is that we may compute the objective function many times without computing the gradient,
+        ## and that whenever we compute the gradient we will also want the objective function
+
+        #pcof_difference = LinearAlgebra.norm(pcof - optimization_tracker.last_pcof)
+        #if (pcof_difference > 1e-15) || !isfinite(pcof_difference)
+
+        if (pcof != optimization_tracker.last_pcof)
             eval_forward!(state_history, schro_prob, controls, pcof, order=order)
             QN = @view state_history[:,1,end,:]
             # Infidelity Term
@@ -261,6 +268,7 @@ function optimize_gate(
                 optimization_tracker.last_ridge_penalty,
             ))
             optimization_tracker.last_pcof .= pcof
+            optimization_tracker.last_forward_evolution_pcof .= pcof
             optimization_tracker.adjoint_calculated = false
         end
 
@@ -270,15 +278,23 @@ function optimize_gate(
     
     function eval_grad_f!(pcof::Vector{Float64}, grad_f::Vector{Float64})
         
-        # Only update gradient if pcof has changed, or if pcof is the same but last time we only computed the objective function
-        # Could make this more efficient by preallocating memory for the lambda history and gradient,
-        # and also by reusing the forward evolution state from the objective function
-        # DO BOTH THESE THINGS!
-        pcof_difference = LinearAlgebra.norm(pcof - optimization_tracker.last_pcof)
-        if (pcof_difference > 1e-15) || !isfinite(pcof_difference)  || !optimization_tracker.adjoint_calculated
+        ## Should I check equality or just for small differences?
+        #pcof_difference = LinearAlgebra.norm(pcof - optimization_tracker.last_pcof)
+        #if (pcof_difference > 1e-15) || !isfinite(pcof_difference)  || !optimization_tracker.adjoint_calculated
 
-            optimization_tracker.last_grad_pcof .= discrete_adjoint(
-                schro_prob, controls, pcof, target, order=order
+        ## Cover case where pcof changes and we immediate eval_grad_f!, and case
+        ## where we run eval_f, don't change pcof, and then run eval_grad_f!
+        if (pcof != optimization_tracker.last_pcof) || !optimization_tracker.adjoint_calculated
+
+            # If we already ran the objective evaluation, then we can reuse the state history from the forward evolution 
+            # (but we may also have run eval_grad_f! for a brand new pcof, so I am being careful of that)
+            history_precomputed = (pcof == optimization_tracker.last_forward_evolution_pcof)
+            println("history_precomputed = ", history_precomputed)
+
+            discrete_adjoint!(
+                optimization_tracker.last_grad_pcof, state_history,
+                lambda_history, adjoint_forcing, schro_prob, controls, pcof,
+                target, order=order, history_precomputed=history_precomputed
             )
             # Ridge Regression Penalty (not included in main discrete adjoint, not necessary since nothing depends on the states)
             N_coeff = length(pcof)
