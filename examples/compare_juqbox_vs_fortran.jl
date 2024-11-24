@@ -15,9 +15,9 @@ degree = 2
 order = degree + 1
 #N_basis_functions = N_knots + order - 2 #(N_nonrepeating_knots + (order-1) + (order-1) - order)
 #N_knots = D1 + 2 - order
-N_knots = D1-1
-fortran_control = FortranBSplineControl(degree, N_knots, tf)
-package_bspline = GeneralBSplineControl(degree, N_knots, tf)
+#N_knots = D1-1
+fortran_control = FortranBSplineControl(degree, D1, tf)
+package_bspline = GeneralBSplineControl(degree, fortran_control.N_distinct_knots, tf)
 
 @assert juqbox_control.N_coeff == fortran_control.N_coeff == package_bspline.N_coeff
 #@assert fortran_control.N_coeff == package_bspline.N_coeff
