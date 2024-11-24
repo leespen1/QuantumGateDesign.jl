@@ -16,6 +16,7 @@ A clamped bspline with order k and N knots should have N-k basis functions
 struct FortranBSplineControl <: AbstractControl
     N_coeff::Int64
     tf::Float64
+    N_basis_functions::Int64
     N_knots::Int64
     N_distinct_knots::Int64
     degree::Int64
@@ -23,15 +24,25 @@ struct FortranBSplineControl <: AbstractControl
     knot_vector::Vector{Float64}
     work_array::Matrix{Float64}
     output_array::Matrix{Float64}
-    function FortranBSplineControl(degree::Integer, N_distinct_knots::Integer, tf::Real)
+    #function FortranBSplineControl(degree::Integer, N_distinct_knots::Integer, tf::Real)
+    function FortranBSplineControl(degree::Integer, N_basis_functions::Integer, tf::Real)
         degree = convert(Int64, degree)
         tf = convert(Float64, tf)
-        N_distinct_knots = convert(Int64, N_distinct_knots)
+        N_basis_functions = convert(Int64, N_basis_functions)
 
+        N_coeff = 2*N_basis_functions
+
+        order = degree+1
+        N_knots = N_basis_functions + order
+        N_distinct_knots = N_knots - 2*(order-1) 
+        #=
         order = degree+1
         N_knots = N_distinct_knots + 2*(order-1)
         N_basis_functions = N_knots - order
         N_coeff = 2*N_basis_functions
+        =#
+
+        N_basis_functions = N_knots - order
 
         work_array = zeros(order, order)
         output_array = zeros(order, 20) # just make it large enough, see if that works
@@ -45,7 +56,7 @@ struct FortranBSplineControl <: AbstractControl
             repeat([knot_vector[end]], order-1)
         )
 
-        new(N_coeff, tf, N_knots, N_distinct_knots, degree, order, knot_vector, work_array, output_array)
+        new(N_coeff, tf, N_basis_functions, N_knots, N_distinct_knots, degree, order, knot_vector, work_array, output_array)
     end
 end
 
