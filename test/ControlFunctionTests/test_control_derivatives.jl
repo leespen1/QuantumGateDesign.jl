@@ -141,7 +141,7 @@ end
         tf = 5.0
         N_basis_functions = 10
 
-        control = QGD.BSpline2Control(tf, N_basis_functions)
+        control = QGD.BSpline2Control(N_basis_functions, tf)
         pcof = rand(MersenneTwister(0), control.N_coeff)
 
         println("="^40, "\nBSpline2Control\n", "="^40, "\n")
