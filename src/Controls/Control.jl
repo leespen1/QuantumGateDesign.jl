@@ -26,6 +26,7 @@ implemented using automatic differentiation (currently broken):
 """
 abstract type AbstractControl end
 
+
 """
 For compatibility between single and multiple controls.
 
@@ -47,9 +48,11 @@ function Base.getindex(control::AbstractControl, index::Int64)
     return control
 end
 
+
 function Base.length(control::AbstractControl)
     return 1
 end
+
 
 function Base.copy(control::AbstractControl)
     return control
@@ -71,6 +74,7 @@ function get_control_vector_slice(pcof::AbstractVector{<: Real}, controls, contr
     return view(pcof, start_index:end_index)
 end
 
+
 function get_local_control_indices(controls, global_index)
     control_index = 1
     local_index = 1
@@ -86,9 +90,37 @@ function get_local_control_indices(controls, global_index)
     return control_index, local_index
 end
 
+
 function get_number_of_control_parameters(controls)
     return sum(control.N_coeff for control in controls)
 end
+
+
+function fill_p_vec!(
+        vals_vec::AbstractVector{<: Real}, control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+
+    for i in 1:length(vals_vec)
+        derivative_order = i-1
+        vals_vec[i] = eval_p_derivative(control, t, pcof, derivative_order) / factorial(derivative_order)
+    end
+    return vals_vec
+end
+
+
+function fill_q_vec!(
+        vals_vec::AbstractVector{<: Real}, control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+
+    for i in 1:length(vals_vec)
+        derivative_order = i-1
+        vals_vec[i] = eval_q_derivative(control, t, pcof, derivative_order) / factorial(derivative_order)
+    end
+    return vals_vec
+end
+
 
 function fill_p_mat!(
         vals_mat::AbstractMatrix{<: Real}, controls, t::Real,
@@ -116,29 +148,6 @@ function fill_q_mat!(
     return vals_mat
 end
 
-function fill_p_vec!(
-        vals_vec::AbstractVector{<: Real}, control::AbstractControl, t::Real,
-        pcof::AbstractVector{<: Real}
-    )
-
-    for i in 1:length(vals_vec)
-        derivative_order = i-1
-        vals_vec[i] = eval_p_derivative(control, t, pcof, derivative_order) / factorial(derivative_order)
-    end
-    return vals_vec
-end
-
-function fill_q_vec!(
-        vals_vec::AbstractVector{<: Real}, control::AbstractControl, t::Real,
-        pcof::AbstractVector{<: Real}
-    )
-
-    for i in 1:length(vals_vec)
-        derivative_order = i-1
-        vals_vec[i] = eval_q_derivative(control, t, pcof, derivative_order) / factorial(derivative_order)
-    end
-    return vals_vec
-end
 
 """
 For human readable display of control objects.
@@ -146,6 +155,7 @@ For human readable display of control objects.
 function Base.show(io::IO, ::MIME"text/plain", control::AbstractControl)
     print(io, typeof(control), " with ", control.N_coeff, " control coefficients and final time tf=", control.tf)
 end
+
 
 """
 For iterating over a control. A control is length 1, so only the first
@@ -161,80 +171,13 @@ function Base.iterate(control::AbstractControl, state=missing)
     return nothing
 end
 
+#==============================================================================
+#
+# The following functions are not used in the main functionality, but can be
+# useful in certain situations (e.g. )
+#
+==============================================================================#
 
-#= Automatic Differentiation Stuff, Abandoning For Now
-"""
-Arbitrary order version, only ever uses automatic differentiation to get high
-order derivatives.
-
-For hermite-interpolant-envolpe, would override this with a lookup-table, which
-throws an error when trying to do a higher order than that of the interpolant 
-(or just return 0, I suppose would be more accurate).
-
-Possibly type instability here, since ForwardDiff.derivative causes p_val to be a 
-ForwardDiff.Dual{...} type.
-"""
-function eval_p_derivative(control::AbstractControl, t::T,
-        pcof::AbstractVector{<: Real},  order::Int64)::T where T <: Real
-    # Note, the type annotation on t and the return type *REALLY* helps the
-    # compiler out. If I don't do this, I get huge type-instability in the
-    # 5-arg mul! calls where the return value from this function is used as one
-    # of the scalar args. (I think compiler can't tell whether the return type
-    # will be a Float64 or a Dual)
-
-    p_val = NaN
-
-    if (order == 0) 
-        p_val = eval_p(control, t, pcof)
-    elseif (order > 0)
-        # This will work recursively until we get to order 0 (no derivative, where the function is implemented explicitly )
-        # Not sure if the lambda functions will hurt performance significantly
-        p_val = ForwardDiff.derivative(t_dummy -> eval_p_derivative(control, t_dummy, pcof, order-1), t)
-    else
-        throw(ArgumentError("Negative derivative order supplied."))
-    end
-
-    return p_val
-end
-
-"""
-Arbitrary order version, only ever uses automatic differentiation to get high
-order derivatives.
-"""
-function eval_q_derivative(control::AbstractControl, t::T,
-        pcof::AbstractVector{<: Real},  order::Int64)::T where T <: Real
-
-    q_val = NaN
-
-    if (order == 0) 
-        q_val = eval_q(control, t, pcof)
-    elseif (order > 0)
-        # This will work recursively until we get to order 0 (no derivative, where the function is implemented explicitly )
-        # Not sure if the lambda functions will hurt performance significantly
-        q_val = ForwardDiff.derivative(t_dummy -> eval_q_derivative(control, t_dummy, pcof, order-1), t)
-    else
-        throw(ArgumentError("Negative derivative order supplied."))
-    end
-
-    return q_val
-end
-
-"""
-Evaluate gradient of p (or a derivative of p) with respect to the control parameters
-"""
-function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::AbstractControl, t::Real,
-        pcof::AbstractVector{<: Real},  order::Int64)
-    grad .= ForwardDiff.gradient(pcof_dummy -> eval_p_derivative_untyped(control, t, pcof_dummy, order), pcof)
-    return grad
-end
-
-
-function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::AbstractControl, t::Real,
-        pcof::AbstractVector{<: Real},  order::Int64)
-    grad .= ForwardDiff.gradient(pcof_dummy -> eval_q_derivative_untyped(control, t, pcof_dummy, order), pcof)
-    return grad
-end
-=#
 
 """
 Mutating version. The default is to call the allocating version and copy that.
@@ -307,23 +250,6 @@ function eval_q_derivative_untyped(control::AbstractControl, t::Real,
     return q_val
 end
 
-"""
-Given a time interval [0,tf], divided into `N_regions` regions, and a time `t`.
-Return the index of the region to which `t` belongs.
-"""
-@inline function find_region_index(t, tf, N_regions)
-    # Check that t is in the interval
-    if (t < 0) || (t > tf*(1+eps()))
-        throw(DomainError(t, "Value is outside the interval [0,tf]"))
-    end
-    # Calculate the width of each region
-    region_width = tf / N_regions
-
-    # Find the index of the region to which t belongs
-    region_index = min(floor(Int, t / region_width) + 1, N_regions)
-
-    return region_index
-end
 
 """
 Given a set of controls and the control vector for all of them, evaluate a 
