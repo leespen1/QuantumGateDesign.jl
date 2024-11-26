@@ -52,21 +52,29 @@ function eval_q_derivative(control::GRAPEControl, t::Real,
 end
 
 function eval_grad_p_derivative!(grad::AbstractVector{<: Real},
-        control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real}
+        control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real},
+        order::Integer
     )
     grad .= 0
-    i = find_region_index(control, t)
-    grad[i] = 1
+    if (order == 0)
+        i = find_region_index(control, t)
+        grad[i] = 1
+    end
+
+
     return grad
 end
 
 function eval_grad_q_derivative!(grad::AbstractVector{<: Real},
-        control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real}
+        control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real},
+        order::Integer
     )
     grad .= 0
-    i = find_region_index(control, t)
-    offset = control.N_amplitudes
-    grad[i+offset] = 1
+    if (order == 0)
+        i = find_region_index(control, t)
+        offset = control.N_amplitudes
+        grad[i+offset] = 1
+    end
     return grad
 end
 

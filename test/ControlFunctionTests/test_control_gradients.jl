@@ -74,34 +74,40 @@ end
 
 
 
-@testset "Testing Control Dervatives" begin
-    @testset "GRAPE Control" begin
-    end
-    @testset "Bspline Control" begin
+@testset "Testing Control Gradients" begin
+    @testset "GRAPEControl" begin
         tf = 5.0
-        D1 = 10
-        omega = [0.0, 1.0, 2.0]
-        bspline_control = QGD.BsplineControl(tf, D1, omega)
-        bspline_control_autodiff = QGD.BSplineControlAutodiff(tf, D1, omega)
+        N_amplitudes = 10
 
-        pcof = rand(MersenneTwister(0), bspline_control.N_coeff)
+        control = GRAPEControl(N_amplitudes, tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff)
 
-        @testset "Hard Coded Derivative" begin
-            test_control_gradient(bspline_control, pcof, upto_order=1)
+        println("="^40, "\nGRAPEControl\n", "="^40, "\n")
+        test_control_gradient(control, pcof, upto_order=4)
+    end
+    @testset "Hard-Coded degree 2 B-Spline Control" begin
+        tf = 5.0
+        N_basis_functions = 10
+
+        control = QGD.BSpline2Control(N_basis_functions, tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff)
+
+        println("="^40, "\nBSpline2Control\n", "="^40, "\n")
+        test_control_gradient(control, pcof, upto_order=4)
+    end
+
+    @testset "PPPack B-Spline Control" begin
+        tf = 5.0 
+        N_basis_functions = 10
+
+        for degree = (2,4,6, 8)
+          @testset "degree $degree" begin
+            control = QGD.FortranBSplineControl(degree, N_basis_functions, tf)
+            pcof = rand(MersenneTwister(0), control.N_coeff)
+
+            println("="^40, "\nFortranBSplineControl, degree $degree\n", "="^40, "\n")
+            test_control_gradient(control, pcof, upto_order=4)
+          end
         end
-        #@testset "Automatic Differentiation" begin
-        #    test_control_gradient(bspline_control_autodiff, pcof, upto_order=4)
-        #end
-    end
-    @testset "Hermite Control" begin
-        tf = 5.0
-        N_points = 3
-        N_derivatives = 4
-        scaling_type = :Derivative
-
-        hermite_control = QGD.HermiteControl(N_points, tf, N_derivatives, scaling_type)
-        pcof = rand(MersenneTwister(0), hermite_control.N_coeff)
-
-        test_control_gradient(hermite_control, pcof, upto_order=2*(1+N_derivatives))
     end
 end
