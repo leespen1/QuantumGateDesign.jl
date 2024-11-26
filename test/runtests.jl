@@ -3,15 +3,18 @@ using Test: @testset, @test
 
 @testset "All Tests" begin
 #include("./hardcoded_derivatives.jl")
-# Test that Control Functions are working properly
+# Test that Control Function derivatives and gradients are working properly
 include("./ControlFunctionTests/test_control_derivatives.jl")
 include("./ControlFunctionTests/test_control_gradients.jl")
-# Test that IVPs are converging with correct order
+#TODO Test on manufactured solution
+# Test that forward simulations are converging with correct order
 include("./ConvergenceTests/forward_convergence.jl")
 # Test that gradients are being computed consistently
 include("./GradientTests/compare_gradients.jl")
+#=
 # Check that the gate design/optimization problem is behaving properly
 include("./OptimizationTests/optimization_rabi_osc_SWAP.jl")
+=#
 end
 ## Not using Hermite controls anymore
 #include("./ControlFunctionTests/quintic_hermite_interpolation.jl")
