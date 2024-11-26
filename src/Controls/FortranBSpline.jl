@@ -100,7 +100,8 @@ function fill_p_vec!(
         for i in 0:control.bspline_order-1
             val += pcof[pcof_offset+i] * control.output_array[1+i,1+derivative_order]
         end
-        vals_vec[1+derivative_order] = val / control.tf ^ derivative_order
+        # Chain rule and getting 1/j! factor in p⁽ʲ⁾(t)/j!
+        vals_vec[1+derivative_order] = val / ((control.tf ^ derivative_order)*derivative_order)
     end
     return vals_vec
 end
@@ -139,7 +140,8 @@ function fill_q_vec!(
         for i in 0:control.bspline_order-1
             val += pcof[pcof_offset+i] * control.output_array[1+i,1+derivative_order]
         end
-        vals_vec[1+derivative_order] = val / control.tf ^ derivative_order
+        # Chain rule and getting 1/j! factor in q⁽ʲ⁾(t)/j!
+        vals_vec[1+derivative_order] = val / ((control.tf ^ derivative_order)*derivative_order)
     end
     return vals_vec
 end
