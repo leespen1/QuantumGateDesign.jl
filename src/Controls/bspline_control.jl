@@ -18,7 +18,7 @@ Constructor for struct splineparams, which sets up the parameters for a regular 
 # External links
 * [Spline Wavelet](https://en.wikipedia.org/wiki/Spline_wavelet#Quadratic_B-spline) on Wikipedia.
 """
-struct MySplineControl <: AbstractControl
+struct BSpline2Control <: AbstractControl
     N_coeff:: Int64 # Total number of coefficients
     tf::Float64
     D1::Int64 # Number of coefficients per spline (e.g. per control function, and in our case we have 2, p and q)
@@ -27,7 +27,7 @@ struct MySplineControl <: AbstractControl
     dtknot::Float64
 
 # new, simplified constructor
-    function MySplineControl(tf, D1)
+    function BSpline2Control(tf, D1)
         if (D1 < 3)
             throw(ArgumentError("Number of coefficients per spline (D1 = $D1) must be ≥ 3."))
         end
@@ -42,8 +42,8 @@ struct MySplineControl <: AbstractControl
     end
 end
 
-function Base.copy(control::MySplineControl)
-    return MySplineControl(control.tf, control.D1)
+function Base.copy(control::BSpline2Control)
+    return BSpline2Control(control.tf, control.D1)
 end
 
 """
@@ -52,8 +52,8 @@ I should make a general function like this in CarrierControl.jl
 function my_bspline_controls(tf::Float64, D1::Int, omega::AbstractMatrix{Float64})
     N_controls = size(omega, 1)
     N_freq = size(omega, 2)
-    base_control = MySplineControl(tf, D1)
-    controls = Vector{CarrierControl{MySplineControl}}()
+    base_control = BSpline2Control(tf, D1)
+    controls = Vector{CarrierControl{BSpline2Control}}()
     for i in 1:N_controls 
         omega_vec = omega[i,:]
 
@@ -65,7 +65,7 @@ end
 
 
 function eval_p_derivative(
-        control::MySplineControl, t::Real, pcof::AbstractVector{<: Real},
+        control::BSpline2Control, t::Real, pcof::AbstractVector{<: Real},
         derivative_order::Integer,
     )
     return bspline2(
@@ -76,7 +76,7 @@ end
 
 
 function eval_q_derivative(
-        control::MySplineControl, t::Real, pcof::AbstractVector{<: Real},
+        control::BSpline2Control, t::Real, pcof::AbstractVector{<: Real},
         derivative_order::Integer,
     )
     return bspline2(
@@ -87,7 +87,7 @@ end
 
 
 function eval_p(
-        control::MySplineControl, t::Real, pcof::AbstractVector{<: Real}
+        control::BSpline2Control, t::Real, pcof::AbstractVector{<: Real}
     )
     derivative_order = 0
     return eval_p_derivative(control, t, pcof, derivative_order)
@@ -95,7 +95,7 @@ end
 
 
 function eval_q(
-        control::MySplineControl, t::Real, pcof::AbstractVector{<: Real}
+        control::BSpline2Control, t::Real, pcof::AbstractVector{<: Real}
     )
     derivative_order = 0
     return eval_q_derivative(control, t, pcof, derivative_order)
@@ -103,7 +103,7 @@ end
 
 
 function eval_grad_p_derivative!(
-        grad::AbstractVector{<: Real}, control::MySplineControl, t::Real,
+        grad::AbstractVector{<: Real}, control::BSpline2Control, t::Real,
         pcof::AbstractVector{<: Real}, derivative_order::Integer
     )
     return gradbspline2!(
@@ -114,7 +114,7 @@ function eval_grad_p_derivative!(
 end
 
 function eval_grad_q_derivative!(
-        grad::AbstractVector{<: Real}, control::MySplineControl, t::Real,
+        grad::AbstractVector{<: Real}, control::BSpline2Control, t::Real,
         pcof::AbstractVector{<: Real}, derivative_order::Integer
     )
     return gradbspline2!(
@@ -138,7 +138,7 @@ Evaluate a B-spline function. See also the `splineparams` constructor.
 - `splinefunc::Int64`: Spline function index ∈ [0, param.Nseg-1]
 """
 @inline function bspline2(
-        control::MySplineControl,
+        control::BSpline2Control,
         t::Real,
         pcof::AbstractVector{<: Real},
         derivative_order::Integer,
@@ -206,7 +206,7 @@ end
 
 @inline function gradbspline2!(
         grad::AbstractVector{<: Real},
-        control::MySplineControl,
+        control::BSpline2Control,
         t::Real,
         pcof::AbstractVector{<: Real},
         derivative_order::Integer,
