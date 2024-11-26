@@ -1,4 +1,5 @@
 using QuantumGateDesign
+import QuantumGateDesign as QGD
 using LinearAlgebra: norm
 using Random: rand, MersenneTwister
 using UnicodePlots
@@ -63,41 +64,110 @@ function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
     return nothing
 end
 
-@testset "Checking Forward Evolution Convergence Order" begin
-
+@testset "Checking Forward Evolution Convergence Order (Using Richardson Extrapolation)" begin
+  @testset "Constant Control" begin
     @testset "Rabi Oscillator" begin
         println("-"^40, "\n")
         println("Problem: Rabi Oscillator\n")
         println("-"^40, "\n")
 
+        # Do rabi oscillation for one (two?) period(s) for lower-order methods
         prob = QuantumGateDesign.construct_rabi_prob(
-            tf=pi, gmres_abstol=1e-15, gmres_reltol=1e-15
+            tf=2*pi, gmres_abstol=1e-15, gmres_reltol=1e-15
         )
 
-        prob.nsteps = 10
-        control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
+        control = QGD.GRAPEControl(1, prob.tf)
         pcof = rand(MersenneTwister(0), control.N_coeff) 
 
-        test_order(prob, control, pcof)
+        println("="^40, "\nProblem: Rabi Oscillator (order 2, 4, 6)\n", "="^40, "\n")
+        test_order(prob, control, pcof, orders=(2,4,6))
+
+        # Do rabi oscillation for 20 (40?) period for higher-order methods
+        # (need a more challenging problem for the high-order methods to not
+        # just reach machine precision immediately) 
+        prob = QuantumGateDesign.construct_rabi_prob(
+            tf=40*pi, gmres_abstol=1e-15, gmres_reltol=1e-15
+        )
+        control = QGD.GRAPEControl(1, prob.tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        test_order(prob, control, pcof, orders=(8, 10, 12))
     end
 
-    @testset "Random Problem" begin
-        println("-"^40, "\n")
-        println("Problem: Random\n")
-        println("-"^40, "\n")
+    @testset "Random Schrodinger Problem" begin
         complex_system_size = 4
         N_operators = 1
+
+        # tf is chosen to be large enough to test the 12th-order method,
+        # but small enough to test the 2nd-order method.
         prob = QuantumGateDesign.construct_rand_prob(
             complex_system_size,
             N_operators,
-            tf = 1.0,
+            tf = 1.75,
             nsteps = 10,
             gmres_abstol=1e-15,
             gmres_reltol=1e-15
         )
-        control = QuantumGateDesign.HermiteControl(2, prob.tf, 12, :Taylor)
+
+        control = QGD.GRAPEControl(1, prob.tf)
         pcof = rand(MersenneTwister(0), control.N_coeff) 
 
+        println("="^40, "\nProblem: Random\n", "="^40, "\n")
         test_order(prob, control, pcof)
     end
+  end 
+  @testset "BSpline Control" begin
+    @testset "Rabi Oscillator" begin
+        println("-"^40, "\n")
+        println("Problem: Rabi Oscillator\n")
+        println("-"^40, "\n")
+
+        # Do rabi oscillation for one (two?) period(s) for lower-order methods
+        prob = QuantumGateDesign.construct_rabi_prob(
+            tf=2*pi, gmres_abstol=1e-15, gmres_reltol=1e-15
+        )
+
+        # High degree, because we want a smooth control
+        degree = 16
+        N_basis_functions = 20
+        control = QGD.GRAPEControl(degree, N_basis_functions, prob.tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        println("="^40, "\nProblem: Rabi Oscillator (order 2, 4, 6)\n", "="^40, "\n")
+        test_order(prob, control, pcof, orders=(2,4,6))
+
+        # Do rabi oscillation for 20 (40?) period for higher-order methods
+        # (need a more challenging problem for the high-order methods to not
+        # just reach machine precision immediately) 
+        prob = QuantumGateDesign.construct_rabi_prob(
+            tf=40*pi, gmres_abstol=1e-15, gmres_reltol=1e-15
+        )
+        control = QGD.GRAPEControl(1, prob.tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        test_order(prob, control, pcof, orders=(8, 10, 12))
+    end
+
+    @testset "Random Schrodinger Problem" begin
+        complex_system_size = 4
+        N_operators = 1
+
+        # tf is chosen to be large enough to test the 12th-order method,
+        # but small enough to test the 2nd-order method.
+        prob = QuantumGateDesign.construct_rand_prob(
+            complex_system_size,
+            N_operators,
+            tf = 1.75,
+            nsteps = 10,
+            gmres_abstol=1e-15,
+            gmres_reltol=1e-15
+        )
+
+        control = QGD.GRAPEControl(1, prob.tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        println("="^40, "\nProblem: Random\n", "="^40, "\n")
+        test_order(prob, control, pcof)
+    end
+  end 
 end
