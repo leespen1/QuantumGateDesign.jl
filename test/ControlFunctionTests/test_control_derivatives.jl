@@ -1,3 +1,9 @@
+#==============================================================================
+#
+# Test correctness of derivatives of controls, comparing the derivative values
+# with finite difference approximations of the derivatives.
+#
+=============================================================================#
 using QuantumGateDesign
 import QuantumGateDesign as QGD
 using Test: @test, @testset
@@ -5,8 +11,9 @@ using Random: rand, MersenneTwister
 using Printf: @printf
 using PrettyTables
 
-function test_control_derivatives(control::AbstractControl, pcof; upto_order=1,
-        ts=missing)
+function test_control_derivatives(control::AbstractControl,
+        pcof::AbstractVector{<: Real}; upto_order::Integer=1, ts=missing
+    )
 
     if ismissing(ts)
         # Add cushion to start and end ts so we have enough space to do centered difference methods
@@ -33,8 +40,7 @@ function test_control_derivatives(control::AbstractControl, pcof; upto_order=1,
             maximum_err_t = NaN
             N_passed = 0
             N_tests = 2*length(ts)
-            for t in ts
-                function_val = eval_p_derivative(control, t, pcof, order-1)
+            for t in ts function_val = eval_p_derivative(control, t, pcof, order-1)
                 dval_analytic = eval_p_derivative(control, t, pcof, order)
                 dval_fin_diff = central_difference(p, t, 1)
 
@@ -71,7 +77,7 @@ function test_control_derivatives(control::AbstractControl, pcof; upto_order=1,
                 if (err < tol)
                     N_passed += 1
                 end
-            end
+            end #for
 
             percent_passed = N_passed / N_tests
             avg_err /= N_tests
@@ -83,7 +89,7 @@ function test_control_derivatives(control::AbstractControl, pcof; upto_order=1,
 
             @test N_passed > acceptable_pass_ratio*N_tests
         end #@testset
-    end
+    end #for
 
     hl_passed = Highlighter((data, i, j) -> (j == 2) && (data[i,j] < acceptable_pass_ratio),
                      crayon"fg:red bold bg:dark_gray")
@@ -123,28 +129,55 @@ end
     @testset "GRAPE Control" begin
         N_amplitudes = 10
         tf = 5.0
-        grape_control = QGD.GRAPEControl(N_amplitudes, tf)
+        control = QGD.GRAPEControl(N_amplitudes, tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff)
 
         ts = Float64[]
+        println("="^40, "\nGRAPEControl\n", "="^40, "\n")
+        test_control_derivatives(control, pcof, upto_order=4) 
     end
 
-    @testset "Bspline Control" begin
+    @testset "Hard-Coded degree 2 B-Spline Control" begin
         tf = 5.0
-        D1 = 10
-        omega = [0.0, 1.0, 2.0]
-        bspline_control = QGD.BsplineControl(tf, D1, omega)
-        bspline_control_autodiff = QGD.BSplineControlAutodiff(tf, D1, omega)
+        N_basis_functions = 10
 
-        pcof = rand(MersenneTwister(0), bspline_control.N_coeff)
+        control = QGD.BSpline2Control(tf, N_basis_functions)
+        pcof = rand(MersenneTwister(0), control.N_coeff)
 
-        @testset "Hard Coded Derivative" begin
-            test_control_derivatives(bspline_control, pcof, upto_order=1)
-        end
-        @testset "Automatic Differentiation" begin
-            test_control_derivatives(bspline_control_autodiff, pcof, upto_order=4)
+        println("="^40, "\nBSpline2Control\n", "="^40, "\n")
+        test_control_derivatives(control, pcof, upto_order=4)
+    end
+
+    @testset "PPPACK B-Spline Control" begin
+        tf = 5.0
+        N_basis_functions = 10
+
+        for degree = (2,4,6, 8)
+          @testset "degree $degree" begin
+            control = QGD.FortranBSplineControl(degree, N_basis_functions, tf)
+            pcof = rand(MersenneTwister(0), control.N_coeff)
+
+            println("="^40, "\nFortranBSplineControl, degree $degree\n", "="^40, "\n")
+            test_control_derivatives(control, pcof, upto_order=4)
+          end
         end
     end
 
+    @testset "PPPACK B-Spline Control with Carrier" begin
+        tf = 5.0
+        N_basis_functions = 10
+        degree = 8
+        bspline_control = QGD.FortranBSplineControl(degree, N_basis_functions, tf)
+
+        carrier_frequencies = [-10.0, -1.0, 0.0, 1.0, 10.0]
+        carrier_control = CarrierControl(bspline_control, carrier_frequencies)
+        pcof = rand(MersenneTwister(0), carrier_control.N_coeff)
+
+        println("="^40, "\nCarrier FortranBSplineControl, degree $degree\n", "="^40, "\n")
+        test_control_derivatives(carrier_control, pcof, upto_order=4)
+    end
+
+    #=
     @testset "Hermite Control" begin
         tf = 5.0
         N_points = 3
@@ -156,8 +189,6 @@ end
 
         test_control_derivatives(hermite_control, pcof, upto_order=2*(1+N_derivatives))
     end
-
-    @testset "Hermite w/ Carrier Control" begin
-    end
+    =#
 end
 
