@@ -26,49 +26,66 @@ struct GRAPEControl <: AbstractControl
 end
 
 
+function eval_p_derivative(control::GRAPEControl, t::Real,
+        pcof::AbstractVector{<: Real}, order::Integer
+    )
 
-function eval_p(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
-    i = find_region_index(t, control.tf, control.N_amplitudes)
-    return pcof[i]
+    if (order > 0)
+        return 0.0
+    else
+        i = find_region_index(control, t)
+        return pcof[i]
+    end
 end
 
-function eval_q(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
-    i = control.N_amplitudes + find_region_index(t, control.tf, control.N_amplitudes)
-    return pcof[i]
+function eval_q_derivative(control::GRAPEControl, t::Real,
+        pcof::AbstractVector{<: Real}, order::Integer
+    )
+
+    if (order > 0)
+        return 0.0
+    else
+        i = find_region_index(control, t)
+        offset = control.N_amplitudes
+        return pcof[i+offset]
+    end
 end
 
-#
-# Old, hard-coded mehtods for evaluating derivatives and gradients (more efficient, )
-#
-
-function eval_pt(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
-    return 0.0
-end
-
-function eval_qt(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
-    return 0.0
-end
-
-function eval_grad_p(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
-    grad = zeros(control.N_coeff)
-    i = find_region_index(t, control.tf, control.N_amplitudes)
+function eval_grad_p_derivative!(grad::AbstractVector{<: Real},
+        control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real}
+    )
+    grad .= 0
+    i = find_region_index(control, t)
     grad[i] = 1
     return grad
 end
 
-function eval_grad_q(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
-    grad = zeros(control.N_coeff)
-    i = find_region_index(t, control.tf, control.N_amplitudes)
-    grad[control.N_amplitudes + i] = 1
+function eval_grad_q_derivative!(grad::AbstractVector{<: Real},
+        control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real}
+    )
+    grad .= 0
+    i = find_region_index(control, t)
+    offset = control.N_amplitudes
+    grad[i+offset] = 1
     return grad
 end
 
-function eval_grad_pt(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
-    grad = zeros(control.N_coeff)
-    return grad
-end
+"""
+Given a time interval [0,tf], divided into `N_regions` regions, and a time `t`.
+Return the index of the region to which `t` belongs.
+"""
+@inline function find_region_index(control::GRAPEControl, t)
+    N_regions = control.N_amplitudes
+    tf = control.tf
+    # Check that t is in the interval
+    if (t < 0) || (t > tf*(1+eps()))
+        throw(DomainError(t, "Value is outside the interval [0,tf]"))
+    end
+    # Calculate the width of each region
+    region_width = tf / N_regions
 
-function eval_grad_qt(control::GRAPEControl, t::Real, pcof::AbstractVector{<: Real})
-    grad = zeros(control.N_coeff)
-    return grad
+    # Find the index of the region to which t belongs
+    region_index = min(floor(Int, t / region_width) + 1, N_regions)
+
+    return region_index
 end
