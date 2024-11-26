@@ -25,9 +25,9 @@ struct BSpline2Control <: AbstractControl
     Nseg::Int64 # Number of segments (real, imaginary, different ctrl func)
     tcenter::Vector{Float64}
     dtknot::Float64
-
-# new, simplified constructor
-    function BSpline2Control(tf, D1)
+    function BSpline2Control(D1, tf)
+        D1 = convert(Int64, D1)
+        tf = convert(Float64, tf)
         if (D1 < 3)
             throw(ArgumentError("Number of coefficients per spline (D1 = $D1) must be ≥ 3."))
         end
