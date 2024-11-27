@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH --job-name=cnot3_convergence_correctness        # Job name
+#SBATCH --mail-type=NONE              # Mail events (NONE, BEGIN, END, FAIL, ALL)
+#SBATCH --mail-user=leespen1@msu.edu # Where to send mail. 
+#SBATCH --nodes=1                   # Maximum number of nodes to be allocated
+#SBATCH --ntasks-per-node=1          # Maximum number of tasks on each node
+#SBATCH --ntasks-per-socket=1        # Maximum number of tasks on each socket
+#SBATCH --distribution=cyclic:cyclic # Distribute tasks cyclically first among nodes and 
+                                     # then among sockets within a node
+#SBATCH --mem-per-cpu=8Gb          # Memory (i.e. RAM) per processor
+#SBATCH --time=96:00:00              # Wall time limit (days-hrs:min:sec)
+#SBATCH --output=cnot3_convergence_correctness_%j.log     # Path to the standard output and error files relative to the working directory
+
+echo "Date              = $(date)"
+echo "Hostname          = $(hostname -s)"
+echo "Working Directory = $(pwd)"
+echo ""
+echo "Number of Nodes Allocated      = $SLURM_JOB_NUM_NODES"
+echo "Number of Tasks Per Node       = $SLURM_NTASKS_PER_NODE"
+echo ""
+
+julia examples/Publication/cnot3_convergence_correctness.jl
