@@ -1,3 +1,18 @@
+#==============================================================================
+#
+# Test that the discrete adjoint and forced methods for computing the gradient
+# (which are mathematically exact with respect to the discretized problem) 
+# agree to nearly machine precision, and that those methods agree with a
+# finite difference approximation of the gradient to a lower level of
+# precision.
+#
+# The stepsize is not very important here because the gradient calculation is
+# exact for the discrete problem. So even for a very innacurate solution of
+# Schrodinger's equation, the discrete adjoint and forced methods should still
+# agree. In fact, an inaccurate solution may be more ideal for testing the
+# correctness of the algorithm.
+#
+==============================================================================#
 using QuantumGateDesign
 import QuantumGateDesign as QGD
 using Test: @test, @testset
@@ -18,19 +33,16 @@ function test_gradient_agreement(prob, control, pcof, target;
                 prob, control, pcof, target, order=order,
                 cost_type=cost_type
             )
-            println("Finished Discrete Adjoint")
 
             grad_forced = eval_grad_forced(
                 prob, control, pcof, target, order=order,
                 cost_type=cost_type
             )
-            println("Finished Forced Method")
 
             grad_fin_diff = eval_grad_finite_difference(
                 prob, control, pcof, target, order=order,
                 cost_type=cost_type
             )
-            println("Finished Finite Difference")
 
             forced_atol = 1e-14
             fin_diff_atol = 1e-9
@@ -144,9 +156,9 @@ println("#"^40, "\n")
         prob = QuantumGateDesign.construct_rabi_prob(
             tf=pi,
             gmres_abstol=1e-15,
-            gmres_reltol=1e-15
+            gmres_reltol=1e-15,
+            nsteps=10
         )
-        prob.nsteps = 10
 
         # High degree, because we want a smooth control
         degree = 16
@@ -184,7 +196,6 @@ println("#"^40, "\n")
     end
   end
 
-  #=
   @testset "B-Spline with Carrier Control" begin
     @testset "Rabi Oscillator" begin
         println("-"^40, "\n")
@@ -237,6 +248,5 @@ println("#"^40, "\n")
         test_gradient_agreement(prob, control, pcof, target)
     end
   end
-  =#
 
 end
