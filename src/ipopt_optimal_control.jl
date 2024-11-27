@@ -299,7 +299,7 @@ function optimize_gate(
             # If we already ran the objective evaluation, then we can reuse the state history from the forward evolution 
             # (but we may also have run eval_grad_f! for a brand new pcof, so I am being careful of that)
             history_precomputed = (pcof == optimization_tracker.last_forward_evolution_pcof)
-            println("history_precomputed = ", history_precomputed)
+            #println("history_precomputed = ", history_precomputed)
 
             discrete_adjoint!(
                 optimization_tracker.last_grad_pcof, state_history,
