@@ -20,9 +20,10 @@ Richardson extrapolation seems like a good idea for that.
 function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
         orders=(2,4,6,8,10),  min_error_limit=-Inf, max_error_limit=-Inf,
         base_nsteps=missing, nsteps_change_factor=2, start_iteration=1, 
-        jld2_filename=missing,
+        jld2_filename=missing, quiet=false,
         evolution_kwargs...
     )
+    io = quiet ? IOBuffer() : stdout
 
     # Touch file, create if needed (append mode, so existing file isn't wiped)
     if !ismissing(jld2_filename)
@@ -43,9 +44,9 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
     println("Beginning at ", Dates.now())
 
     for order in orders
-        println("#"^40, "\n")
-        println("Order ", order, "\n")
-        println("#"^40)
+        println(io, "#"^40, "\n")
+        println(io, "Order ", order, "\n")
+        println(io, "#"^40)
 
         nsteps_vec = Int64[]
         step_sizes = Float64[]
@@ -80,7 +81,7 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
         end
 
         for k in start_iteration:N_iterations
-            println("Starting iteration ", k, " at ", Dates.now())
+            println(io, "Starting iteration ", k, " at ", Dates.now())
             nsteps_multiplier = nsteps_change_factor^(k-1)
             prob_copy.nsteps = base_nsteps*nsteps_multiplier
 
@@ -105,11 +106,11 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
             push!(histories, history[:,:,:])
             push!(richardson_errors, richardson_err)
 
-            println("Finished iteration ", k, " at ", Dates.now())
-            println("Nsteps = \t", prob_copy.nsteps)
-            println("Richardson Error = \t", richardson_err)
-            println("Elapsed Time = \t", elapsed_time)
-            println("----------------------------------------")
+            println(io, "Finished iteration ", k, " at ", Dates.now())
+            println(io, "Nsteps = \t", prob_copy.nsteps)
+            println(io, "Richardson Error = \t", richardson_err)
+            println(io, "Elapsed Time = \t", elapsed_time)
+            println(io, "----------------------------------------")
 
             # Save intermediate results
             if !ismissing(jld2_filename)
@@ -121,7 +122,7 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
 
             # Break once we reach high enough precision
             if richardson_errors[end] < min_error_limit 
-                println("Breaking early due to precision reached")
+                println(io, "Breaking early due to precision reached")
                 break
             end
 
@@ -130,7 +131,7 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
             if length(richardson_errors) > 2
                 if ((richardson_errors[end] < max_error_limit) 
                     && (richardson_errors[end] > richardson_errors[end-1] > richardson_errors[end-2]))
-                    println("Breaking early due to numerical saturation")
+                    println(io, "Breaking early due to numerical saturation")
                     break
                 end
             end
@@ -138,8 +139,8 @@ function get_histories(prob::SchrodingerProb, controls, pcof, N_iterations;
 
     end
     
-    println("Finished at ", Dates.now())
-    println("Returning Results")
+    println(io, "Finished at ", Dates.now())
+    println(io, "Returning Results")
 
     return ret_dict
 end
