@@ -184,9 +184,6 @@ function accumulate_gradient!(gradient::AbstractVector{Float64},
         order=2
     )
 
-    accumulate_gradient_arbitrary_fast!(gradient, prob, controls, pcof, history, lambda_history, order=order)
-    return gradient
-
     if (order == 2)
         accumulate_gradient_order2!(gradient, prob, controls, pcof, history, lambda_history)
         return gradient
@@ -194,6 +191,10 @@ function accumulate_gradient!(gradient::AbstractVector{Float64},
         accumulate_gradient_order4!(gradient, prob, controls, pcof, history, lambda_history)
         return gradient
     end
+
+    accumulate_gradient_arbitrary_fast!(gradient, prob, controls, pcof, history, lambda_history, order=order)
+    return gradient
+
 
 
     dt = prob.tf / prob.nsteps
