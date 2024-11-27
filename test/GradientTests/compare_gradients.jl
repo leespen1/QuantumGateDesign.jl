@@ -12,7 +12,6 @@ function test_gradient_agreement(prob, control, pcof, target;
 
     for order in orders
         @testset "Order $order" begin
-
             # Check that gradients calculated using discrete adjoint and finite difference
             # methods agree to reasonable precision
             grad_disc_adj = discrete_adjoint(
@@ -91,49 +90,153 @@ println("#"^40, "\n")
 
 
 @testset "Checking That 3 Gradient Computation Methods Agree" begin
-  @testset "Rabi Oscillator" begin
-    println("-"^40, "\n")
-    println("Problem: Rabi Oscillator\n")
-    println("-"^40, "\n")
+  @testset "Piecewise Constant Control" begin
+    @testset "Rabi Oscillator" begin
+        println("-"^40, "\n")
+        println("Problem: Rabi Oscillator\n")
+        println("-"^40, "\n")
 
-    prob = QuantumGateDesign.construct_rabi_prob(
-        tf=pi,
-        gmres_abstol=1e-15,
-        gmres_reltol=1e-15
-    )
-    prob.nsteps = 10
+        prob = QuantumGateDesign.construct_rabi_prob(
+            tf=pi,
+            gmres_abstol=1e-15,
+            gmres_reltol=1e-15
+        )
+        prob.nsteps = 10
 
+        N_amplitudes = 5
+        control = QuantumGateDesign.GRAPEControl(N_amplitudes, prob.tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
 
+        target = rand(MersenneTwister(0), ComplexF64, prob.N_tot_levels, prob.N_initial_conditions)
+        test_gradient_agreement(prob, control, pcof, target)
+    end
+        
+    @testset "Random Problem" begin
+        println("-"^40, "\n")
+        println("Problem: Random\n")
+        println("-"^40, "\n")
+        complex_system_size = 4
+        N_operators = 1
 
-    N_amplitudes = 1
-    control = QuantumGateDesign.GRAPEControl(N_amplitudes, prob.tf)
-    pcof = rand(MersenneTwister(0), control.N_coeff) 
+        prob = QuantumGateDesign.construct_rand_prob(
+            complex_system_size,
+            N_operators,
+            tf = 1.0,
+            nsteps = 10,
+            gmres_abstol=1e-15, gmres_reltol=1e-15
+        )
 
-    target = rand(MersenneTwister(0), ComplexF64, prob.N_tot_levels, prob.N_initial_conditions)
-    test_gradient_agreement(prob, control, pcof, target)
+        N_amplitudes = 5
+        control = QuantumGateDesign.GRAPEControl(N_amplitudes, prob.tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        target = rand(MersenneTwister(0), ComplexF64, prob.N_tot_levels, prob.N_initial_conditions)
+        test_gradient_agreement(prob, control, pcof, target)
+    end
   end
 
-  @testset "Random Problem" begin
-    println("-"^40, "\n")
-    println("Problem: Random\n")
-    println("-"^40, "\n")
-    complex_system_size = 4
-    N_operators = 1
+  @testset "B-Spline Control" begin
+    @testset "Rabi Oscillator" begin
+        println("-"^40, "\n")
+        println("Problem: Rabi Oscillator\n")
+        println("-"^40, "\n")
 
-    prob = QuantumGateDesign.construct_rand_prob(
-        complex_system_size,
-        N_operators,
-        tf = 1.0,
-        nsteps = 10,
-        gmres_abstol=1e-15, gmres_reltol=1e-15
-    )
+        prob = QuantumGateDesign.construct_rabi_prob(
+            tf=pi,
+            gmres_abstol=1e-15,
+            gmres_reltol=1e-15
+        )
+        prob.nsteps = 10
 
-    N_amplitudes = 1
-    control = QuantumGateDesign.GRAPEControl(N_amplitudes, prob.tf)
-    pcof = rand(MersenneTwister(0), control.N_coeff) 
+        # High degree, because we want a smooth control
+        degree = 16
+        N_basis_functions = 20
+        control = QGD.FortranBSplineControl(degree, N_basis_functions, prob.tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
 
-    target = rand(MersenneTwister(0), ComplexF64, prob.N_tot_levels, prob.N_initial_conditions)
+        target = rand(MersenneTwister(0), ComplexF64, prob.N_tot_levels, prob.N_initial_conditions)
+        test_gradient_agreement(prob, control, pcof, target)
+    end
+        
+    @testset "Random Problem" begin
+        println("-"^40, "\n")
+        println("Problem: Random\n")
+        println("-"^40, "\n")
+        complex_system_size = 4
+        N_operators = 1
 
-    test_gradient_agreement(prob, control, pcof, target)
+        prob = QuantumGateDesign.construct_rand_prob(
+            complex_system_size,
+            N_operators,
+            tf = 0.1,
+            nsteps = 10,
+            gmres_abstol=1e-15, gmres_reltol=1e-15
+        )
+
+        # High degree, because we want a smooth control
+        degree = 16
+        N_basis_functions = 20
+        control = QGD.FortranBSplineControl(degree, N_basis_functions, prob.tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        target = rand(MersenneTwister(0), ComplexF64, prob.N_tot_levels, prob.N_initial_conditions)
+        test_gradient_agreement(prob, control, pcof, target)
+    end
   end
+
+  #=
+  @testset "B-Spline with Carrier Control" begin
+    @testset "Rabi Oscillator" begin
+        println("-"^40, "\n")
+        println("Problem: Rabi Oscillator\n")
+        println("-"^40, "\n")
+
+        prob = QuantumGateDesign.construct_rabi_prob(
+            tf=pi,
+            gmres_abstol=1e-15,
+            gmres_reltol=1e-15
+        )
+        prob.nsteps = 10
+
+        # High degree, because we want a smooth control
+        degree = 16
+        N_basis_functions = 20
+        bspline_control = QGD.FortranBSplineControl(degree, N_basis_functions, prob.tf)
+        carrier_frequencies = [-10, -1, 0, 1, 10]
+        control = QGD.CarrierControl(bspline_control, carrier_frequencies)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        target = rand(MersenneTwister(0), ComplexF64, prob.N_tot_levels, prob.N_initial_conditions)
+        test_gradient_agreement(prob, control, pcof, target)
+    end
+        
+    @testset "Random Problem" begin
+        println("-"^40, "\n")
+        println("Problem: Random\n")
+        println("-"^40, "\n")
+        complex_system_size = 4
+        N_operators = 1
+
+        prob = QuantumGateDesign.construct_rand_prob(
+            complex_system_size,
+            N_operators,
+            tf = 1.0,
+            nsteps = 10,
+            gmres_abstol=1e-15, gmres_reltol=1e-15
+        )
+
+        # High degree, because we want a smooth control
+        degree = 16
+        N_basis_functions = 20
+        bspline_control = QGD.FortranBSplineControl(degree, N_basis_functions, prob.tf)
+        carrier_frequencies = [-10, -1, 0, 1, 10]
+        control = QGD.CarrierControl(bspline_control, carrier_frequencies)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        target = rand(MersenneTwister(0), ComplexF64, prob.N_tot_levels, prob.N_initial_conditions)
+        test_gradient_agreement(prob, control, pcof, target)
+    end
+  end
+  =#
+
 end
