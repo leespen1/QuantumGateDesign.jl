@@ -705,6 +705,12 @@ function recursive_magic!(grad_contrib::AbstractVector{<: Real},
         # Move this outside the loop
         right_inner = @view working_state_matrix[:,1+i]
         right_inner .= 0
+
+        # Using views here might lead to type instability in next recursive_magic! call.
+        # Should check this with @code_warn
+        right_inner = view(working_state_matrix, :, 1+i)
+        working_state_matrix_reduced = view(working_state_matrix, :, 1:i)
+        right_inner .= 0
         apply_hamiltonian!(right_inner, lambda, prob, controls, t, pcof;
                            derivative_order=(j-i), use_adjoint=true)
         
@@ -712,7 +718,7 @@ function recursive_magic!(grad_contrib::AbstractVector{<: Real},
         recursive_magic!(
             grad_contrib, w_mat, right_inner, i, coeff/(j+1), prob,
             controls, t, pcof, control_index, working_pcof, working_state_vector,
-            working_state_matrix,
+            working_state_matrix_reduced,
         )
     end
 
