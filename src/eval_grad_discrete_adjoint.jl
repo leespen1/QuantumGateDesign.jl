@@ -593,6 +593,7 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
 
     working_pcof = zeros(length(pcof))
     working_state_vector = zeros(prob.real_system_size)
+    working_state_matrix = zeros(prob.real_system_size, N_derivatives)
 
 
     for i in 1:prob.N_operators
@@ -617,7 +618,7 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
                 # Handle explicit
                 recursive_magic!(
                     grad_contrib, wₙ, λₙ₊₁, k, c_explicit, prob, controls, tₙ,
-                    pcof, i, working_pcof, working_state_vector
+                    pcof, i, working_pcof, working_state_vector, working_state_matrix
                 )
             end
                 
@@ -632,7 +633,8 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
                 # Handle implicit
                 recursive_magic!(
                     grad_contrib, wₙ₊₁, λₙ₊₁, k, c_implicit, prob, controls,
-                    tₙ₊₁, pcof, i, working_pcof, working_state_vector
+                    tₙ₊₁, pcof, i, working_pcof, working_state_vector,
+                    working_state_matrix
                 )
             end
         end
@@ -657,8 +659,8 @@ function recursive_magic!(grad_contrib::AbstractVector{<: Real},
         prob::SchrodingerProb, controls, t::Real,
         pcof::AbstractVector{<: Real}, control_index::Integer,
         working_pcof::AbstractVector{<: Real},
-        working_state_vector::AbstractVector{<: Real}
-
+        working_state_vector::AbstractVector{<: Real},
+        working_state_matrix::AbstractMatrix{<: Real}
     )
     control = controls[control_index]
     asym_op = prob.asym_operators[control_index]
@@ -701,16 +703,16 @@ function recursive_magic!(grad_contrib::AbstractVector{<: Real},
     for i in 0:j
         # Take special care about how factors are handled
         # Move this outside the loop
-        # NEED A NEW SOLUTION HERE! FIXED ERROR, BUT STILL HAVE MEMORY ALLOCATION!
-        # WANT TO HAVE SAME BEHAVIOR, BUT NOT ALLOCATE MEMORY! (maybe use two working vectors, alternate?)
-        right_inner = zeros(real_system_size)
+        right_inner = @view working_state_matrix[:,1+i]
+        right_inner .= 0
         apply_hamiltonian!(right_inner, lambda, prob, controls, t, pcof;
                            derivative_order=(j-i), use_adjoint=true)
         
 
         recursive_magic!(
             grad_contrib, w_mat, right_inner, i, coeff/(j+1), prob,
-            controls, t, pcof, control_index, working_pcof, working_state_vector
+            controls, t, pcof, control_index, working_pcof, working_state_vector,
+            working_state_matrix,
         )
     end
 
