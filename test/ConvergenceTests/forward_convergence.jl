@@ -1,3 +1,18 @@
+#==============================================================================
+#
+# Test the ability of the forward timestepping method to converge (with the
+# correct order of convergence) to a numerical solution.
+#
+# This is done for a "Rabi Oscillator" problem, where the system hamiltonian is
+# zero, and the control hamiltonians are a^†+a^† and a^†-a^†, and a "Random"
+# problem, where the system and control hamiltonians are pseudo-randomly
+# generated.
+#
+# This is done for a series of increasingly complicated controls. First, a
+# constant amplitude control, then a B-Spline control, then a B-Spline with
+# carrier waves control.
+#
+==============================================================================#
 using QuantumGateDesign
 import QuantumGateDesign as QGD
 using LinearAlgebra: norm
@@ -10,8 +25,10 @@ function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
     )
     histories_dict = QuantumGateDesign.get_histories(
         prob, controls, pcof, N_iterations, orders=orders,
-        min_error_limit=1e-14
+        min_error_limit=1e-14, quiet=true
     )
+
+    true_history = histories_dict["Order $(maximum(orders)) (QGD)"]["histories"][end]
 
     for order in orders
       @testset "Order $order" begin
@@ -20,7 +37,6 @@ function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
         step_sizes = run_dict["step_sizes"]
         histories = run_dict["histories"]
 
-        true_history = histories[end]
 
         # Make sure we have enough data to check order of convergence, skip if not
         if length(histories) <= 2
@@ -35,8 +51,6 @@ function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
         error_differences = diff(log_relative_errors) ./ diff(log_step_sizes)
 
 
-        println("[Order $order] Slopes (log scale) between adjacent points:")
-        println("\t", error_differences)
         
         for error_diff in error_differences
             @test isapprox(error_diff, order, atol=0.5)
@@ -48,7 +62,6 @@ function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
         b = log_relative_errors
         x = A \ b
         slope = x[2]
-        println("[Order $order] Least-Squares Slope (log scale) of entire line = ", slope)
         @test isapprox(slope, order, atol=0.5)
 
         pl = scatterplot(log_step_sizes, log_relative_errors,
@@ -57,6 +70,9 @@ function test_order(prob::SchrodingerProb, controls, pcof; N_iterations=6,
             marker=:circle
         )
         display(pl)
+        println("[Order $order] Least-Squares Slope (log scale) of entire line = ", slope)
+        println("[Order $order] Slopes (log scale) between adjacent points:")
+        println("\t", error_differences)
 
       end
     end
@@ -66,10 +82,8 @@ end
 
 @testset "Checking Forward Evolution Convergence Order (Using Richardson Extrapolation)" begin
   @testset "Constant Control" begin
+    println("\n\n", "="^40, "\nConstant Control Convergence Tests\n", "="^40, "\n\n\n")
     @testset "Rabi Oscillator" begin
-        println("-"^40, "\n")
-        println("Problem: Rabi Oscillator\n")
-        println("-"^40, "\n")
 
         # Do rabi oscillation for one (two?) period(s) for lower-order methods
         prob = QuantumGateDesign.construct_rabi_prob(
@@ -91,6 +105,7 @@ end
         control = QGD.GRAPEControl(1, prob.tf)
         pcof = rand(MersenneTwister(0), control.N_coeff) 
 
+        println("="^40, "\nProblem: Rabi Oscillator (order 8, 10, 12)\n", "="^40, "\n")
         test_order(prob, control, pcof, orders=(8, 10, 12))
     end
 
@@ -98,8 +113,6 @@ end
         complex_system_size = 4
         N_operators = 1
 
-        # tf is chosen to be large enough to test the 12th-order method,
-        # but small enough to test the 2nd-order method.
         prob = QuantumGateDesign.construct_rand_prob(
             complex_system_size,
             N_operators,
@@ -116,11 +129,10 @@ end
         test_order(prob, control, pcof)
     end
   end 
-  @testset "BSpline Control" begin
+
+  @testset "B-Spline Control" begin
+    println("\n\n", "="^40, "\nB-Spline Control Convergence Tests\n", "="^40, "\n\n\n")
     @testset "Rabi Oscillator" begin
-        println("-"^40, "\n")
-        println("Problem: Rabi Oscillator\n")
-        println("-"^40, "\n")
 
         # Do rabi oscillation for one (two?) period(s) for lower-order methods
         prob = QuantumGateDesign.construct_rabi_prob(
@@ -130,7 +142,7 @@ end
         # High degree, because we want a smooth control
         degree = 16
         N_basis_functions = 20
-        control = QGD.GRAPEControl(degree, N_basis_functions, prob.tf)
+        control = QGD.FortranBSplineControl(degree, N_basis_functions, prob.tf)
         pcof = rand(MersenneTwister(0), control.N_coeff) 
 
         println("="^40, "\nProblem: Rabi Oscillator (order 2, 4, 6)\n", "="^40, "\n")
@@ -145,6 +157,7 @@ end
         control = QGD.GRAPEControl(1, prob.tf)
         pcof = rand(MersenneTwister(0), control.N_coeff) 
 
+        println("="^40, "\nProblem: Rabi Oscillator (orders 8, 10, 12)\n", "="^40, "\n")
         test_order(prob, control, pcof, orders=(8, 10, 12))
     end
 
@@ -152,22 +165,124 @@ end
         complex_system_size = 4
         N_operators = 1
 
-        # tf is chosen to be large enough to test the 12th-order method,
-        # but small enough to test the 2nd-order method.
         prob = QuantumGateDesign.construct_rand_prob(
             complex_system_size,
             N_operators,
-            tf = 1.75,
-            nsteps = 10,
+            tf = 1.0,
+            nsteps = 20,
             gmres_abstol=1e-15,
             gmres_reltol=1e-15
         )
 
-        control = QGD.GRAPEControl(1, prob.tf)
+        # High degree, because we want a smooth control
+        degree = 16
+        N_basis_functions = 20
+        control = QGD.FortranBSplineControl(degree, N_basis_functions, prob.tf)
         pcof = rand(MersenneTwister(0), control.N_coeff) 
 
-        println("="^40, "\nProblem: Random\n", "="^40, "\n")
-        test_order(prob, control, pcof)
+        println("="^40, "\nProblem: Random (orders 2,4,6)\n", "="^40, "\n")
+        test_order(prob, control, pcof, orders=(2,4,6))
+    
+        prob = QuantumGateDesign.construct_rand_prob(
+            complex_system_size,
+            N_operators,
+            tf = 1.0,
+            nsteps = 60,
+            gmres_abstol=1e-15,
+            gmres_reltol=1e-15
+        )
+
+        # High degree, because we want a smooth control
+        degree = 16
+        N_basis_functions = 20
+        control = QGD.FortranBSplineControl(degree, N_basis_functions, prob.tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        println("="^40, "\nProblem: Random (orders 8, 10)\n", "="^40, "\n")
+        test_order(prob, control, pcof, orders=(8,10))
+
+        prob = QuantumGateDesign.construct_rand_prob(
+            complex_system_size,
+            N_operators,
+            tf = 10.0,
+            nsteps = 40,
+            gmres_abstol=1e-15,
+            gmres_reltol=1e-15
+        )
+
+        # High degree, because we want a smooth control
+        degree = 16
+        N_basis_functions = 20
+        control = QGD.FortranBSplineControl(degree, N_basis_functions, prob.tf)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        println("="^40, "\nProblem: Random (order 12)\n", "="^40, "\n")
+        test_order(prob, control, pcof, orders=12)
+    end
+  end 
+  @testset "B-Spline with Carrier Wave Control" begin
+    @testset "Rabi Oscillator" begin
+        # Do rabi oscillation for one (two?) period(s) for lower-order methods
+        prob = QuantumGateDesign.construct_rabi_prob(
+            tf=2*pi, gmres_abstol=1e-15, gmres_reltol=1e-15,
+            nsteps=50
+        )
+
+        # High degree, because we want a smooth control
+        degree = 16
+        N_basis_functions = 20
+        bspline_control = QGD.FortranBSplineControl(degree, N_basis_functions, prob.tf)
+        carrier_frequencies = [-10, -1, 0, 1, 10]
+        control = QGD.CarrierControl(bspline_control, carrier_frequencies)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        println("="^40, "\nProblem: Rabi Oscillator (order 2, 4, 6, 8, 10, 12)\n", "="^40, "\n")
+        test_order(prob, control, pcof, orders=(2,4,6,8,10,12))
+    end
+
+    @testset "Random Schrodinger Problem" begin
+        complex_system_size = 4
+        N_operators = 1
+
+        prob = QuantumGateDesign.construct_rand_prob(
+            complex_system_size,
+            N_operators,
+            tf = 1.0,
+            nsteps = 40,
+            gmres_abstol=1e-15,
+            gmres_reltol=1e-15
+        )
+
+        # High degree, because we want a smooth control
+        degree = 16
+        N_basis_functions = 20
+        bspline_control = QGD.FortranBSplineControl(degree, N_basis_functions, prob.tf)
+        carrier_frequencies = [-10, -1, 0, 1, 10]
+        control = QGD.CarrierControl(bspline_control, carrier_frequencies)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        println("="^40, "\nProblem: Random (order 2,4,6,8)\n", "="^40, "\n")
+        test_order(prob, control, pcof, orders=(2,4,6,8))
+
+        prob = QuantumGateDesign.construct_rand_prob(
+            complex_system_size,
+            N_operators,
+            tf = 10.0,
+            nsteps = 100,
+            gmres_abstol=1e-15,
+            gmres_reltol=1e-15
+        )
+
+        # High degree, because we want a smooth control
+        degree = 16
+        N_basis_functions = 20
+        bspline_control = QGD.FortranBSplineControl(degree, N_basis_functions, prob.tf)
+        carrier_frequencies = [-10, -1, 0, 1, 10]
+        control = QGD.CarrierControl(bspline_control, carrier_frequencies)
+        pcof = rand(MersenneTwister(0), control.N_coeff) 
+
+        println("="^40, "\nProblem: Random (order 2,4,6,8)\n", "="^40, "\n")
+        test_order(prob, control, pcof, orders=(10,12))
     end
   end 
 end
