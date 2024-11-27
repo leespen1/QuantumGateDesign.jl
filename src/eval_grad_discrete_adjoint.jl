@@ -184,6 +184,9 @@ function accumulate_gradient!(gradient::AbstractVector{Float64},
         order=2
     )
 
+    accumulate_gradient_arbitrary_fast!(gradient, prob, controls, pcof, history, lambda_history, order=order)
+    return gradient
+
     if (order == 2)
         accumulate_gradient_order2!(gradient, prob, controls, pcof, history, lambda_history)
         return gradient
@@ -191,10 +194,6 @@ function accumulate_gradient!(gradient::AbstractVector{Float64},
         accumulate_gradient_order4!(gradient, prob, controls, pcof, history, lambda_history)
         return gradient
     end
-
-    accumulate_gradient_arbitrary_fast!(gradient, prob, controls, pcof, history, lambda_history, order=order)
-    return gradient
-
 
 
     dt = prob.tf / prob.nsteps
@@ -652,12 +651,6 @@ May as well make a matrix of right inners, since I will have λ, A₀λ, A₁λ,
 
 Does the contribution of ⟨coeff*wⱼ₊₁, λ⟩
 """
-#function recursive_magic!(grad_contrib::AbstractVector,
-#        w_mat::AbstractMatrix, lambda::AbstractVector,
-#        derivative_order::Int, coeff::Real,
-#        prob::SchrodingerProb, control::AbstractControl, t::Real,
-#        pcof::AbstractVector, sym_op, asym_op
-#    )
 function recursive_magic!(grad_contrib::AbstractVector{<: Real},
         w_mat::AbstractMatrix{<: Real}, lambda::AbstractVector{<: Real},
         derivative_order::Integer, coeff::Real,
@@ -708,15 +701,15 @@ function recursive_magic!(grad_contrib::AbstractVector{<: Real},
     for i in 0:j
         # Take special care about how factors are handled
         # Move this outside the loop
-        working_state_vector .= 0
-        apply_hamiltonian!(working_state_vector, lambda, prob, controls, t, pcof;
+        # NEED A NEW SOLUTION HERE! FIXED ERROR, BUT STILL HAVE MEMORY ALLOCATION!
+        # WANT TO HAVE SAME BEHAVIOR, BUT NOT ALLOCATE MEMORY! (maybe use two working vectors, alternate?)
+        right_inner = zeros(real_system_size)
+        apply_hamiltonian!(right_inner, lambda, prob, controls, t, pcof;
                            derivative_order=(j-i), use_adjoint=true)
         
-        # Maybe following line is needed
-        #working_vector ./= factorial(j-i)
 
         recursive_magic!(
-            grad_contrib, w_mat, working_state_vector, i, coeff/(j+1), prob,
+            grad_contrib, w_mat, right_inner, i, coeff/(j+1), prob,
             controls, t, pcof, control_index, working_pcof, working_state_vector
         )
     end
