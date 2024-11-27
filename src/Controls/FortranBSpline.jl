@@ -101,7 +101,7 @@ function fill_p_vec!(
             val += pcof[pcof_offset+i] * control.output_array[1+i,1+derivative_order]
         end
         # Chain rule and getting 1/j! factor in p⁽ʲ⁾(t)/j!
-        vals_vec[1+derivative_order] = val / ((control.tf ^ derivative_order)*derivative_order)
+        vals_vec[1+derivative_order] = val / ((control.tf ^ derivative_order)*factorial(derivative_order))
     end
     return vals_vec
 end
@@ -141,7 +141,7 @@ function fill_q_vec!(
             val += pcof[pcof_offset+i] * control.output_array[1+i,1+derivative_order]
         end
         # Chain rule and getting 1/j! factor in q⁽ʲ⁾(t)/j!
-        vals_vec[1+derivative_order] = val / ((control.tf ^ derivative_order)*derivative_order)
+        vals_vec[1+derivative_order] = val / ((control.tf ^ derivative_order)*factorial(derivative_order))
     end
     return vals_vec
 end
@@ -160,7 +160,8 @@ function eval_grad_p_derivative!(
     # Control is linear in the pcof coefficients
     grad .= 0
     for i in 0:control.bspline_order-1
-        grad[pcof_offset+i] = control.output_array[1+i,1+order] / control.tf ^ order
+        # Chain rule (no 1/j! factor needed)
+        grad[pcof_offset+i] = control.output_array[1+i,1+order] / (control.tf ^ order)
     end
 
     return grad
@@ -180,7 +181,8 @@ function eval_grad_q_derivative!(
     # Control is linear in the pcof coefficients
     grad .= 0
     for i in 0:control.bspline_order-1
-        grad[pcof_offset+i] = control.output_array[1+i,1+order] / control.tf ^ order
+        # Chain rule (no 1/j! factor needed)
+        grad[pcof_offset+i] = control.output_array[1+i,1+order] / (control.tf ^ order)
     end
 
     return grad
