@@ -375,7 +375,7 @@ function optimize_gate(
 
         infidelity = optimization_tracker.last_infidelity
         if (infidelity < 0) || (infidelity > 1)
-            @warn "Infidelity is outside range the [0,1]. This may indicate that the solution is inaccurate, and a smaller stepsize is needed."
+            @warn "Infidelity $infidelity is outside range the [0,1]. This may indicate that the solution is inaccurate, and a smaller stepsize is needed."
         end
 
         if obj_value < 1e-7
