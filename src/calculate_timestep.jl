@@ -45,20 +45,19 @@ function estimate_N_timesteps(
 end
 
 """
-Should have a function that actually does an error analysis to figure out how
-many timesteps are typically needed per period. Could randomize this over
-many SchrodingerProbs and include it in the paper. Would be a good reference to
-estimate how many timesteps would be needed for various problems.
+Using the max-amplitude strategy, perform actual forward evolutions to determine
+an appropiate number timesteps per period to achieve the target error.
 
 # Arguments
 - `prob::SchrodingerProb`
 - `max_amplitudes::Vector{<: Real}`: Maximum amplitude for each control function.
 - `timesteps_per_period::Integer`: Number of time steps per shortest period (assuming a slowly varying Hamiltonian).
 """
-function estimate_timesteps_per_period(
+function experiment_N_timesteps(
         prob::SchrodingerProb,
         max_amplitudes::Vector{<: Real},
-        order::Integer
+        order::Integer,
+        target_error::Real
     )
     # We are going to mutate the stepsize, so copy the problem
     prob = copy(prob)
@@ -70,16 +69,18 @@ function estimate_timesteps_per_period(
     pcof = repeat(max_amplitudes, inner=2)
 
 
-
     timesteps_per_period_vec = [2.0^i for i in -3:6]
     histories = Any[] 
-    relative_errors = Any[]
+    relative_errors = Float64[]
+    nsteps_vec = Float64[]
 
     println("\n\nStarting Test with order $order\n\n")
     for (i, timesteps_per_period) in enumerate(timesteps_per_period_vec)
-        prob.nsteps = estimate_N_timesteps(prob, max_amplitudes, timesteps_per_period)
+        nsteps = estimate_N_timesteps(prob, max_amplitudes, timesteps_per_period)
+        prob.nsteps = nsteps
         history = eval_forward(prob, controls, pcof, order=order)
         push!(histories, history)
+        push!(nsteps_vec, nsteps)
 
         if i > 1
             relative_error = QuantumGateDesign.richardson_extrap_rel_err(
@@ -88,11 +89,35 @@ function estimate_timesteps_per_period(
             push!(relative_errors, relative_error)
             println("For $(timesteps_per_period_vec[i]) timesteps per period, relative error is $relative_error")
 
-            #if relative_error < 1e-9
-            #    break
-            #end
+            # Stop once we have gotten below the target error
+            if (relative_error < target_error) && (i > 2)
+                break
+            end
         end
     end
+    push!(relative_errors, NaN)
+
+    # Do a linear interpolation of the last two relative errors (in log scale)
+    # to estimate the stepsize needed to achieve the target error
+
+    log10_rel_errs = log10.(relative_errors)
+    log10_nsteps = log10.(nsteps_vec)
+
+    log10_target_nsteps = linear_interpolate(
+        log10_nsteps[end-2], log10_rel_errs[end-2],
+        log10_nsteps[end-1], log10_rel_errs[end-1],
+        log10(target_error)    
+    )
+
+    display(hcat(log10_nsteps, log10_rel_errs))
+    println(log10_target_nsteps)
+
+    target_nsteps = 10.0 ^ log10_target_nsteps
     
-    return relative_errors
+    return ceil(Int64, target_nsteps)
+end
+
+function linear_interpolate(x1, y1, x2, y2, y_target)
+    x_target = x1 + (y_target - y1) * (x2 - x1) / (y2 - y1)
+    return x_target
 end
