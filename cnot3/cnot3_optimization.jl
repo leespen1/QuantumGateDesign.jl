@@ -33,22 +33,9 @@ oscillator:
     Oscillator B: 0, ξ_a, ξ_b
     Oscillator S: 0, ξ_{as}, ξ_{bs}.
 ==========================================================# 
-#using LinearAlgebra
-#using Ipopt
-#using Base.Threads
-using Random
-#using DelimitedFiles
-using Printf
-#using FFTW
-#using Plots
-#using SparseArrays
-#using FileIO
 
-#include("Juqbox.jl") # using the consolidated Juqbox module
-using Juqbox
-using QuantumGateDesign
-
-using JLD2, Dates, ArgParse, Printf
+using QuantumGateDesign, Juqbox
+using JLD2, Dates, ArgParse, Printf, Random, LinearAlgebra
 
 Base.show(io::IO, f::Float64) = @printf(io, "%20.13e", f)
 
@@ -72,7 +59,7 @@ s = ArgParseSettings()
         help = "Output directory (must be created by user)"
         arg_type = String
         default = ""
-    "--max_time", "-c"
+    "--max_time", "-t"
         help = "Maximum amount of wall time (hours) to be elapsed by ipopt optimization."
         arg_type = Float64
         default = 24
@@ -108,10 +95,13 @@ max_time = parsed_args["max_time"]
 max_iter = parsed_args["max_iter"]
 target_error = parsed_args["target_error"]
 
+
 # Setup output directory, make sure it exists
 output_dir = (@__DIR__) * "/" * parsed_args["output_dir"] * "/"
 mkpath(output_dir)
 
+juqbox_filename_str = parsed_args["use_juqbox"] ? "juqbox_" : ""
+output_filename = output_dir * "cnot3_opt_" * juqbox_filename_str * "order=$(method_order)_targetError=$(target_error)_nsteps=$(nsteps)_seed=$(seed)_date=$(now()).jld2"
 
 if parsed_args["use_juqbox"]
     @assert method_order == 2
@@ -331,7 +321,7 @@ println("Initial coefficient vector stored in 'pcof0'")
 ==============================================================================#
 if parsed_args["use_juqbox"]
     Juqbox.run_optimizer(juqbox_ipopt_prob, pcof0)
-    output_filename = output_dir * "cnot3_opt_juqbox_order=$(method_order)_nsteps=$(juqbox_params.nsteps)_date=$(now()).jld2"
+
     JLD2.jldopen(output_filename, "a+") do file
         file["objHist"] = juqbox_params.objHist
         file["primaryHist"] = juqbox_params.primaryHist
@@ -341,8 +331,6 @@ if parsed_args["use_juqbox"]
     end
 
 else
-
-
 
 #==============================================================================
 # Create controls with the same number of coefficients as the Jubox ones, but
@@ -375,7 +363,6 @@ else
         qgd_prob, max_amplitudes, method_order, target_error
     )
     qgd_prob.nsteps = nsteps
-    output_filename = output_dir * "cnot3_optimization_order=$(method_order)_targetError=$(target_error)_nsteps=$(nsteps)_date=$(now()).jld2"
 
 #==============================================================================
 # Do QGD Optimization

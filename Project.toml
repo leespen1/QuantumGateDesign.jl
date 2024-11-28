@@ -4,6 +4,7 @@ authors = ["Spencer Lee <leespen1@msu.edu>"]
 version = "0.1.0"
 
 [deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 BSplines = "488c2830-172b-11e9-1591-253b8a7df96d"
 BasicBSpline = "4c5d9882-2acf-4ea4-9e48-968fd4518195"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
@@ -24,7 +25,6 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 [weakdeps]
 CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
-Juqbox = "d847742d-ef10-4feb-8f3c-cfc2faa2caf7"
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
@@ -33,6 +33,11 @@ ControlVisualizer = "GLMakie"
 JuqboxHelpers = "Juqbox"
 OrdinaryDiffEqInterface = "OrdinaryDiffEq"
 QuTipIntegration = ["PythonCall", "CondaPkg"]
+
+[compat]
+ArgParse = "1.2.0"
+Juqbox = "0.2.7"
+SparseArrays = "1.11.0"
 
 [extras]
 Polynomials = "f27b6e38-b328-58d1-80ce-0feddd5e7a45"
