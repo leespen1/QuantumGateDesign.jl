@@ -107,6 +107,7 @@ method_order = ORDER
 seed = SEED
 max_time = MAX_TIME
 max_iter = MAX_ITER
+target_error_str = "TARGET_ERROR"
 target_error = TARGET_ERROR
 use_juqbox = USE_JUQBOX
 
@@ -332,7 +333,7 @@ println("Initial coefficient vector stored in 'pcof0'")
 if use_juqbox
     Juqbox.run_optimizer(juqbox_ipopt_prob, pcof0)
 
-    output_filename = output_dir * "cnot3_opt_juqbox_order=$(method_order)_targetError=$(target_error)_nsteps=$(nsteps)_seed=$(seed)_date=$(now()).jld2"
+    output_filename = output_dir * "cnot3_opt_juqbox_order=$(method_order)_targetError=$(target_error_str)_nsteps=$(nsteps)_seed=$(seed)_date=$(now()).jld2"
     JLD2.jldopen(output_filename, "a+") do file
         file["objHist"] = juqbox_params.objHist
         file["primaryHist"] = juqbox_params.primaryHist
@@ -378,7 +379,7 @@ else
 #==============================================================================
 # Do QGD Optimization
 ==============================================================================#
-    output_filename = output_dir * "cnot3_opt_order=$(method_order)_targetError=$(target_error)_nsteps=$(nsteps)_seed=$(seed)_date=$(now()).jld2"
+    output_filename = output_dir * "cnot3_opt_order=$(method_order)_targetError=$(target_error_str)_nsteps=$(nsteps)_seed=$(seed)_date=$(now()).jld2"
     optimization_history = optimize_gate(
         qgd_prob, controls, pcof0, target, order=method_order,
         pcof_U=amax, pcof_L=-amax,
