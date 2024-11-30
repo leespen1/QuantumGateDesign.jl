@@ -378,9 +378,9 @@ function optimize_gate(
             @warn "Infidelity $infidelity is outside range the [0,1]. This may indicate that the solution is inaccurate, and a smaller stepsize is needed."
         end
 
-        if obj_value < 1e-7
-            return false # Stop the optimization
-        end
+        #if obj_value < 1e-7
+        #    return false # Stop the optimization
+        #end
         return true # continue the optimization
     end
 
