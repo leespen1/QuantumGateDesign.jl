@@ -1,5 +1,5 @@
 #!/bin/bash --login
-#SBATCH --job-name=cnot3_optimization_order=ORDER_targeterror=TARGETERROR_seed=SEED_maxiter=MAXITER_usejuqbox=USEJUQBOX  # Job name
+#SBATCH --job-name=cnot3_optimization_order=ORDER_targeterror=TARGETERROR_seed=SEED_maxtime=MAXTIME_maxiter=MAXITER_usejuqbox=USEJUQBOX  # Job name
 #SBATCH --mail-type=NONE             # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=leespen1@msu.edu # Where to send mail. 
 #SBATCH --nodes=1                    # Maximum number of nodes to be allocated
