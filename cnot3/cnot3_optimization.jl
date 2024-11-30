@@ -105,11 +105,11 @@ mkpath(output_dir)
 =#
 method_order = ORDER
 seed = SEED
-max_time = MAX_TIME
-max_iter = MAX_ITER
-target_error_str = "TARGET_ERROR"
-target_error = TARGET_ERROR
-use_juqbox = USE_JUQBOX
+max_time = MAXTIME
+max_iter = MAXITER
+target_error_str = "TARGETERROR"
+target_error = TARGETERROR
+use_juqbox = USEJUQBOX
 
 
 if use_juqbox
