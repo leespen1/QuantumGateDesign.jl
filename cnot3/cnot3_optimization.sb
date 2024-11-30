@@ -1,0 +1,32 @@
+#!/bin/bash --login
+#SBATCH --job-name=cnot3_optimization_order=ORDER_targeterror=TARGETERROR_seed=SEED_maxiter=MAXITER_usejuqbox=USEJUQBOX  # Job name
+#SBATCH --mail-type=NONE             # Mail events (NONE, BEGIN, END, FAIL, ALL)
+#SBATCH --mail-user=leespen1@msu.edu # Where to send mail. 
+#SBATCH --nodes=1                    # Maximum number of nodes to be allocated
+#SBATCH --ntasks-per-node=1          # Maximum number of tasks on each node
+#SBATCH --cpus-per-task=1            # Number of processors for each task (want several because the BLAS is multithreaded, even though my Julia code is not)
+#SBATCH --mem=16G                    # Memory (i.e. RAM) per NODE
+#SBATCH --export=NONE                 # HPCC suggests setting to NONE for HPCC reasons, but I don't think it's necessary, and I want ALL so that I can load julia and have it transfer to all nodes
+#SBATCH --constraint=intel18         # Run on the
+#SBATCH --time=2-00:00:00                           # Wall time limit (days-hrs:min:sec)
+#SBATCH --output=DIR/cnot3_optimization_order=ORDER_targeterror=TARGETERROR_seed=SEED_maxiter=MAXITER_usejuqbox=USEJUQBOX_%A.log     # Path to the standard output and error files relative to the working directory
+
+
+#echo "Date              = $(date)"
+#echo "Hostname          = $(hostname -s)"
+#echo "Working Directory = $(pwd)"
+#echo ""
+#echo "Number of Nodes Allocated      = $SLURM_JOB_NUM_NODES"
+#echo "Number of Tasks Per Node       = $SLURM_NTASKS_PER_NODE"
+#echo "Number of CPUs Per Task       = $SLURM_CPUS_PER_TASK"
+#echo ""
+
+
+#ARTIFACT_HASH=43964d8fde379b95f9b4bdc214b688bc394cd4ac 
+#export LD_LIBRARY_PATH=$HOME/.julia/artifacts/$ARTIFACT_HASH/lib:$LD_LIBRARY_PATH
+
+#PROJECTENV=/mnt/home/leespen1/Research/QuantumGateDesign.jl
+PROJECTENV=/home/spencer/Research/QuantumGateDesign.jl
+
+#echo "julia --project=$PROJECTENV OUTPUT_SCRIPT"
+julia --project=$PROJECTENV DIR/OUTPUT_SCRIPT
