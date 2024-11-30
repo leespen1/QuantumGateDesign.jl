@@ -22,8 +22,8 @@
 #echo ""
 
 
-#ARTIFACT_HASH=43964d8fde379b95f9b4bdc214b688bc394cd4ac 
-#export LD_LIBRARY_PATH=$HOME/.julia/artifacts/$ARTIFACT_HASH/lib:$LD_LIBRARY_PATH
+ARTIFACT_HASH=43964d8fde379b95f9b4bdc214b688bc394cd4ac 
+export LD_LIBRARY_PATH=$HOME/.julia/artifacts/$ARTIFACT_HASH/lib:$LD_LIBRARY_PATH
 
 PROJECTENV=/mnt/home/leespen1/Research/QuantumGateDesign.jl
 #PROJECTENV=/home/spencer/Research/QuantumGateDesign.jl
