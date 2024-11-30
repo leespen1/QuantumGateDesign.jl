@@ -35,7 +35,7 @@ oscillator:
 ==========================================================# 
 
 using QuantumGateDesign, Juqbox
-using JLD2, Dates, ArgParse, Printf, Random, LinearAlgebra
+using JLD2, Dates, Printf, Random, LinearAlgebra
 
 Base.show(io::IO, f::Float64) = @printf(io, "%20.13e", f)
 
@@ -45,7 +45,9 @@ Base.show(io::IO, f::Float64) = @printf(io, "%20.13e", f)
 # Set up command line arguments
 #
 ==============================================================================#
+#= Old way, but ArgParse is not working with HPC
 s = ArgParseSettings()
+println("Set up ArgParseSettings!")
 
 @add_arg_table s begin
     "--use_juqbox", "-j"
@@ -96,17 +98,25 @@ max_iter = parsed_args["max_iter"]
 target_error = parsed_args["target_error"]
 
 
+
 # Setup output directory, make sure it exists
 output_dir = (@__DIR__) * "/" * parsed_args["output_dir"] * "/"
 mkpath(output_dir)
+=#
+method_order = ORDER
+seed = SEED
+max_time = MAX_TIME
+max_iter = MAX_ITER
+target_error = TARGET_ERROR
+use_juqbox = USE_JUQBOX
 
-juqbox_filename_str = parsed_args["use_juqbox"] ? "juqbox_" : ""
-output_filename = output_dir * "cnot3_opt_" * juqbox_filename_str * "order=$(method_order)_targetError=$(target_error)_nsteps=$(nsteps)_seed=$(seed)_date=$(now()).jld2"
 
-if parsed_args["use_juqbox"]
+if use_juqbox
     @assert method_order == 2
 end
 
+# With the new bash loop, don't need to have a subdirectory, since each script lives in it's own directory
+output_dir = (@__DIR__) * "/"
 
 #==============================================================================
 #
@@ -319,9 +329,10 @@ println("Initial coefficient vector stored in 'pcof0'")
 #==============================================================================
 # Run Juqbox Optimization, Log Results
 ==============================================================================#
-if parsed_args["use_juqbox"]
+if use_juqbox
     Juqbox.run_optimizer(juqbox_ipopt_prob, pcof0)
 
+    output_filename = output_dir * "cnot3_opt_juqbox_order=$(method_order)_targetError=$(target_error)_nsteps=$(nsteps)_seed=$(seed)_date=$(now()).jld2"
     JLD2.jldopen(output_filename, "a+") do file
         file["objHist"] = juqbox_params.objHist
         file["primaryHist"] = juqbox_params.primaryHist
@@ -367,6 +378,7 @@ else
 #==============================================================================
 # Do QGD Optimization
 ==============================================================================#
+    output_filename = output_dir * "cnot3_opt_order=$(method_order)_targetError=$(target_error)_nsteps=$(nsteps)_seed=$(seed)_date=$(now()).jld2"
     optimization_history = optimize_gate(
         qgd_prob, controls, pcof0, target, order=method_order,
         pcof_U=amax, pcof_L=-amax,
