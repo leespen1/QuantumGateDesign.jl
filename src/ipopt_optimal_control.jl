@@ -19,21 +19,37 @@ mutable struct OptimizationTracker
 end
 
 struct OptimizationHistory
-    iter_count::Vector{Int64}
-    ipopt_obj_value::Vector{Float64}
+    ipopt_iter::Vector{Int64}
+    ipopt_objective::Vector{Float64}
+    ipopt_inf_pr::Vector{Float64}
+    ipopt_inf_du::Vector{Float64}
+    ipopt_lg_mu::Vector{Float64}
+    ipopt_d_norm::Vector{Float64}
+    ipopt_regularization_size::Vector{Float64}
+    ipopt_alpha_du::Vector{Float64}
+    ipopt_alpha_pr::Vector{Float64}
+    ipopt_ls::Vector{Int64}
     wall_time::Vector{Float64}
     pcof::Vector{Vector{Float64}}
     grad_pcof::Vector{Vector{Float64}}
     analytic_obj_value::Vector{Float64}
     infidelity::Vector{Float64}
     guard_penalty::Vector{Float64}
-    ridge_penalty::Vector{Float64}
+    ridge_penalty::Vector{Float64} # Add primaryobj, secondaryobj, to match juqbox
 end
 
 function OptimizationHistory()
     return OptimizationHistory(
         Int64[],
         Float64[],
+        Float64[],
+        Float64[],
+        Float64[],
+        Float64[],
+        Float64[],
+        Float64[],
+        Float64[],
+        Int64[],
         Float64[],
         Vector{Float64}[],
         Vector{Float64}[],
@@ -73,8 +89,16 @@ Write contents of an OptimizationHistory object to a jld2 file.
 """
 function write(obj::OptimizationHistory, filename)
     JLD2.jldopen(filename, "a+") do file
-        file["iter_count"] = obj.iter_count
-        file["ipopt_obj_value"] = obj.ipopt_obj_value
+        file["ipopt_iter"] = obj.ipopt_iter
+        file["ipopt_objective"] = obj.ipopt_objective
+        file["ipopt_inf_pr"] = obj.ipopt_inf_pr
+        file["ipopt_inf_du"] = obj.ipopt_inf_du
+        file["ipopt_lg_mu"] = obj.ipopt_lg_mu
+        file["ipopt_d_norm"] = obj.ipopt_d_norm
+        file["ipopt_regularization_size"] = obj.regularization_size
+        file["ipopt_alpha_du"] = obj.ipopt_alpha_du
+        file["ipopt_alpha_pr"] = obj.ipopt_alpha_pr
+        file["ipopt_ls"] = obj.ipopt_ls
         file["wall_time"] = obj.wall_time
         file["pcof"] = obj.pcof
         file["grad_pcof"] = obj.grad_pcof
@@ -91,15 +115,23 @@ Read contents of a jld2 file into an OptimizationHistory object.
 function read_optimization_history(filename)
     jld2_dict = JLD2.load(filename)
     return OptimizationHistory(
-        jld2_dict["iter_count"],
-        jld2_dict["ipopt_obj_value"],
+        jld2_dict["ipopt_iter"],
+        jld2_dict["ipopt_objective"],
+        jld2_dict["ipopt_inf_pr"],
+        jld2_dict["ipopt_inf_du"],
+        jld2_dict["ipopt_lg_mu"],
+        jld2_dict["ipopt_d_norm"],
+        jld2_dict["ipopt_regularization_size"],
+        jld2_dict["ipopt_alpha_du"],
+        jld2_dict["ipopt_alpha_pr"],
+        jld2_dict["ipopt_ls"],
         jld2_dict["wall_time"],
         jld2_dict["pcof"],
         jld2_dict["grad_pcof"],
         jld2_dict["analytic_obj_value"],
         jld2_dict["infidelity"],
         jld2_dict["guard_penalty"],
-        jld2_dict["ridge_penalty"],
+        jld2_dict["ridge_penalty"]
     )
 end
 
@@ -359,8 +391,17 @@ function optimize_gate(
         ls_trials
     )
         elapsed_time = time() - initial_time
-        # Open file in append mode and update arrays
-        push!(optimization_history.iter_count, iter_count)
+        push!(optimization_history.ipopt_, ) # alg mod?
+        push!(optimization_history.ipopt_iter, iter_count)
+        push!(optimization_history.ipopt_objective, obj_value )
+        push!(optimization_history.ipopt_inf_pr, inf_pr)
+        push!(optimization_history.ipopt_inf_du, inf_du)
+        push!(optimization_history.ipopt_lg_mu, mu) # The ipopt terminal output gives lg_mu. Is mu on log scale too?
+        push!(optimization_history.ipopt_d_norm, d_norm)
+        push!(optimization_history.ipopt_regularization_size, regularization_size)
+        push!(optimization_history.ipopt_alpha_du, alpha_du)
+        push!(optimization_history.ipopt_alpha_pr, alpha_pr)
+        push!(optimization_history.ipopt_ls, ls_trials)
         push!(optimization_history.ipopt_obj_value, obj_value)
         push!(optimization_history.wall_time, elapsed_time)
         push!(optimization_history.pcof, optimization_tracker.last_pcof)
@@ -370,6 +411,7 @@ function optimize_gate(
         push!(optimization_history.guard_penalty, optimization_tracker.last_guard_penalty)
         push!(optimization_history.ridge_penalty, optimization_tracker.last_ridge_penalty)
 
+        # Open file in append mode and update arrays
         update_jld2()
 
 
