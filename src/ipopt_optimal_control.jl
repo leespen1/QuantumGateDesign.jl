@@ -7,6 +7,7 @@ mutable struct OptimizationTracker
     last_infidelity::Float64
     last_guard_penalty::Float64
     last_ridge_penalty::Float64
+    last_length_deviation::Float64
     function OptimizationTracker(N_params::Integer)
         initial_pcof = fill(NaN, N_params)
         initial_grad_pcof = fill(NaN, N_params)
@@ -14,11 +15,12 @@ mutable struct OptimizationTracker
         initial_discrete_adjoint_pcof = fill(NaN, N_params)
 
         new(initial_pcof, initial_grad_pcof, initial_forward_evolution_pcof, 
-            initial_discrete_adjoint_pcof, NaN, NaN, NaN, NaN)
+            initial_discrete_adjoint_pcof, NaN, NaN, NaN, NaN, NaN)
     end
 end
 
 struct OptimizationHistory
+    ipopt_alg_mod::Vector{Float64}
     ipopt_iter::Vector{Int64}
     ipopt_objective::Vector{Float64}
     ipopt_inf_pr::Vector{Float64}
@@ -36,10 +38,12 @@ struct OptimizationHistory
     infidelity::Vector{Float64}
     guard_penalty::Vector{Float64}
     ridge_penalty::Vector{Float64} # Add primaryobj, secondaryobj, to match juqbox
+    length_deviation::Vector{Float64}
 end
 
 function OptimizationHistory()
     return OptimizationHistory(
+        Float64[],
         Int64[],
         Float64[],
         Float64[],
@@ -53,6 +57,7 @@ function OptimizationHistory()
         Float64[],
         Vector{Float64}[],
         Vector{Float64}[],
+        Float64[],
         Float64[],
         Float64[],
         Float64[],
@@ -61,7 +66,7 @@ function OptimizationHistory()
 end
 
 function Base.length(obj::OptimizationHistory)
-    return length(obj.iter_count)
+    return length(obj.ipopt_iter)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", obj::OptimizationHistory)
@@ -71,8 +76,8 @@ function Base.show(io::IO, ::MIME"text/plain", obj::OptimizationHistory)
     if (length(obj) > 0)
         println(io, obj.wall_time[end], " seconds elapsed.")
 
-        min_obj_val_index = argmin(obj.ipopt_obj_value)
-        min_obj_val = obj.ipopt_obj_value[min_obj_val_index]
+        min_obj_val_index = argmin(obj.ipopt_objective)
+        min_obj_val = obj.ipopt_objective[min_obj_val_index]
         println(io, "Minimum objective function was ", min_obj_val, ", at iteration ", min_obj_val_index, ".")
 
         min_infidelity_index = argmin(obj.infidelity)
@@ -89,13 +94,14 @@ Write contents of an OptimizationHistory object to a jld2 file.
 """
 function write(obj::OptimizationHistory, filename)
     JLD2.jldopen(filename, "a+") do file
+        file["ipopt_alg_mod"] = obj.ipopt_alg_mod
         file["ipopt_iter"] = obj.ipopt_iter
         file["ipopt_objective"] = obj.ipopt_objective
         file["ipopt_inf_pr"] = obj.ipopt_inf_pr
         file["ipopt_inf_du"] = obj.ipopt_inf_du
         file["ipopt_lg_mu"] = obj.ipopt_lg_mu
         file["ipopt_d_norm"] = obj.ipopt_d_norm
-        file["ipopt_regularization_size"] = obj.regularization_size
+        file["ipopt_regularization_size"] = obj.ipopt_regularization_size
         file["ipopt_alpha_du"] = obj.ipopt_alpha_du
         file["ipopt_alpha_pr"] = obj.ipopt_alpha_pr
         file["ipopt_ls"] = obj.ipopt_ls
@@ -106,6 +112,7 @@ function write(obj::OptimizationHistory, filename)
         file["infidelity"] = obj.infidelity
         file["guard_penalty"] = obj.guard_penalty
         file["ridge_penalty"] = obj.ridge_penalty
+        file["length_deviation"] = obj.length_deviation
     end
 end
 
@@ -115,6 +122,7 @@ Read contents of a jld2 file into an OptimizationHistory object.
 function read_optimization_history(filename)
     jld2_dict = JLD2.load(filename)
     return OptimizationHistory(
+        jld2_dict["ipopt_alg_mod"],
         jld2_dict["ipopt_iter"],
         jld2_dict["ipopt_objective"],
         jld2_dict["ipopt_inf_pr"],
@@ -131,7 +139,8 @@ function read_optimization_history(filename)
         jld2_dict["analytic_obj_value"],
         jld2_dict["infidelity"],
         jld2_dict["guard_penalty"],
-        jld2_dict["ridge_penalty"]
+        jld2_dict["ridge_penalty"],
+        jld2_dict["length_deviation"]
     )
 end
 
@@ -295,7 +304,6 @@ function optimize_gate(
 
             # Guard Penalty Term
             dt = schro_prob.tf / schro_prob.nsteps
-
             optimization_tracker.last_guard_penalty = guard_penalty_real(
                 state_history, dt, schro_prob.tf, schro_prob.guard_subspace_projector
             )
@@ -312,6 +320,16 @@ function optimize_gate(
             ))
             optimization_tracker.last_pcof .= pcof
             optimization_tracker.last_forward_evolution_pcof .= pcof
+
+            # State vector length preservation - Check how much the state vector length deviates from unity
+            length_deviation = 0.0
+            for i in 1:size(QN, 2)
+                ψf =  @view QN[:,i]
+                ψf_length = LinearAlgebra.norm(ψf)
+                ψf_length_deviation = ψf_length - 1
+                length_deviation = abs(ψf_length_deviation) > abs(length_deviation) ? ψf_length_deviation : length_deviation
+            end
+            optimization_tracker.last_length_deviation = length_deviation
         end
 
         return optimization_tracker.last_objective
@@ -371,6 +389,16 @@ function optimize_gate(
                 optimization_tracker.last_guard_penalty,
                 optimization_tracker.last_ridge_penalty,
             ))
+
+            # State vector length preservation - Check how much the state vector length deviates from unity
+            length_deviation = 0.0
+            for i in 1:size(QN, 2)
+                ψf =  @view QN[:,i]
+                ψf_length = LinearAlgebra.norm(ψf)
+                ψf_length_deviation = ψf_length - 1
+                length_deviation = abs(ψf_length_deviation) > abs(length_deviation) ? ψf_length_deviation : length_deviation
+            end
+            optimization_tracker.last_length_deviation = length_deviation
         end
 
         grad_f .= optimization_tracker.last_grad_pcof
@@ -391,7 +419,7 @@ function optimize_gate(
         ls_trials
     )
         elapsed_time = time() - initial_time
-        push!(optimization_history.ipopt_, ) # alg mod?
+        push!(optimization_history.ipopt_alg_mod, alg_mod) # alg mod?
         push!(optimization_history.ipopt_iter, iter_count)
         push!(optimization_history.ipopt_objective, obj_value )
         push!(optimization_history.ipopt_inf_pr, inf_pr)
@@ -402,7 +430,6 @@ function optimize_gate(
         push!(optimization_history.ipopt_alpha_du, alpha_du)
         push!(optimization_history.ipopt_alpha_pr, alpha_pr)
         push!(optimization_history.ipopt_ls, ls_trials)
-        push!(optimization_history.ipopt_obj_value, obj_value)
         push!(optimization_history.wall_time, elapsed_time)
         push!(optimization_history.pcof, optimization_tracker.last_pcof)
         push!(optimization_history.grad_pcof, optimization_tracker.last_grad_pcof)
@@ -410,6 +437,7 @@ function optimize_gate(
         push!(optimization_history.infidelity, optimization_tracker.last_infidelity)
         push!(optimization_history.guard_penalty, optimization_tracker.last_guard_penalty)
         push!(optimization_history.ridge_penalty, optimization_tracker.last_ridge_penalty)
+        push!(optimization_history.length_deviation, optimization_tracker.last_length_deviation)
 
         # Open file in append mode and update arrays
         update_jld2()
@@ -417,7 +445,7 @@ function optimize_gate(
 
         infidelity = optimization_tracker.last_infidelity
         if (infidelity < 0) || (infidelity > 1)
-            @warn "Infidelity $infidelity is outside range the [0,1]. This may indicate that the solution is inaccurate, and a smaller stepsize is needed."
+            @warn "Infidelity $infidelity is outside range the [0,1]. This may indicate that the numerical error in the solution at the final time is greater than the deviation of the implemented gate from the target gate. Considert using a smaller stepsize."
         end
 
         #if obj_value < 1e-7
