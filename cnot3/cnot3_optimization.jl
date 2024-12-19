@@ -35,7 +35,7 @@ oscillator:
 ==========================================================# 
 
 using QuantumGateDesign, Juqbox
-using JLD2, Dates, Printf, Random, LinearAlgebra, Pkg
+using JLD2, Dates, Printf, Random, LinearAlgebra, Pkg, InteractiveUtils
 
 Base.show(io::IO, f::Float64) = @printf(io, "%20.13e", f)
 
