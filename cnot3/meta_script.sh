@@ -13,11 +13,12 @@ echo "Checking that QuantumGateDesign precompiles and loads correctly ..."
 # Define variables
 PRECOMPILE_LOG_FILE="precompile_output.log"
 EMAIL_ADDRESS="leespen1@msu.edu"
-EMAIL_SUBJECT="SpencerHPCC | Julia Script Failure: QuantumGateDesign.jl"
-PROJECTENV=/mnt/home/leespen1/Research/QuantumGateDesign.jl # Should this change? The director is different on compute nodes
+EMAIL_SUBJECT="SpencerHPCC | Julia Script Failure: QuantumGateDesign.jl" PROJECTENV=/mnt/home/leespen1/Research/QuantumGateDesign.jl # Should this change? The director is different on compute nodes
 
 # Run the Julia script and capture output (stdout and stderr)
-srun julia --project=$PROJECTENV $JULIA_SCRIPT -e "import Pkg; Pkg.precompile(); using QuantumGateDesign" > $PRECOMPILE_LOG_FILE 2>&1
+srun --constraint=intel18 --mem=16G --time=00:30:00 --nodes=1 --nodes=1 \
+     --ntasks=1 --cpus-per-task=8 \
+     julia --project=$PROJECTENV $JULIA_SCRIPT -e "import Pkg; Pkg.precompile(); using QuantumGateDesign" > $PRECOMPILE_LOG_FILE 2>&1
 PRECOMPILE_EXIT_CODE=$?
 
 
@@ -58,7 +59,7 @@ for ORDER in "${ORDER_VALUES[@]}"; do
             sed "s/ORDER/${ORDER}/; s/TARGETERROR/${TARGETERROR}/; s/SEED/${SEED}/; s/MAXTIME/${MAXTIME}/; s/MAXITER/${MAXITER}/; s/USEJUQBOX/${USEJUQBOX}/; s/OUTPUT_SCRIPT/${OUTPUT_SCRIPT}/; s/DIR/$DIR/" $INPUT_SLURM > $DIR/$OUTPUT_SLURM
     
             # Run the SLURM script (which runs the Julia script) [doing bash instead of sbatch for now]
-            ########################################sbatch $DIR/$OUTPUT_SLURM
+            sbatch $DIR/$OUTPUT_SLURM
         done
     done
 done
