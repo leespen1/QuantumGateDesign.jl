@@ -35,9 +35,17 @@ oscillator:
 ==========================================================# 
 
 using QuantumGateDesign, Juqbox
-using JLD2, Dates, Printf, Random, LinearAlgebra
+using JLD2, Dates, Printf, Random, LinearAlgebra, Pkg
 
 Base.show(io::IO, f::Float64) = @printf(io, "%20.13e", f)
+
+
+# Debugging: Check Julia versioninfo, active project, environment status, etc
+println("Version Info: ")
+versioninfo()
+println("Active environment: ", Base.active_project())
+Pkg.status()
+
 
 
 #==============================================================================
