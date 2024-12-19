@@ -22,9 +22,14 @@
 #echo "Number of CPUs Per Task       = $SLURM_CPUS_PER_TASK"
 #echo ""
 
+module list
 
+
+# Fix the library error (not exactly sure how/why this fixes that)
 ARTIFACT_HASH=43964d8fde379b95f9b4bdc214b688bc394cd4ac 
 export LD_LIBRARY_PATH=$HOME/.julia/artifacts/$ARTIFACT_HASH/lib:$LD_LIBRARY_PATH
+#ERROR: LoadError: InitError: could not load library "/mnt/home/leespen1/.julia/artifacts/43964d8fde379b95f9b4bdc214b688bc394cd4ac/lib/libgobject-2.0.so"
+#/mnt/home/leespen1/.julia/artifacts/43964d8fde379b95f9b4bdc214b688bc394cd4ac/lib/libgobject-2.0.so: undefined symbol: g_dir_unref
 
 PROJECTENV=/mnt/home/leespen1/Research/QuantumGateDesign.jl
 #PROJECTENV=/home/spencer/Research/QuantumGateDesign.jl
