@@ -8,31 +8,32 @@
 #SBATCH --mem=16G                    # Memory (i.e. RAM) per NODE
 #SBATCH --export=NONE                 # HPCC suggests setting to NONE for HPCC reasons, but I don't think it's necessary, and I want ALL so that I can load julia and have it transfer to all nodes
 #SBATCH --constraint=intel18         # Run on the
-#SBATCH --time=2-00:00:00                           # Wall time limit (days-hrs:min:sec)
+#SBATCH --time=00:30:00                           # Wall time limit (days-hrs:min:sec)
 #SBATCH --output=DIR/cnot3_optimization_order=ORDER_targeterror=TARGETERROR_seed=SEED_maxtime=MAXTIME_maxiter=MAXITER_usejuqbox=USEJUQBOX_%A.log     # Path to the standard output and error files relative to the working directory
 #SBATCH --error=DIR/cnot3_optimization_order=ORDER_targeterror=TARGETERROR_seed=SEED_maxtime=MAXTIME_maxiter=MAXITER_usejuqbox=USEJUQBOX_%A.log     # Path to the standard output and error files relative to the working directory
 
 
-#echo "Date              = $(date)"
-#echo "Hostname          = $(hostname -s)"
-#echo "Working Directory = $(pwd)"
-#echo ""
-#echo "Number of Nodes Allocated      = $SLURM_JOB_NUM_NODES"
-#echo "Number of Tasks Per Node       = $SLURM_NTASKS_PER_NODE"
-#echo "Number of CPUs Per Task       = $SLURM_CPUS_PER_TASK"
-#echo ""
+echo "Date              = $(date)"
+echo "Hostname          = $(hostname -s)"
+echo "Working Directory = $(pwd)"
+echo ""
+echo "Number of Nodes Allocated      = $SLURM_JOB_NUM_NODES"
+echo "Number of Tasks Per Node       = $SLURM_NTASKS_PER_NODE"
+echo "Number of CPUs Per Task       = $SLURM_CPUS_PER_TASK"
+echo ""
 
 module list
 
 
 # Fix the library error (not exactly sure how/why this fixes that)
-ARTIFACT_HASH=43964d8fde379b95f9b4bdc214b688bc394cd4ac 
-export LD_LIBRARY_PATH=$HOME/.julia/artifacts/$ARTIFACT_HASH/lib:$LD_LIBRARY_PATH
+#ARTIFACT_HASH=43964d8fde379b95f9b4bdc214b688bc394cd4ac 
+#export LD_LIBRARY_PATH=$HOME/.julia/artifacts/$ARTIFACT_HASH/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/mnt/home/leespen1/.julia/artifacts/43964d8fde379b95f9b4bdc214b688bc394cd4ac/lib
 #ERROR: LoadError: InitError: could not load library "/mnt/home/leespen1/.julia/artifacts/43964d8fde379b95f9b4bdc214b688bc394cd4ac/lib/libgobject-2.0.so"
 #/mnt/home/leespen1/.julia/artifacts/43964d8fde379b95f9b4bdc214b688bc394cd4ac/lib/libgobject-2.0.so: undefined symbol: g_dir_unref
 
 PROJECTENV=/mnt/home/leespen1/Research/QuantumGateDesign.jl
 #PROJECTENV=/home/spencer/Research/QuantumGateDesign.jl
 
-#echo "julia --project=$PROJECTENV OUTPUT_SCRIPT"
+echo "julia --project=$PROJECTENV DIR/OUTPUT_SCRIPT"
 julia --project=$PROJECTENV DIR/OUTPUT_SCRIPT
