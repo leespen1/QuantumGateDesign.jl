@@ -20,8 +20,8 @@ mutable struct OptimizationTracker
 end
 
 struct OptimizationHistory
-    ipopt_alg_mod::Vector{Float64}
-    ipopt_iter::Vector{Int64}
+    ipopt_alg_mod::Vector{Int32}
+    ipopt_iter::Vector{Int32}
     ipopt_objective::Vector{Float64}
     ipopt_inf_pr::Vector{Float64}
     ipopt_inf_du::Vector{Float64}
@@ -30,7 +30,7 @@ struct OptimizationHistory
     ipopt_regularization_size::Vector{Float64}
     ipopt_alpha_du::Vector{Float64}
     ipopt_alpha_pr::Vector{Float64}
-    ipopt_ls::Vector{Int64}
+    ipopt_ls::Vector{Int32}
     wall_time::Vector{Float64}
     pcof::Vector{Vector{Float64}}
     grad_pcof::Vector{Vector{Float64}}
@@ -43,17 +43,17 @@ end
 
 function OptimizationHistory()
     return OptimizationHistory(
-        Float64[],
-        Int64[],
-        Float64[],
-        Float64[],
+        Int32[],
+        Int32[],
         Float64[],
         Float64[],
         Float64[],
         Float64[],
         Float64[],
         Float64[],
-        Int64[],
+        Float64[],
+        Float64[],
+        Int32[],
         Float64[],
         Vector{Float64}[],
         Vector{Float64}[],
@@ -442,11 +442,12 @@ function optimize_gate(
         # Open file in append mode and update arrays
         update_jld2()
 
-
         infidelity = optimization_tracker.last_infidelity
-        if (infidelity < 0) || (infidelity > 1)
-            @warn "Infidelity $infidelity is outside range the [0,1]. This may indicate that the numerical error in the solution at the final time is greater than the deviation of the implemented gate from the target gate. Considert using a smaller stepsize."
-        end
+
+        ## Commenting this out so the log output is clean enough to parse
+        #if (infidelity < 0) || (infidelity > 1)
+        #    @warn "Infidelity $infidelity is outside range the [0,1]. This may indicate that the numerical error in the solution at the final time is greater than the deviation of the implemented gate from the target gate. Considert using a smaller stepsize."
+        #end
 
         #if obj_value < 1e-7
         #    return false # Stop the optimization
