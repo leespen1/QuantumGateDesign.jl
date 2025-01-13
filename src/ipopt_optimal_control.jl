@@ -117,6 +117,13 @@ function write(obj::OptimizationHistory, filename)
 end
 
 """
+Write contents of an OptimizationHistory object (minus the vector fields) to a
+csv
+"""
+function write_csv(obj::OptimizationTracker, filename)
+end
+
+"""
 Read contents of a jld2 file into an OptimizationHistory object.
 """
 function read_optimization_history(filename)
@@ -145,16 +152,21 @@ function read_optimization_history(filename)
 end
 
 # Wrappers for easy parameter adding
-function genericAddOption(ipopt_prob, option, value::String)
-    Ipopt.AddIpoptStrOption(ipopt_prob, option, value)
+function AddIpoptOption(prob::Ipopt.IpoptProblem, keyword::String, value::String)
+    Ipopt.AddIpoptStrOption(prob, keyword, value)
 end
 
-function genericAddOption(ipopt_prob, option, value::Integer)
-    Ipopt.AddIpoptIntOption(ipopt_prob, option, value)
+function AddIpoptOption(prob::Ipopt.IpoptProblem, keyword::String, value::Float64)
+    Ipopt.AddIpoptNumOption(prob, keyword, value)
 end
 
-function genericAddOption(ipopt_prob, option, value::Number)
-    Ipopt.AddIpoptNumOption(ipopt_prob, option, value)
+function AddIpoptOption(prob::Ipopt.IpoptProblem, keyword::String, value::Int64)
+    try
+        Ipopt.AddIpoptIntOption(prob, keyword, value)
+    catch e
+        println("Error while trying to set Ipopt integer option '$keyword' to '$value', trying again as Num option.")
+        Ipopt.AddIpoptNumOption(prob, keyword, Float64(value))
+    end
 end
 
 # First set up constraint, jacobian, and hessian functions. We will not be
@@ -220,33 +232,48 @@ the IPOPT API.
 - `order::Int64=2`: Which order of the timestepping method to use.
 - `pcof_L=missing`: Lower bounds of the control parameters. Can either be a single number, used for all parameters, or a vector the same length as `pcof`, which will set a lower limit on each parameter.
 - `pcof_U=missing`: Upper bounds of the control parameters.
-- `maxIter=50`: Maximum number of iterations to perform.
-- `print_level=5`: Print level of IPOPT.
 - `ridge_penalty_strength`: Strength of the ridge/Tikhonov regularization term in the objective function.
-- `max_cpu_time`: Maximum CPU time (in seconds) to spend on the optimization problem.
 """
 function optimize_gate(
         schro_prob::SchrodingerProb{M, VM}, controls,
         pcof_init::AbstractVector{Float64}, target::AbstractMatrix{<: Number};
-        order=4,
-        pcof_L=missing,
-        pcof_U=missing,
-        maxIter=50,
-        print_level=5, # Default is 5, goes from 0 to 12
-        ridge_penalty_strength=1e-2,
-        max_cpu_time = 60.0*60*24, # 24 hours
-        filename=missing,
+        order::Integer=4,
+        pcof_lbound::Real=-Inf,
+        pcof_ubound::Real=Inf,
+        ridge_penalty_strength::Real=1e-2,
+        savename::Union{Missing, String}=missing,
+        ipopt_options=missing,
+        write_every_iter=false,
     ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
+
+    # Check correct control vector length
     N_coeff = get_number_of_control_parameters(controls)
-    @assert length(pcof_init) == N_coeff
+    if length(pcof_init) != N_coeff
+        throw(ArgumentError("Length $(length(pcof_init)) of initial control vector does not match expected length based on the control functions ($N_coeff"))
+    end
+
+    # Set up variables neede to construct ipopt problem
+    pcof_lbound_array = ones(N_coeff)*pcof_lbound
+    pcof_ubound_array = ones(N_coeff)*pcof_ubound
+
+    N_constraints = 0
+    g_L = Float64[]
+    g_U = Float64[]
+
+    nele_jacobian = 0
+    nele_hessian = 0
+
+
+    # Other variables needed to interface with my code, also store information my way
+    N_derivatives = div(order, 2)
+    target_real_valued = vcat(real(target), imag(target))
     optimization_tracker = OptimizationTracker(N_coeff)
     optimization_history = OptimizationHistory()
+    initial_time = NaN # Will overwrite this just before starting the actual optimization
 
-
-
-    N_derivatives = div(order, 2)
-    # Pre-allocate arrays
+    
+    # Pre-allocate arrays 
     state_history =  zeros(
         schro_prob.real_system_size,
         1+N_derivatives,
@@ -256,31 +283,33 @@ function optimize_gate(
     lambda_history = similar(state_history)
     adjoint_forcing = zeros(schro_prob.real_system_size, 1+schro_prob.nsteps, schro_prob.N_initial_conditions)
 
-    target_real_valued = vcat(real(target), imag(target))
 
-    initial_time = NaN # Will overwrite this just before starting the actual optimization
 
     # Set up JLD2 file
-    function update_jld2()
-        if !ismissing(filename)
-            JLD2.jldopen(filename, "w") do file
+    function write_jld2()
+        if !ismissing(savename)
+            jld2_filename = savename * ".jld2"
+            JLD2.jldopen(jld2_filename, "w") do file
                 # Also save SchrodingerProb, Controls, and Target, Optimization Parameters (one-time things that won't be updated)
                 file["Setup/schrodinger_prob"] = schro_prob
                 file["Setup/controls"] = controls
                 file["Setup/target"] = target
                 file["Setup/ridge_penalty_strength"] = ridge_penalty_strength
-                file["Setup/max_cpu_time"] = max_cpu_time
                 file["Setup/pcof_init"] = pcof_init
-                file["Setup/pcof_L"] = pcof_L
-                file["Setup/pcof_U"] = pcof_U
+                file["Setup/pcof_lbound"] = pcof_lbound
+                file["Setup/pcof_ubound"] = pcof_ubound
                 file["Setup/order"] = order
             end
-            write(optimization_history, filename)
+            write(optimization_history, jld2_filename)
         end
     end
 
-    update_jld2()
+    write_jld2()
 
+    #==========================================================================
+    # Define objective and gradient calculation, plus custom iteration callback
+    ==========================================================================#
+    
     function eval_f(pcof::Vector{Float64})
 
         ## Check if control vector differs from old one before performing computation (maybe use relative error here?)
@@ -406,7 +435,7 @@ function optimize_gate(
     end
 
     function my_callback(
-        alg_mod,
+        alg_mod, # algorithm mode
         iter_count,
         obj_value,
         inf_pr,
@@ -419,7 +448,7 @@ function optimize_gate(
         ls_trials
     )
         elapsed_time = time() - initial_time
-        push!(optimization_history.ipopt_alg_mod, alg_mod) # alg mod?
+        push!(optimization_history.ipopt_alg_mod, alg_mod)
         push!(optimization_history.ipopt_iter, iter_count)
         push!(optimization_history.ipopt_objective, obj_value )
         push!(optimization_history.ipopt_inf_pr, inf_pr)
@@ -440,7 +469,9 @@ function optimize_gate(
         push!(optimization_history.length_deviation, optimization_tracker.last_length_deviation)
 
         # Open file in append mode and update arrays
-        update_jld2()
+        if write_every_iter
+            write_jld2()
+        end
 
         infidelity = optimization_tracker.last_infidelity
 
@@ -455,38 +486,14 @@ function optimize_gate(
         return true # continue the optimization
     end
 
-    N_parameters = length(pcof_init)
-
-    if ismissing(pcof_L)
-        # If lower bounds not provided, set lower bound to -Inf  
-        pcof_L = ones(N_parameters)*-Inf
-    elseif isa(pcof_L, Real)
-        # If one value provided, apply that bound to all parameters
-        pcof_L = ones(N_parameters) .* pcof_L
-    end
-
-    if ismissing(pcof_U)
-        # If upper bounds not provided, set upper bound to Inf
-        pcof_U = ones(N_parameters)*Inf
-    elseif isa(pcof_U, Real)
-        # If one value provided, apply that bound to all parameters
-        pcof_U = ones(N_parameters) .* pcof_U
-    end
-
-    @assert isa(pcof_L, Vector{Float64})
-    @assert isa(pcof_U, Vector{Float64})
-
-    N_constraints = 0
-    g_L = Vector{Float64}()
-    g_U = Vector{Float64}()
-
-    nele_jacobian = 0
-    nele_hessian = 0
+    #==========================================================================
+    # Define objective and gradient calculation, plus custom iteration callback
+    ==========================================================================#
 
     ipopt_prob = Ipopt.CreateIpoptProblem(
-        N_parameters,
-        pcof_L,
-        pcof_U,
+        N_coeff,
+        pcof_lbound_array,
+        pcof_ubound_array,
         N_constraints,
         g_L,
         g_U,
@@ -499,44 +506,44 @@ function optimize_gate(
         dummy_eval_hessian!,
     )
 
-    lbfgsMax = 40
-    acceptTol = 5e-5 
-    ipTol = 1e-5
-    acceptIter = 15 # Number of "acceptable" iterations before calling it quits
-    
-
-    # Should add derivative test back in. I think this tests for correct
-    # derivatives? Maybe gradients?
-
-    # Description of options: https://coin-or.github.io/Ipopt/OPTIONS.html
-
-    Ipopt.AddIpoptStrOption(ipopt_prob, "hessian_approximation", "limited-memory"); # Use L-BFGS, approximate hessian
-    Ipopt.AddIpoptIntOption(ipopt_prob, "limited_memory_max_history", lbfgsMax); # Maximum number of gradients to use for Hessian approximation (not really a memory concern for me)
-    Ipopt.AddIpoptIntOption(ipopt_prob, "max_iter", maxIter); # Maximum number of iterations to run before terminating
-    Ipopt.AddIpoptNumOption(ipopt_prob, "max_cpu_time", max_cpu_time); # Maximum number of iterations to run before terminating
-    Ipopt.AddIpoptNumOption(ipopt_prob, "tol", ipTol); # Relative convergence tolerance. Terminate if (scaled) NLP error becomes smaller than this (NLP = Nonlinear Programming, is NLP error just objective function, or something closely related?)
-    #Ipopt.AddIpoptNumOption(ipopt_prob, "acceptable_tol", acceptTol); # "Acceptable" relative convergence tolerance
-    Ipopt.AddIpoptIntOption(ipopt_prob, "acceptable_iter", acceptIter); # If we perform this many iterations with "acceptable" NLP error, terminate optimization process (useful if we can't reach desired tolerance)
-    Ipopt.AddIpoptStrOption(ipopt_prob, "jacobian_approximation", "exact");
-    #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "first-order") # What does this do?
-    #Ipopt.AddIpoptStrOption(ipopt_prob, "derivative_test", "none") # Not sure what derivative test does, but it takes a minute.
-    Ipopt.AddIpoptIntOption(ipopt_prob, "print_level", print_level)  
-    #Ipopt.AddIpoptStrOption(ipopt_prob, "timing_statistics", "yes")
-    #Ipopt.AddIpoptStrOption(ipopt_prob, "print_timing_statistics", "yes")
-    # Anything below this number will be considered -∞. I.e., terminate when objective goes beloww this
-    #Ipopt.AddIpoptNumOption(ipopt_prob, "nlp_lower_bound_inf", nlp_lower_bound)
-    
-    # Trying to figure out why my ls is frequently bigger than in juqbox
-    # If I add this, the optimization suffers greatly.
-    #Ipopt.AddIpoptStrOption(ipopt_prob, "accept_every_trial_step", "yes")
     Ipopt.SetIntermediateCallback(ipopt_prob, my_callback)
+    
 
+    # Set default ipopt options and add them to the Ipopt problem
+    # Description of options: https://coin-or.github.io/Ipopt/OPTIONS.html
+    default_ipopt_options = (
+        "hessian_approximation" => "limited-memory",
+        "limited_memory_max_history" => 40,
+        "max_iter" => 50,
+        "acceptable_iter" => 15, # Number of "acceptable" iterations before calling it quits
+        "tol" => 1e-5,
+        "print_level" => 5, # Default is 5, goes from 0 to 12
+        "derivative_test" => "none", # Change t "first-order" to do finite-difference check of derivatives
+        "jacobian_approximation" => "exact", # I don't think this matters, since we don't compute the jacobian
+        "max_cpu_time" => 60.0*60*24, # Default to 24 hours
+    )
 
+    for (keyword, value) in default_ipopt_options
+        AddIpoptOption(ipopt_prob, keyword, value)
+    end
+
+    # Add user ipopt options, overriding defaults
+    if !ismissing(ipopt_options)
+        for (keyword, value) in ipopt_options
+            AddIpoptOption(ipopt_prob, keyword, value)
+        end
+    end
+    
+
+    # Initialize
     ipopt_prob.x .= pcof_init
-
     initial_time = time()
 
+    # Perform the optimization
     solvestat = Ipopt.IpoptSolve(ipopt_prob)
+
+    # Save data
+    write_jld2()
 
     return optimization_history
 end

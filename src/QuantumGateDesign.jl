@@ -100,6 +100,8 @@ include("gradient_descent.jl")
 
 include("state_vector_helpers.jl")
 
+include("./richardson_extrapolation.jl")
+
 
 include("ProblemConstructors/multi_qudit_systems.jl")
 include("ProblemConstructors/rotating_frame_qubit.jl")
