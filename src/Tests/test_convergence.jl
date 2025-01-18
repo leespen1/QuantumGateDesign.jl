@@ -249,6 +249,7 @@ function richardson_extrap_sol(Aₕ, A₂ₕ, order)
     return ((2^n)*Aₕ - A₂ₕ)/(2^n-1)
 end
 
+
 """
 Given CPU times and relative errors, estimate the CPU time which would give a
 relative error of 1e-7
