@@ -1,7 +1,5 @@
 using QuantumGateDesign
 using Random
-using Profile
-using PProf
 
 #==============================================================================
 # Set up Problem
@@ -55,11 +53,16 @@ dummy_terminal_condition = vcat(prob.u0, prob.v0)
 dummy_target = prob.u0 + im*prob.v0
 lambda_history = QuantumGateDesign.eval_adjoint(prob, controls_fortran, pcof, dummy_terminal_condition, order=2)
 grad = discrete_adjoint(prob, controls_fortran, pcof, target, order=2)
-ret = optimize_gate(prob, controls_fortran, pcof, target, order=2,
-                    maxIter=1, print_level=0);
+ret = optimize_gate(
+    prob, controls_fortran, pcof, target, order=2,
+    ipopt_options=("max_iter" => 1, "print_level" => 0)
+)
 
 #==============================================================================
 # Perform Optimization
 ==============================================================================#
-ret = optimize_gate(prob, controls_fortran, pcof, target, order=4,
-                    maxIter=70, pcof_L=-50e-2, pcof_U=50e-2, filename="test.jld2");
+ret = optimize_gate(
+    prob, controls_fortran, pcof, target, order=4,
+    ipopt_options=("max_iter" => 70,),
+    pcof_lbound=-50e-2, pcof_ubound=50e-2, savename="test2",
+);
