@@ -2,7 +2,9 @@ struct RichardsonExtrapolation{T}
     order::Int64
     abs_err_L1::Float64
     abs_err_L2::Float64
+    rel_err_L1::Float64
     rel_err_L2::Float64
+    abs_err_Linf::Float64
     sol::T
     err::T
     """
@@ -15,7 +17,10 @@ struct RichardsonExtrapolation{T}
         err = sol - Aₕ
         abs_err_L1 = norm(err, 1)
         abs_err_L2 = norm(err, 2)
-        rel_err_L2 = norm(err, 2) / norm(sol, 2)
-        new{typeof(sol)}(order, abs_err_L1, abs_err_L2, abs_err_L2, sol, err)
+        rel_err_L1 = abs_err_L1 / norm(sol, 1)
+        rel_err_L2 = abs_err_L2 / norm(sol, 2)
+        abs_err_Linf = norm(err, Inf)
+        new{typeof(sol)}(order, abs_err_L1, abs_err_L2, rel_err_L1, rel_err_L2, 
+                         abs_err_Linf, sol, err)
     end
 end
