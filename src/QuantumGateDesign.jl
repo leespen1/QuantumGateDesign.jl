@@ -4,6 +4,7 @@ module QuantumGateDesign
 import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
 import BenchmarkTools, SparseArrays, Dates, OrderedCollections, JLD2, Random
 import BSplines, BasicBSpline
+import Juqbox
 using Printf: @printf, @sprintf
 using LinearAlgebra: mul!, axpy!, dot, tr, norm
 using Random: rand, MersenneTwister
@@ -100,7 +101,9 @@ include("gradient_descent.jl")
 
 include("state_vector_helpers.jl")
 
-include("./richardson_extrapolation.jl")
+include("richardson_extrapolation.jl")
+
+include("cnot3_setup.jl")
 
 
 include("ProblemConstructors/multi_qudit_systems.jl")
