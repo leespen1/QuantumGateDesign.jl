@@ -6,7 +6,7 @@ function collect_data(prob::SchrodingerProb, controls,
         pcof::AbstractVector{<: Real}, order::Integer, max_walltime::Real,
         filename_base::AbstractString
     )
-    max_walltime *= 60 # convert walltime from minutes to seconds
+    max_walltime *= 60*60 # convert walltime from hours to seconds
 
     initial_time = time()
     prob = copy(prob) # Copy problem, just to make sure there are no mutability issues.
@@ -86,7 +86,7 @@ function parse_commandline()
             arg_type = Int64
             default = 15
         "--time", "-t"
-            help = "Amount of wall time (in minutes) to spend on test."
+            help = "Amount of wall time (in hours) to spend on test."
             arg_type = Float64
             default = 1 # Default
         "order"
