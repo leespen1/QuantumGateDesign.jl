@@ -118,7 +118,7 @@ function main()
     # Coefficients uniformly distributed between amax and -amax
     pcof = cnot3ret.amax * 2* (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
-    mkdir("Data")
+    mkpath("Data")
     filename = "Data/cnot3StepsizeTest_seed=$(seed)_order=$(order)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)"
 
     collect_data(cnot3ret.qgd_prob, controls, cnot3ret.pcof0, order, time, filename)
