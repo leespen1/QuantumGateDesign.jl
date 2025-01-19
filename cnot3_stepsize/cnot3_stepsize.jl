@@ -48,9 +48,7 @@ function collect_data(prob::SchrodingerProb, controls,
 
         # Run simulation
         t1 = time()
-        println("Starting")
         history_h = eval_forward(prob, controls, pcof, order=order)
-        println("Finished")
         t2 = time()
         elapsed_time = t2 - t1
 
