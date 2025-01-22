@@ -26,28 +26,65 @@ echo "Number of CPUs Per Task        = $SLURM_CPUS_PER_TASK"
 echo "Memory per node                = $SLURM_MEM_PER_NODE"
 echo ""
 
-module purge
-
 # Define the options for arg1 and arg2
 METHOD_ORDERS=(2 4 6 8 10 12)
-NUM_SEEDS=100
 
-# Calculate the indices for this task
-METHOD_ORDER_INDEX=$(( SLURM_ARRAY_TASK_ID / NUM_SEEDS ))
-METHOD_ORDER=${METHOD_ORDERS[$METHOD_ORDER_INDEX]}
-SEED=$(( SLURM_ARRAY_TASK_ID % NUM_SEEDS ))
-
-TIME=12
+TIME=1
 
 D1=15
 RTOL=1e-12
 
-PROJECTENV=/mnt/home/leespen1/Research/QuantumGateDesign.jl
-#julia --project=$PROJECTENV -e 'using Pkg; Pkg.instantiate()' # Set up project enviornment
-
 # To avoid Pkg errors
 unset LD_LIBRARY_PATH
 
-CMD_STRING="julia --project=$PROJECTENV --threads=$SLURM_CPUS_PER_TASK ./cnot3_stepsize.jl $METHOD_ORDER $SEED --time $TIME --D1 $D1 --rtol $RTOL"
-echo $CMD_STRING
-$CMD_STRING
+
+
+if [[ -n "$SLURM_JOB_ID" ]]; then
+    echo "You are in a SLURM environment. Using job array id to run script."
+    echo "SLURM Job ID: $SLURM_JOB_ID"
+
+    module purge
+
+    PROJECTENV=/mnt/home/leespen1/Research/QuantumGateDesign.jl
+
+    # Set up project environment, if needed
+    INSTANTIATE_STRING="julia --project=$PROJECTENV -e 'using Pkg; Pkg.instantiate()'"
+    echo $INSTANTIATE_STRING
+    eval $INSTANTIATE_STRING
+
+    NUM_SEEDS=100
+
+    # Calculate the indices for this task
+    METHOD_ORDER_INDEX=$(( SLURM_ARRAY_TASK_ID / NUM_SEEDS ))
+    METHOD_ORDER=${METHOD_ORDERS[$METHOD_ORDER_INDEX]}
+    SEED=$(( SLURM_ARRAY_TASK_ID % NUM_SEEDS ))
+
+
+    CMD_STRING="julia --project=$PROJECTENV --threads=$SLURM_CPUS_PER_TASK ./cnot3_stepsize.jl $METHOD_ORDER $SEED --time $TIME --D1 $D1 --rtol $RTOL"
+    echo $CMD_STRING
+    eval $CMD_STRING
+else
+    echo "You are not in a SLURM environment. Running script over a loop."
+
+    PROJECTENV=/home/spencer/Research/QuantumGateDesign.jl
+
+    # Set up project environment, if needed
+    INSTANTIATE_STRING="julia --project=$PROJECTENV -e 'using Pkg; Pkg.instantiate()'"
+    echo $INSTANTIATE_STRING
+    eval $INSTANTIATE_STRING
+
+    NUM_SEEDS=2
+
+    for SLURM_ARRAY_TASK_ID in {0..11} # Replace SLURM_ARRAY_TASK_ID with my own loop
+    do
+        # Calculate the indices for this task
+        METHOD_ORDER_INDEX=$(( SLURM_ARRAY_TASK_ID / NUM_SEEDS ))
+        METHOD_ORDER=${METHOD_ORDERS[$METHOD_ORDER_INDEX]}
+        SEED=$(( SLURM_ARRAY_TASK_ID % NUM_SEEDS ))
+
+
+        CMD_STRING="julia --project=$PROJECTENV --threads=4 ./cnot3_stepsize.jl $METHOD_ORDER $SEED --time $TIME --D1 $D1 --rtol $RTOL"
+        echo $CMD_STRING
+        eval $CMD_STRING
+    done
+fi
