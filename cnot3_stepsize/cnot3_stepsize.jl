@@ -175,7 +175,7 @@ function main()
     pcof = cnot3ret.amax * 2* (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
     mkpath(output_directory)
-    filename = "output_directory/cnot3StepsizeTest_seed=$(seed)_order=$(order)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)"
+    filename = output_directory * "/cnot3StepsizeTest_seed=$(seed)_order=$(order)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)"
 
     collect_data(cnot3ret.qgd_prob, controls, cnot3ret.pcof0, order, time, filename, N_timestep_saves)
 end
