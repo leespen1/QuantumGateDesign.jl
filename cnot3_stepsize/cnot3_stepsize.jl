@@ -137,6 +137,10 @@ function parse_commandline()
             help = "Number of timesteps to save in CSV files."
             arg_type = Int64
             default = 64 # Default
+        "--output_directory", "-o"
+            help = "Directory to store data."
+            arg_type = String
+            default = "Data"
         "order"
             help = "Method order to use"
             required = true
@@ -159,6 +163,7 @@ function main()
     D1 = parsed_args["D1"]
     time = parsed_args["time"]
     N_timestep_saves = parsed_args["nsaves"]
+    output_directory = parsed_args["output_directory"]
 
     nthreads = Threads.nthreads()
     cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, rtol=rtol, D1=D1)
@@ -169,8 +174,8 @@ function main()
     # Coefficients uniformly distributed between amax and -amax
     pcof = cnot3ret.amax * 2* (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
-    mkpath("Data")
-    filename = "Data/cnot3StepsizeTest_seed=$(seed)_order=$(order)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)"
+    mkpath(output_directory)
+    filename = "output_directory/cnot3StepsizeTest_seed=$(seed)_order=$(order)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)"
 
     collect_data(cnot3ret.qgd_prob, controls, cnot3ret.pcof0, order, time, filename, N_timestep_saves)
 end
