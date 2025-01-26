@@ -1,10 +1,10 @@
-using Plots, DelimitedFiles
+using Plots, DelimitedFiles, LaTeXStrings
 import Makie
 import CairoMakie
 CairoMakie.set_theme!(CairoMakie.theme_latexfonts())
 
 function get_data(x_header, y_header, out_order, data_directory=missing)
-    file_pattern= r"""cnot3StepsizeTest_seed=(\d+)
+    file_pattern= r"""cnot3StepsizeTest
     _order=(\d+)
     _degree=(\d+)
     _seed=(\d+)
@@ -32,7 +32,7 @@ function get_data(x_header, y_header, out_order, data_directory=missing)
         if occursin(file_pattern, file)
             regex_match = match(file_pattern, file)
             order    = parse(Int,     regex_match[1])
-            degree    = parse(Int,    regex_match[2])
+            degree   = parse(Int,     regex_match[2])
             seed     = parse(Int,     regex_match[3])
             atol     = parse(Float64, regex_match[4])
             rtol     = parse(Float64, regex_match[5])
@@ -68,6 +68,11 @@ function get_data(x_header, y_header, out_order, data_directory=missing)
 end
 
 function get_x_vec_y_mat(x_data_entries, y_data_entries)
+    if length(x_data_entries) == 0
+        @warn "Length of data entries is zero, returning empty vectors and matrices"
+        return zeros(0), zeros(0,0), zeros(0,0)
+    end
+
     x_data_lengths = length.(x_data_entries)
     max_length = maximum(x_data_lengths)
     min_length = minimum(x_data_lengths)
@@ -75,7 +80,8 @@ function get_x_vec_y_mat(x_data_entries, y_data_entries)
         @warn "Not all x_data entries are the same length. Max is $max_length, min is $min_length."
     end
 
-    x_vec = x_data_entries[1]
+    # Use the longest one
+    x_vec = argmax(length, x_data_entries)
 
     n_entries = length(x_data_entries)
     x_mat = fill(NaN, max_length, n_entries)
@@ -93,7 +99,8 @@ function get_x_vec_y_mat(x_data_entries, y_data_entries)
 end
 
 
-data_directory = "48827378"
+#data_directory = "Data"
+data_directory = "48854734"
 x_vecs = Any[]
 y_mats = Any[]
 stddev_pls = Any[]
@@ -126,9 +133,22 @@ ax4 = CairoMakie.Axis(
     title="Combined Orders",
 )
 
-for (k, order) in enumerate((2,4,6,8,10,12))
+orders = (2,4,6,8,10,12)
+#orders = (12,)
+for (k, order) in enumerate(orders)
     local x_data_entries, y_data_entries = get_data("nsteps", "R_rel_err_L2", order, data_directory)
     local x_data_entries2, y_data_entries2 = get_data("nsteps", "elapsed_time", order, data_directory)
+
+    if length(x_data_entries) == 0
+        push!(x_vecs, missing)
+        push!(y_mats, missing)
+        push!(stddev_pls, missing)
+        push!(spaghetti_pls, missing)
+        push!(makie_stddev, missing)
+        push!(makie_spaghetti, missing)
+        continue
+    end
+
     local x_vec, x_mat, y_mat = get_x_vec_y_mat(x_data_entries, y_data_entries)
     local y_mean = Plots.mean(y_mat, dims=2) |> vec
     local y_std = Plots.std(y_mat, dims=2) |> vec
@@ -150,7 +170,7 @@ for (k, order) in enumerate((2,4,6,8,10,12))
         yticks=10.0 .^ (-10:10),
     )
 
-    max_lines = 10
+    max_lines = min(10, size(x_mat,2))
     local spaghetti_pl = plot(
         x_mat[:,1:max_lines], y_mat[:,1:max_lines],
         label="",
@@ -181,6 +201,8 @@ for (k, order) in enumerate((2,4,6,8,10,12))
         yticks = (10.0 .^ (-15:15), [L"10^{%$i}" for i in -15:15]),
         title="Order = $order",
     )
+    @show x_vec
+    @show y_mean
     CairoMakie.lines!(ax1, x_vec, y_mean; color = :dodgerblue, label = "blue")
     CairoMakie.band!(ax1, x_vec, y_mean .- y_std, y_mean .+ y_std; color = (:dodgerblue, 0.35), label = "blue")
 
