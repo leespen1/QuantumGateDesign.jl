@@ -39,7 +39,7 @@ struct CNOT3Ret{T}
 end
     
 
-function setup_cnot3(; seed::Integer=0, rtol=1e-12, D1=15)
+function setup_cnot3(; seed::Integer=0, atol=1e-10, rtol=1e-12, D1=15)
     #==============================================================================
     #
     # Juqbox Problem Setup
@@ -214,6 +214,7 @@ function setup_cnot3(; seed::Integer=0, rtol=1e-12, D1=15)
     println("Number of B-spline parameters per spline = ", D1, " Total number of parameters = ", nCoeff)
     println("Max parameter amplitudes: maxpar = ", maxpar)
     println("Tikhonov coefficients: tik0 (L2) = ", juqbox_params.tik0)
+    println("Tolerance in Linear Solver = ", juqbox_params.linear_solver.tol)
     if use_sparse
         println("Using a sparse representation of the Hamiltonian matrices")
     else
@@ -229,7 +230,8 @@ function setup_cnot3(; seed::Integer=0, rtol=1e-12, D1=15)
     ==============================================================================#
     qgd_prob = convert_juqbox(
         juqbox_params,
-        gmres_reltol=juqbox_params.linear_solver.tol,
+        gmres_reltol=rtol,
+        gmres_abstol=atol,
         preconditioner_type=QuantumGateDesign.DiagonalHamiltonianPreconditioner
     )
 
