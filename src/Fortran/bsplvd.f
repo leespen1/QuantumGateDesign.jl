@@ -1,4 +1,5 @@
-      subroutine bsplvd ( t, k, x, left, a, dbiatx, nderiv )
+      subroutine bsplvd ( t, k, x, left, a, dbiatx, nderiv, jbsplvb, 
+     &                    deltal, deltar )
 c  from  * a practical guide to splines *  by c. de Boor (7 may 92)    
 calls bsplvb
 calculates value and deriv.s of all b-splines which do not vanish at x
@@ -39,12 +40,14 @@ c  ceding one of lower order, and combined with the values of b-splines
 c  of corresponding order in  dbiatx  to produce the desired values .
 c
       integer k,left,nderiv,   i,ideriv,il,j,jlow,jp1mid,kp1,kp1mm
-     *                        ,ldummy,m,mhigh
-      real a(k,k),dbiatx(k,nderiv),t(1),x,   factor,fkp1mm,sum
+     *                        ,ldummy,m,mhigh, jbsplvb 
+      parameter (jmax = 20)
+      real a(k,k),dbiatx(k,nderiv),t(1),x,   factor,fkp1mm,sum,
+     *                         deltal(jmax), deltar(jmax)
       mhigh = max0(min0(nderiv,k),1)
 c     mhigh is usually equal to nderiv.
       kp1 = k+1
-      call bsplvb(t,kp1-mhigh,1,x,left,dbiatx)
+      call bsplvb(t,kp1-mhigh,1,x,left,dbiatx,jbsplvb,deltal,deltar)
       if (mhigh .eq. 1)                 go to 99
 c     the first column of  dbiatx  always contains the b-spline values
 c     for the current order. these are stored in column k+1-current
@@ -57,7 +60,7 @@ c     higher order on top of it.
             dbiatx(j,ideriv) = dbiatx(jp1mid,1)
    11       jp1mid = jp1mid + 1
          ideriv = ideriv - 1
-         call bsplvb(t,kp1-ideriv,2,x,left,dbiatx)
+         call bsplvb(t,kp1-ideriv,2,x,left,dbiatx,jbsplvb,deltal,deltar)
    15    continue
 c
 c     at this point,  b(left-k+i, k+1-j)(x) is in  dbiatx(i,j) for
