@@ -1,4 +1,5 @@
-      subroutine bsplvb ( t, jhigh, index, x, left, biatx )
+      subroutine bsplvb ( t, jhigh, index, x, left, biatx, j, deltal,
+     &                   deltar )
 c  from  * a practical guide to splines *  by c. de boor    
 calculates the value of all possibly nonzero b-splines at  x  of order
 c
@@ -67,8 +68,10 @@ c     dimension biatx(jout), t(left+jout)
 current fortran standard makes it impossible to specify the length of
 c  t  and of  biatx  precisely without the introduction of otherwise
 c  superfluous additional arguments.
-      data j/1/
-      save j,deltal,deltar 
+
+c     These two lines are from when these were stored as globals, which is bad for multithreading
+c     data j/1/
+c     save j,deltal,deltar 
 c
                                         go to (10,20), index
    10 j = 1
