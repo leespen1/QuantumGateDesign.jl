@@ -22,11 +22,6 @@ struct CarrierControl{T} <: AbstractControl
     end
 end
 
-function Base.copy(control::CarrierControl)
-    return CarrierControl(copy(control.base_control), copy(control.carrier_frequencies))
-end
-
-
 function eval_p(control::CarrierControl, t::Real, pcof::AbstractVector{<: Real})
     return eval_p_derivative(control, t, pcof, 0)
 end
