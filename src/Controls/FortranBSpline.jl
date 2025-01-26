@@ -24,6 +24,9 @@ struct FortranBSplineControl <: AbstractControl
     knot_vector::Vector{Float64}
     work_array::Matrix{Float64}
     output_array::Matrix{Float64}
+    jbsplvd::Int64
+    deltal::Vector{Float64}
+    deltar::Vector{Float64}
     #function FortranBSplineControl(degree::Integer, N_distinct_knots::Integer, tf::Real)
     function FortranBSplineControl(degree::Integer, N_basis_functions::Integer, tf::Real)
         degree = convert(Int64, degree)
@@ -56,9 +59,15 @@ struct FortranBSplineControl <: AbstractControl
             repeat([knot_vector[end]], order-1)
         )
 
-        new(N_coeff, tf, N_basis_functions, N_knots, N_distinct_knots, degree, order, knot_vector, work_array, output_array)
+        jbsplvd = 1
+        deltal = fill(NaN, 20)
+        deltar = fill(NaN, 20)
+
+        new(N_coeff, tf, N_basis_functions, N_knots, N_distinct_knots,
+            degree, order, knot_vector, work_array, output_array, jbsplvd, deltal, deltar)
     end
 end
+
 
 """
 Could do a check for t_scaled = t_current, but first let's see if this is fast or not 
@@ -119,6 +128,9 @@ function eval_q_derivative(control::FortranBSplineControl, t::Real, pcof::Abstra
         val += pcof[pcof_offset+i] * control.output_array[1+i,1+order]
     end
     val /= control.tf ^ order
+    if isnan(val) #REMOVETHIS
+        println("order=",order, ",\tt=",t, "\tt_scaled=", t_scaled)
+    end
     return val
 end
 
@@ -255,12 +267,19 @@ calculates value and deriv.s of all b-splines which do not vanish at x
 
 """
 function bsplvd!(t::Vector{Float64}, k::Int64, x::Float64, left::Int64,
-        a::Matrix{Float64}, dbiatx::Matrix{Float64}, nderiv::Int64)
+        a::Matrix{Float64}, dbiatx::Matrix{Float64}, nderiv::Int64,
+        jbsplvd::Int64, deltal::Vector{Float64}, deltar::Vector{Float64})
     ccall(
         (:bsplvd_, fortrain_lib_str),
         Cvoid, # Return
-        (Ref{Float64}, Ref{Int64}, Ref{Float64}, Ref{Int64}, Ref{Float64}, Ref{Float64}, Ref{Int64}), # Argument Types
-        t, Ref(k), Ref(x), Ref(left), a, dbiatx, Ref(nderiv) # Arguments
+
+        (Ref{Float64}, Ref{Int64}, Ref{Float64}, Ref{Int64},
+         Ref{Float64}, Ref{Float64}, Ref{Int64}, 
+         Ref{Int64}, Ref{Float64}, Ref{Float64}), # Argument Types
+
+        t, Ref(k), Ref(x), Ref(left),
+        a, dbiatx, Ref(nderiv),
+        Ref(jbsplvd), deltal, deltar  # Arguments
     )
 end
 
@@ -274,5 +293,5 @@ function bsplvd!(control::FortranBSplineControl, x::Float64, nderiv::Int64)
     #@assert control.knot_vector[left] < control.knot_vector[left+1]
 
     bsplvd!(control.knot_vector, control.bspline_order, x, left,
-            control.work_array, control.output_array, nderiv)
+            control.work_array, control.output_array, nderiv, control.jbsplvd, control.deltal, control.deltar)
 end
