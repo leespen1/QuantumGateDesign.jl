@@ -20,9 +20,15 @@ function collect_data(prob::SchrodingerProb, controls,
     final_states = Matrix{ComplexF64}(undef, 0, prob.N_tot_levels*prob.N_initial_conditions)
     state_saves = Matrix{ComplexF64}(undef, 0, prob.N_tot_levels*prob.N_initial_conditions*(1+N_timestep_saves))
 
+
+
     # Run simulation
     prob.nsteps = 2
     stepsize = prob.tf / prob.nsteps
+
+    # Run simulation once just to get compilation out of the way
+    dummy_history = eval_forward(prob, controls, pcof, order=order)
+
     t1 = time()
     history_2h = eval_forward(prob, controls, pcof, order=order)
     t2 = time()
@@ -75,6 +81,8 @@ function collect_data(prob::SchrodingerProb, controls,
         println("Size of csv_data:\t", sizeof(csv_data))
         println("Size of history_h:\t", sizeof(history_h))
         println("Size of free memory:\t", Int(Sys.free_memory()))
+        println("Data:")
+        println(csv_row)
 
 
         history_2h = history_h
@@ -121,6 +129,10 @@ function parse_commandline()
     s = ArgParseSettings()
 
     @add_arg_table s begin
+        "--atol", "-a"
+            help = "Absolute tolerance to use in the linear solves."
+            arg_type = Float64
+            default = 1e-10
         "--rtol", "-r"
             help = "Relative tolerance to use in the linear solves."
             arg_type = Float64
@@ -145,6 +157,10 @@ function parse_commandline()
             help = "Method order to use"
             required = true
             arg_type = Int64
+        "degree"
+            help = "Degree of B-spline to use"
+            required= true
+            arg_type = Int64
         "seed"
             help = "Seed to use when generating control vector."
             required = true
@@ -158,7 +174,9 @@ end
 function main()
     parsed_args = parse_commandline()
     order = parsed_args["order"]
+    degree = parsed_args["degree"]
     seed = parsed_args["seed"]
+    atol = parsed_args["atol"]
     rtol = parsed_args["rtol"]
     D1 = parsed_args["D1"]
     time = parsed_args["time"]
@@ -166,8 +184,8 @@ function main()
     output_directory = parsed_args["output_directory"]
 
     nthreads = Threads.nthreads()
-    cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, rtol=rtol, D1=D1)
-    controls = get_controls(order, D1, cnot3ret.juqbox_params.Cfreq, cnot3ret.tf)
+    cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1)
+    controls = get_controls(degree, D1, cnot3ret.juqbox_params.Cfreq, cnot3ret.tf)
 
     N_coeff = QuantumGateDesign.get_number_of_control_parameters(controls)
 
@@ -175,7 +193,7 @@ function main()
     pcof = cnot3ret.amax * 2* (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
     mkpath(output_directory)
-    filename = output_directory * "/cnot3StepsizeTest_seed=$(seed)_order=$(order)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)"
+    filename = output_directory * "/cnot3StepsizeTest_order=$(order)_degree=$(degree)_seed=$(seed)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)"
 
     collect_data(cnot3ret.qgd_prob, controls, cnot3ret.pcof0, order, time, filename, N_timestep_saves)
 end
