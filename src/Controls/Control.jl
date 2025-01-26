@@ -54,11 +54,6 @@ function Base.length(control::AbstractControl)
 end
 
 
-function Base.copy(control::AbstractControl)
-    return control
-end
-
-
 """
 Get the slice (view) of the control vector which corresponds to the given control index.
 
