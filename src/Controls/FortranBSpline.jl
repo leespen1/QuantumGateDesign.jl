@@ -24,7 +24,7 @@ struct FortranBSplineControl <: AbstractControl
     knot_vector::Vector{Float64}
     work_array::Matrix{Float64}
     output_array::Matrix{Float64}
-    jbsplvd::Int64
+    jbsplvd::Base.RefValue{Int64}
     deltal::Vector{Float64}
     deltar::Vector{Float64}
     #function FortranBSplineControl(degree::Integer, N_distinct_knots::Integer, tf::Real)
@@ -59,7 +59,7 @@ struct FortranBSplineControl <: AbstractControl
             repeat([knot_vector[end]], order-1)
         )
 
-        jbsplvd = 1
+        jbsplvd = Ref(1)
         deltal = fill(NaN, 20)
         deltar = fill(NaN, 20)
 
@@ -268,7 +268,9 @@ calculates value and deriv.s of all b-splines which do not vanish at x
 """
 function bsplvd!(t::Vector{Float64}, k::Int64, x::Float64, left::Int64,
         a::Matrix{Float64}, dbiatx::Matrix{Float64}, nderiv::Int64,
-        jbsplvd::Int64, deltal::Vector{Float64}, deltar::Vector{Float64})
+        jbsplvd::Ref{Int64}, deltal::Vector{Float64}, deltar::Vector{Float64})
+    # jsplvd should be passed in as a reference, since I want it to be changed
+    # by the program ()
     ccall(
         (:bsplvd_, fortrain_lib_str),
         Cvoid, # Return
@@ -279,7 +281,7 @@ function bsplvd!(t::Vector{Float64}, k::Int64, x::Float64, left::Int64,
 
         t, Ref(k), Ref(x), Ref(left),
         a, dbiatx, Ref(nderiv),
-        Ref(jbsplvd), deltal, deltar  # Arguments
+        jbsplvd, deltal, deltar  # Arguments
     )
 end
 
