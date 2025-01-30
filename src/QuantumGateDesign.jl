@@ -3,6 +3,7 @@ module QuantumGateDesign
 
 import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
 import BenchmarkTools, SparseArrays, Dates, OrderedCollections, JLD2, Random
+import DelimitedFiles
 import BSplines, BasicBSpline
 import Juqbox
 using Printf: @printf, @sprintf
