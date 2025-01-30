@@ -19,137 +19,6 @@ mutable struct OptimizationTracker
     end
 end
 
-struct OptimizationHistory
-    ipopt_alg_mod::Vector{Int32}
-    ipopt_iter::Vector{Int32}
-    ipopt_objective::Vector{Float64}
-    ipopt_inf_pr::Vector{Float64}
-    ipopt_inf_du::Vector{Float64}
-    ipopt_lg_mu::Vector{Float64}
-    ipopt_d_norm::Vector{Float64}
-    ipopt_regularization_size::Vector{Float64}
-    ipopt_alpha_du::Vector{Float64}
-    ipopt_alpha_pr::Vector{Float64}
-    ipopt_ls::Vector{Int32}
-    wall_time::Vector{Float64}
-    pcof::Vector{Vector{Float64}}
-    grad_pcof::Vector{Vector{Float64}}
-    analytic_obj_value::Vector{Float64}
-    infidelity::Vector{Float64}
-    guard_penalty::Vector{Float64}
-    ridge_penalty::Vector{Float64} # Add primaryobj, secondaryobj, to match juqbox
-    length_deviation::Vector{Float64}
-end
-
-function OptimizationHistory()
-    return OptimizationHistory(
-        Int32[],
-        Int32[],
-        Float64[],
-        Float64[],
-        Float64[],
-        Float64[],
-        Float64[],
-        Float64[],
-        Float64[],
-        Float64[],
-        Int32[],
-        Float64[],
-        Vector{Float64}[],
-        Vector{Float64}[],
-        Float64[],
-        Float64[],
-        Float64[],
-        Float64[],
-        Float64[],
-    )
-end
-
-function Base.length(obj::OptimizationHistory)
-    return length(obj.ipopt_iter)
-end
-
-function Base.show(io::IO, ::MIME"text/plain", obj::OptimizationHistory)
-    println(io, typeof(obj))
-    println(io, length(obj), " iterations performed.")
-
-    if (length(obj) > 0)
-        println(io, obj.wall_time[end], " seconds elapsed.")
-
-        min_obj_val_index = argmin(obj.ipopt_objective)
-        min_obj_val = obj.ipopt_objective[min_obj_val_index]
-        println(io, "Minimum objective function was ", min_obj_val, ", at iteration ", min_obj_val_index, ".")
-
-        min_infidelity_index = argmin(obj.infidelity)
-        min_infidelity = obj.infidelity[min_infidelity_index]
-        println(io, "Minimum infidelity was ", min_infidelity, ", at iteration ", min_infidelity_index, ".")
-    end
-
-    return nothing
-end
-
-
-"""
-Write contents of an OptimizationHistory object to a jld2 file.
-"""
-function write(obj::OptimizationHistory, filename)
-    JLD2.jldopen(filename, "a+") do file
-        file["ipopt_alg_mod"] = obj.ipopt_alg_mod
-        file["ipopt_iter"] = obj.ipopt_iter
-        file["ipopt_objective"] = obj.ipopt_objective
-        file["ipopt_inf_pr"] = obj.ipopt_inf_pr
-        file["ipopt_inf_du"] = obj.ipopt_inf_du
-        file["ipopt_lg_mu"] = obj.ipopt_lg_mu
-        file["ipopt_d_norm"] = obj.ipopt_d_norm
-        file["ipopt_regularization_size"] = obj.ipopt_regularization_size
-        file["ipopt_alpha_du"] = obj.ipopt_alpha_du
-        file["ipopt_alpha_pr"] = obj.ipopt_alpha_pr
-        file["ipopt_ls"] = obj.ipopt_ls
-        file["wall_time"] = obj.wall_time
-        file["pcof"] = obj.pcof
-        file["grad_pcof"] = obj.grad_pcof
-        file["analytic_obj_value"] = obj.analytic_obj_value
-        file["infidelity"] = obj.infidelity
-        file["guard_penalty"] = obj.guard_penalty
-        file["ridge_penalty"] = obj.ridge_penalty
-        file["length_deviation"] = obj.length_deviation
-    end
-end
-
-"""
-Write contents of an OptimizationHistory object (minus the vector fields) to a
-csv
-"""
-function write_csv(obj::OptimizationTracker, filename)
-end
-
-"""
-Read contents of a jld2 file into an OptimizationHistory object.
-"""
-function read_optimization_history(filename)
-    jld2_dict = JLD2.load(filename)
-    return OptimizationHistory(
-        jld2_dict["ipopt_alg_mod"],
-        jld2_dict["ipopt_iter"],
-        jld2_dict["ipopt_objective"],
-        jld2_dict["ipopt_inf_pr"],
-        jld2_dict["ipopt_inf_du"],
-        jld2_dict["ipopt_lg_mu"],
-        jld2_dict["ipopt_d_norm"],
-        jld2_dict["ipopt_regularization_size"],
-        jld2_dict["ipopt_alpha_du"],
-        jld2_dict["ipopt_alpha_pr"],
-        jld2_dict["ipopt_ls"],
-        jld2_dict["wall_time"],
-        jld2_dict["pcof"],
-        jld2_dict["grad_pcof"],
-        jld2_dict["analytic_obj_value"],
-        jld2_dict["infidelity"],
-        jld2_dict["guard_penalty"],
-        jld2_dict["ridge_penalty"],
-        jld2_dict["length_deviation"]
-    )
-end
 
 # Wrappers for easy parameter adding
 function AddIpoptOption(prob::Ipopt.IpoptProblem, keyword::String, value::String)
@@ -243,7 +112,6 @@ function optimize_gate(
         ridge_penalty_strength::Real=1e-2,
         savename::Union{Missing, String}=missing,
         ipopt_options=missing,
-        write_every_iter=false,
     ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
 
@@ -264,12 +132,10 @@ function optimize_gate(
     nele_jacobian = 0
     nele_hessian = 0
 
-
     # Other variables needed to interface with my code, also store information my way
     N_derivatives = div(order, 2)
     target_real_valued = vcat(real(target), imag(target))
     optimization_tracker = OptimizationTracker(N_coeff)
-    optimization_history = OptimizationHistory()
     initial_time = NaN # Will overwrite this just before starting the actual optimization
 
     
@@ -283,28 +149,12 @@ function optimize_gate(
     lambda_history = similar(state_history)
     adjoint_forcing = zeros(schro_prob.real_system_size, 1+schro_prob.nsteps, schro_prob.N_initial_conditions)
 
-
-
-    # Set up JLD2 file
-    function write_jld2()
-        if !ismissing(savename)
-            jld2_filename = savename * ".jld2"
-            JLD2.jldopen(jld2_filename, "w") do file
-                # Also save SchrodingerProb, Controls, and Target, Optimization Parameters (one-time things that won't be updated)
-                file["Setup/schrodinger_prob"] = schro_prob
-                file["Setup/controls"] = controls
-                file["Setup/target"] = target
-                file["Setup/ridge_penalty_strength"] = ridge_penalty_strength
-                file["Setup/pcof_init"] = pcof_init
-                file["Setup/pcof_lbound"] = pcof_lbound
-                file["Setup/pcof_ubound"] = pcof_ubound
-                file["Setup/order"] = order
-            end
-            write(optimization_history, jld2_filename)
+    header = ["main_objective" "grad_norm" "infidelity" "guard_penalty" "ridge_penalty" "length_deviation" "elapsed_time" "alg_mod" "iter_count" "obj_value" "inf_pr" "inf_du" "mu" "d_norm" "regularization_size" "alpha_du" "alpha_pr" "ls_trials"]
+    if !ismissing(savename)
+        open(savename * ".csv", "w") do io
+            DelimitedFiles.writedlm(io, header, ',')
         end
     end
-
-    write_jld2()
 
     #==========================================================================
     # Define objective and gradient calculation, plus custom iteration callback
@@ -431,6 +281,7 @@ function optimize_gate(
         end
 
         grad_f .= optimization_tracker.last_grad_pcof
+
         return nothing
     end
 
@@ -448,47 +299,25 @@ function optimize_gate(
         ls_trials
     )
         elapsed_time = time() - initial_time
-        push!(optimization_history.ipopt_alg_mod, alg_mod)
-        push!(optimization_history.ipopt_iter, iter_count)
-        push!(optimization_history.ipopt_objective, obj_value )
-        push!(optimization_history.ipopt_inf_pr, inf_pr)
-        push!(optimization_history.ipopt_inf_du, inf_du)
-        push!(optimization_history.ipopt_lg_mu, mu) # The ipopt terminal output gives lg_mu. Is mu on log scale too?
-        push!(optimization_history.ipopt_d_norm, d_norm)
-        push!(optimization_history.ipopt_regularization_size, regularization_size)
-        push!(optimization_history.ipopt_alpha_du, alpha_du)
-        push!(optimization_history.ipopt_alpha_pr, alpha_pr)
-        push!(optimization_history.ipopt_ls, ls_trials)
-        push!(optimization_history.wall_time, elapsed_time)
-        push!(optimization_history.pcof, optimization_tracker.last_pcof)
-        push!(optimization_history.grad_pcof, optimization_tracker.last_grad_pcof)
-        push!(optimization_history.analytic_obj_value, optimization_tracker.last_objective)
-        push!(optimization_history.infidelity, optimization_tracker.last_infidelity)
-        push!(optimization_history.guard_penalty, optimization_tracker.last_guard_penalty)
-        push!(optimization_history.ridge_penalty, optimization_tracker.last_ridge_penalty)
-        push!(optimization_history.length_deviation, optimization_tracker.last_length_deviation)
+        grad_norm = norm(optimization_tracker.last_grad_pcof)
+        data_row = [grad_norm optimization_tracker.last_objective optimization_tracker.last_infidelity optimization_tracker.last_guard_penalty optimization_tracker.last_ridge_penalty optimization_tracker.last_length_deviation elapsed_time alg_mod iter_count obj_value inf_pr inf_du mu d_norm regularization_size alpha_du alpha_pr ls_trials]
+        if !ismissing(savename)
+            open(savename * ".csv", "a+") do io
+                DelimitedFiles.writedlm(io, data_row, ',')
+            end
 
-        # Open file in append mode and update arrays
-        if write_every_iter
-            write_jld2()
+            open(savename * "_pcof.csv", "a+") do io
+                DelimitedFiles.writedlm(io, reshape(optimization_tracker.last_pcof, 1, :), ',')
+            end
+            open(savename * "_gradPcof.csv", "a+") do io
+                DelimitedFiles.writedlm(io, reshape(optimization_tracker.last_grad_pcof, 1, :), ',')
+            end
         end
 
-        infidelity = optimization_tracker.last_infidelity
+        # Could put a stopping condition here if I want to
 
-        ## Commenting this out so the log output is clean enough to parse
-        #if (infidelity < 0) || (infidelity > 1)
-        #    @warn "Infidelity $infidelity is outside range the [0,1]. This may indicate that the numerical error in the solution at the final time is greater than the deviation of the implemented gate from the target gate. Considert using a smaller stepsize."
-        #end
-
-        #if obj_value < 1e-7
-        #    return false # Stop the optimization
-        #end
         return true # continue the optimization
     end
-
-    #==========================================================================
-    # Define objective and gradient calculation, plus custom iteration callback
-    ==========================================================================#
 
     ipopt_prob = Ipopt.CreateIpoptProblem(
         N_coeff,
@@ -533,7 +362,6 @@ function optimize_gate(
             AddIpoptOption(ipopt_prob, keyword, value)
         end
     end
-    
 
     # Initialize
     ipopt_prob.x .= pcof_init
@@ -542,9 +370,6 @@ function optimize_gate(
     # Perform the optimization
     solvestat = Ipopt.IpoptSolve(ipopt_prob)
 
-    # Save data
-    write_jld2()
-
-    return optimization_history
+    return ipopt_prob
 end
 
