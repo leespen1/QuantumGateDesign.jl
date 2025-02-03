@@ -1,5 +1,4 @@
-using QuantumGateDesign, DelimitedFiles, JLD2
-using Juqbox, Dates, Printf, Random, LinearAlgebra, Pkg, InteractiveUtils, ArgParse
+using QuantumGateDesign, DelimitedFiles, Dates, Random, LinearAlgebra, ArgParse
 using QuantumGateDesign: setup_cnot3, get_D1, get_controls
 
 function collect_data(prob::SchrodingerProb, controls,
