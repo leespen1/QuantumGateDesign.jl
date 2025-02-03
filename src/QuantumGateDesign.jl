@@ -11,6 +11,7 @@ using LinearAlgebra: mul!, axpy!, dot, tr, norm
 using Random: rand, MersenneTwister
 using Base.Iterators: product
 using BasicBSpline: BSplineDerivativeSpace, BSplineSpace
+using LoopVectorization: @turbo
 
 # Export derivative computation functions
 export compute_derivatives!, compute_adjoint_derivatives!, compute_partial_derivative!, apply_hamiltonian!
@@ -80,9 +81,9 @@ include("Controls/zero_control.jl")
 include("Controls/generalized_grape_control.jl")
 include("Controls/hermite_carrier.jl")
 include("Controls/GeneralBSplineControl.jl")
+include("Controls/FortranBSpline.jl")
 include("Controls/CarrierControl.jl")
 #include("Controls/BasicBSplineControl.jl")
-include("Controls/FortranBSpline.jl")
 
 
 include("hermite.jl")
