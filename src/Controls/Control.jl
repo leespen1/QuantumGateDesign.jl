@@ -41,7 +41,7 @@ Although we might think about "multiple controls" in the
 sense that a bcarrier control for a single qubit consists of multiple controls
 with different frequencies, it should be considered as only one control.
 """
-function Base.getindex(control::AbstractControl, index::Int64)
+@inline function Base.getindex(control::AbstractControl, index::Int64)
     if index != 1
         throw(BoundsError(control, index))
     end
@@ -49,10 +49,30 @@ function Base.getindex(control::AbstractControl, index::Int64)
 end
 
 
-function Base.length(control::AbstractControl)
+@inline function Base.length(control::AbstractControl)
     return 1
 end
 
+@inline function check_vector_indices_are_1_to_length(v::AbstractVector)
+    if (firstindex(v) != 1) || (lastindex(v) != length(v))
+        throw(DimensionMismatch("Vector does not have indices 1:length(vector)."))
+    end
+    return nothing
+end
+
+
+
+function check_pcof_length(control::AbstractControl, pcof::AbstractVector)
+    pcof_length = length(pcof)
+    if pcof_length != control.N_coeff
+        error_str = "Length (" * string(pcof_length) * ") of given control vector does not match expected number of coefficients (" * string(control.N_coeff) * ")."
+        throw(DimensionMismatch(error_str))
+    end
+    if (firstindex(pcof) != 1) || (lastindex(pcof) != control.N_coeff)
+        throw(DimensionMismatch("Indices of given pcof are not 1:N_coeff"))
+    end
+    return nothing
+end
 
 """
 Get the slice (view) of the control vector which corresponds to the given control index.
