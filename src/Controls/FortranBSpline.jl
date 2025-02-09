@@ -504,11 +504,11 @@ function eval_grad_derivative!(
     pcof_offset = floor(Int64, t_scaled*(control.bspline.N_distinct_knots-1) + 1)
     pcof_offset = min(pcof_offset, control.bspline.N_distinct_knots-1)
     pcof_offset += extra_offset
-
+    tf_pow_order = control.tf ^ order
     @turbo for i in 0:control.bspline.bspline_order-1 
         # Control is linear in the pcof coefficients
         # Chain rule (no 1/j! factor needed)
-        grad[pcof_offset+i] = control.bspline.output_array[1+i,1+order] / (control.tf ^ order)
+        grad[pcof_offset+i] = control.bspline.output_array[1+i,1+order] / tf_pow_order
     end
 
     return grad
