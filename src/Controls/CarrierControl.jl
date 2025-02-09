@@ -115,7 +115,6 @@ function eval_p_derivative(control::CarrierControl, t::Real,
 
     val = 0.0
     for i in 1:control.N_frequencies
-        offset = (i-1)*2
         for k = 0:order
             val += control.carrier_val_storage[1+k, 1, i] * control.base_val_storage[1+order-k, 1, i]
             val -= control.carrier_val_storage[1+k, 2, i] * control.base_val_storage[1+order-k, 2, i]
@@ -134,7 +133,6 @@ function eval_q_derivative(control::CarrierControl, t::Real,
 
     val = 0.0
     for i in 1:control.N_frequencies
-        offset = (i-1)*2
         for k = 0:order
             val += control.carrier_val_storage[1+k, 1, i] * control.base_val_storage[1+order-k, 2, i]
             val += control.carrier_val_storage[1+k, 2, i] * control.base_val_storage[1+order-k, 1, i]
@@ -157,7 +155,6 @@ function fill_p_vec!(
     for n = 0:nderiv
         val = 0.0
         for i in 1:control.N_frequencies
-            offset = (i-1)*2
             for k = 0:n
                 val += control.carrier_val_storage[1+k, 1, i] * control.base_val_storage[1+n-k, 1, i]
                 val -= control.carrier_val_storage[1+k, 2, i] * control.base_val_storage[1+n-k, 2, i]
@@ -181,7 +178,6 @@ function fill_q_vec!(
     for n = 0:nderiv
         val = 0.0
         for i in 1:control.N_frequencies
-            offset = (i-1)*2
             for k = 0:n
                 val += control.carrier_val_storage[1+k, 1, i] * control.base_val_storage[1+n-k, 2, i]
                 val += control.carrier_val_storage[1+k, 2, i] * control.base_val_storage[1+n-k, 1, i]
@@ -196,6 +192,8 @@ end
 
 
 function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::CarrierControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
+    update_carrier_vals!(control, t, order)
+
     grad .= 0
 
     for (i, w) in enumerate(control.carrier_frequencies)
@@ -204,19 +202,8 @@ function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::Carrier
         this_carrier_grad = view(grad, 1+offset:offset+control.base_control.N_coeff)
 
         for k in 0:order
-            if (k % 4) == 0
-                carrier_val1 =  cos(w*t) * (w^k)
-                carrier_val2 = -sin(w*t) * (w^k)
-            elseif (k % 4) == 1
-                carrier_val1 = -sin(w*t) * (w^k)
-                carrier_val2 = -cos(w*t) * (w^k)
-            elseif (k % 4) == 2
-                carrier_val1 = -cos(w*t) * (w^k)
-                carrier_val2 =  sin(w*t) * (w^k)
-            elseif (k % 4) == 3
-                carrier_val1 =  sin(w*t) * (w^k)
-                carrier_val2 =  cos(w*t) * (w^k)
-            end
+            carrier_val1 =  control.carrier_val_storage[1+k,1,i] * factorial(k)
+            carrier_val2 = -control.carrier_val_storage[1+k,2,i] * factorial(k)
 
             binomial_coeff = binomial(order, k)
 
@@ -244,6 +231,8 @@ end
 
 
 function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::CarrierControl{T}, t::Real, pcof::AbstractVector{<: Real}, order::Int64) where T
+    update_carrier_vals!(control, t, order)
+
     grad .= 0
 
     for (i, w) in enumerate(control.carrier_frequencies)
@@ -252,19 +241,8 @@ function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::Carrier
         this_carrier_grad = view(grad, 1+offset:offset+control.base_control.N_coeff)
 
         for k in 0:order
-            if (k % 4) == 0
-                carrier_val1 =  sin(w*t) * (w^k)
-                carrier_val2 =  cos(w*t) * (w^k)
-            elseif (k % 4) == 1
-                carrier_val1 =  cos(w*t) * (w^k)
-                carrier_val2 = -sin(w*t) * (w^k)
-            elseif (k % 4) == 2
-                carrier_val1 = -sin(w*t) * (w^k)
-                carrier_val2 = -cos(w*t) * (w^k)
-            elseif (k % 4) == 3
-                carrier_val1 = -cos(w*t) * (w^k)
-                carrier_val2 =  sin(w*t) * (w^k)
-            end
+            carrier_val1 = control.carrier_val_storage[1+k,2,i] * factorial(k)
+            carrier_val2 = control.carrier_val_storage[1+k,1,i] * factorial(k)
 
             binomial_coeff = binomial(order, k)
 
