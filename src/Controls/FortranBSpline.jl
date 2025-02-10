@@ -593,8 +593,8 @@ function fill_grad_mat!(
     )
     check_pcof_length(control, pcof)
     check_indices_are_1_to_size(grad_mat)
-    # calculate derivatives up to and including nderiv
-    nderiv = size(grad_mat, 2) - 1
+    # calculate derivatives up to (but not including nderiv)
+    nderiv = size(grad_mat, 2)
     t_scaled::Float64 = t / control.tf
     update!(control.bspline, t_scaled, nderiv)
 
@@ -605,10 +605,8 @@ function fill_grad_mat!(
     # Control is linear in the pcof coefficients
     grad_mat .= 0
     pow_tf = 1.0
-    # Could use turbo here if I didn't use efficient pow_tf, could be faster.
-    # Shoulf also check that indices of grad_mat are 1_to_length
     for k in 0:nderiv-1
-        for i in 0:control.bspline.bspline_order-1
+        @turbo for i in 0:control.bspline.bspline_order-1
             # Chain rule (no 1/j! factor needed)
             grad_mat[pcof_offset+i,1+k] = control.bspline.output_array[1+i,1+k] / pow_tf
         end
