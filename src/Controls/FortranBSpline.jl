@@ -200,6 +200,60 @@ function eval_grad_q_derivative!(
     return grad
 end
 
+function fill_grad_p_mat!(
+        grad_mat::AbstractMatrix{Float64}, control::FortranBSplineControl, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+    # calculate derivatives up to (but not including) nderiv
+    nderiv = size(grad_mat, 2)  
+    t_scaled::Float64 = t / control.tf
+    bsplvd!(control, t_scaled, nderiv)
+
+    pcof_offset = floor(Int64, t_scaled*(control.N_distinct_knots-1) + 1)
+    pcof_offset = min(pcof_offset, control.N_distinct_knots-1)
+
+    # Control is linear in the pcof coefficients
+    grad_mat .= 0
+    pow_tf = 1.0
+    for k in 0:nderiv-1
+        for i in 0:control.bspline_order-1
+            # Chain rule (no 1/j! factor needed)
+            grad_mat[pcof_offset+i,1+k] = control.output_array[1+i,1+k] / pow_tf
+        end
+        pow_tf *= control.tf
+    end
+
+    return grad_mat
+end
+
+function fill_grad_q_mat!(
+        grad_mat::AbstractMatrix{Float64}, control::FortranBSplineControl, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+    # calculate derivatives up to (but not including) nderiv
+    nderiv = size(grad_mat, 2)  
+    # calculate derivatives up to (but not including) nderiv
+    t_scaled::Float64 = t / control.tf
+    bsplvd!(control, t_scaled, nderiv)
+
+    pcof_offset = floor(Int64, t_scaled*(control.N_distinct_knots-1) + 1)
+    pcof_offset = min(pcof_offset, control.N_distinct_knots-1)
+    pcof_offset += div(control.N_coeff, 2)
+
+    # Control is linear in the pcof coefficients
+    grad_mat .= 0
+    pow_tf = 1.0
+    for k in 0:nderiv-1
+        for i in 0:control.bspline_order-1
+            # Chain rule (no 1/j! factor needed)
+            grad_mat[pcof_offset+i,1+k] = control.output_array[1+i,1+k] / pow_tf
+        end
+        pow_tf *= control.tf
+    end
+
+    return grad_mat
+end
+
 
 """
 Bezier degree elevations: 
@@ -497,7 +551,7 @@ function eval_grad_derivative!(
         pcof::AbstractVector{<: Real}, order::Integer, extra_offset::Integer
     )
     grad .= 0
-    check_vector_indices_are_1_to_length(grad)
+    check_indices_are_1_to_size(grad)
 
     t_scaled::Float64 = t / control.tf
     update!(control.bspline, t_scaled, order)
@@ -531,4 +585,51 @@ end
     )
     offset = div(control.N_coeff, 2)
     return eval_grad_derivative!(grad, control, t, pcof, order, offset)
+end
+
+function fill_grad_mat!(
+        grad_mat::AbstractMatrix{Float64}, control::FortranBSplineControl2, t::Real,
+        pcof::AbstractVector{<: Real}, extra_offset::Integer
+    )
+    check_pcof_length(control, pcof)
+    check_indices_are_1_to_size(grad_mat)
+    # calculate derivatives up to and including nderiv
+    nderiv = size(grad_mat, 2) - 1
+    t_scaled::Float64 = t / control.tf
+    update!(control.bspline, t_scaled, nderiv)
+
+    pcof_offset = floor(Int64, t_scaled*(control.bspline.N_distinct_knots-1) + 1)
+    pcof_offset = min(pcof_offset, control.bspline.N_distinct_knots-1)
+    pcof_offset += extra_offset
+
+    # Control is linear in the pcof coefficients
+    grad_mat .= 0
+    pow_tf = 1.0
+    # Could use turbo here if I didn't use efficient pow_tf, could be faster.
+    # Shoulf also check that indices of grad_mat are 1_to_length
+    for k in 0:nderiv-1
+        for i in 0:control.bspline.bspline_order-1
+            # Chain rule (no 1/j! factor needed)
+            grad_mat[pcof_offset+i,1+k] = control.bspline.output_array[1+i,1+k] / pow_tf
+        end
+        pow_tf *= control.tf
+    end
+
+    return grad_mat
+end
+
+function fill_grad_p_mat!(
+        grad_mat::AbstractMatrix{Float64}, control::FortranBSplineControl2, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+    offset = 0 
+    fill_grad_mat!(grad_mat, control, t, pcof, offset)
+end
+
+function fill_grad_q_mat!(
+        grad_mat::AbstractMatrix{Float64}, control::FortranBSplineControl2, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+    offset = div(control.N_coeff, 2)
+    fill_grad_mat!(grad_mat, control, t, pcof, offset)
 end
