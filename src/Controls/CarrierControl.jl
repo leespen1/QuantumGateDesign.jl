@@ -97,24 +97,19 @@ matrix.
 end
 
 @inline function update_base_gradients!(control::CarrierControl, t::Real, nderiv::Integer, pcof::AbstractVector{<: Real})
-    # Should put in time checks here as well
+    # From update_base_vals
     for i in 1:control.N_frequencies
-        for k in 0:nderiv
-            pcof_offset = (i-1)*control.base_control.N_coeff
-            this_carrier_pcof = view(pcof, pcof_offset+1:pcof_offset+control.base_control.N_coeff)
+        pcof_offset = (i-1)*control.base_control.N_coeff
+        this_carrier_pcof = view(pcof, pcof_offset+1:pcof_offset+control.base_control.N_coeff)
 
-            base_p_grad = view(control.pcof_storage, :, 1+k, 1, i)
-            base_q_grad = view(control.pcof_storage, :, 1+k, 2, i)
+        base_grad_p_mat = view(control.pcof_storage, :, 1:1+nderiv, 1, i)
+        base_grad_q_mat = view(control.pcof_storage, :, 1:1+nderiv, 2, i)
 
-            eval_grad_p_derivative!(
-                base_p_grad, control.base_control, t, this_carrier_pcof, k
-            )
-            eval_grad_q_derivative!(
-                base_q_grad, control.base_control, t, this_carrier_pcof, k
-            )
-        end
+        fill_grad_p_mat!(base_grad_p_mat, control.base_control, t, this_carrier_pcof)
+        fill_grad_q_mat!(base_grad_q_mat, control.base_control, t, this_carrier_pcof)
     end
     return nothing
+
 end
 
 function eval_p(control::CarrierControl, t::Real, pcof::AbstractVector{<: Real})
