@@ -595,10 +595,16 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
     working_state_vector = zeros(prob.real_system_size)
     working_state_matrix = zeros(prob.real_system_size, N_derivatives)
 
+    control_vals_real = zeros(1+N_derivatives, prob.N_operators)
+    control_vals_imag = zeros(1+N_derivatives, prob.N_operators)
 
     for i in 1:prob.N_operators
         control = controls[i]
         grad_contrib = zeros(control.N_coeff)
+
+        local_pcof = get_control_vector_slice(pcof, controls, i)
+        local_control_grad_real = zeros(control.N_coeff, 1+N_derivatives)
+        local_control_grad_imag = zeros(control.N_coeff, 1+N_derivatives)
 
         for n in 0:prob.nsteps-1
             λₙ₊₁ .= @view lambda_history[:, 1, 1+n+1]
@@ -614,11 +620,18 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
                 c_implicit = -(-dt)^k * coefficient(k, N_derivatives, N_derivatives)
                 c_explicit = (dt)^k  * coefficient(k, N_derivatives, N_derivatives)
 
+                fill_p_mat!(control_vals_real, controls, tₙ, pcof) 
+                fill_q_mat!(control_vals_imag, controls, tₙ, pcof) 
+                fill_grad_p_mat!(local_control_grad_real, control, tₙ, pcof)
+                fill_grad_q_mat!(local_control_grad_imag, control, tₙ, pcof)
+
                 #println("#"^20, "\nOrder $k Contribution\n", "#"^20)
                 # Handle explicit
                 recursive_magic!(
                     grad_contrib, wₙ, λₙ₊₁, k, c_explicit, prob, controls, tₙ,
-                    pcof, i, working_pcof, working_state_vector, working_state_matrix
+                    pcof, i, working_pcof, working_state_vector,
+                    working_state_matrix, control_vals_real, control_vals_imag, 
+                    local_control_grad_real, local_control_grad_imag,
                 )
             end
                 
@@ -629,12 +642,18 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
                 c_implicit = -(-dt)^k * coefficient(k, N_derivatives, N_derivatives)
                 c_explicit = (dt)^k  * coefficient(k, N_derivatives, N_derivatives)
 
+                fill_p_mat!(control_vals_real, controls, tₙ₊₁, pcof) 
+                fill_q_mat!(control_vals_imag, controls, tₙ₊₁, pcof) 
+                fill_grad_p_mat!(local_control_grad_real, control, tₙ₊₁, pcof)
+                fill_grad_q_mat!(local_control_grad_imag, control, tₙ₊₁, pcof)
+
                 #println("#"^20, "\nOrder $k Contribution\n", "#"^20)
                 # Handle implicit
                 recursive_magic!(
                     grad_contrib, wₙ₊₁, λₙ₊₁, k, c_implicit, prob, controls,
                     tₙ₊₁, pcof, i, working_pcof, working_state_vector,
-                    working_state_matrix
+                    working_state_matrix, control_vals_real, control_vals_imag,
+                    local_control_grad_real, local_control_grad_imag,
                 )
             end
         end
@@ -646,6 +665,7 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
     return gradient
 end
 
+#=
 """
 I will need a matrix of left_inners, since I have y0, y1, y2, etc. 
 
@@ -719,6 +739,89 @@ function recursive_magic!(grad_contrib::AbstractVector{<: Real},
             grad_contrib, w_mat, right_inner, i, coeff/(j+1), prob,
             controls, t, pcof, control_index, working_pcof, working_state_vector,
             working_state_matrix_reduced,
+        )
+    end
+
+    return grad_contrib
+end
+=#
+
+"""
+I will need a matrix of left_inners, since I have y0, y1, y2, etc. 
+
+May as well make a matrix of right inners, since I will have λ, A₀λ, A₁λ, ...
+
+Does the contribution of ⟨coeff*wⱼ₊₁, λ⟩
+
+**update** New version, uses precomputed control values
+"""
+function recursive_magic!(grad_contrib::AbstractVector{<: Real},
+        w_mat::AbstractMatrix{<: Real}, lambda::AbstractVector{<: Real},
+        derivative_order::Integer, coeff::Real,
+        prob::SchrodingerProb, controls, t::Real,
+        pcof::AbstractVector{<: Real}, control_index::Integer,
+        working_pcof::AbstractVector{<: Real},
+        working_state_vector::AbstractVector{<: Real},
+        working_state_matrix::AbstractMatrix{<: Real},
+        control_vals_real::AbstractMatrix{Float64},
+        control_vals_imag::AbstractMatrix{Float64},
+        local_control_grad_real::AbstractMatrix{Float64},
+        local_control_grad_imag::AbstractMatrix{Float64},
+    )
+    control = controls[control_index]
+    asym_op = prob.asym_operators[control_index]
+    sym_op = prob.sym_operators[control_index]
+
+    j = derivative_order-1
+    real_system_size = size(w_mat, 1)
+
+    for i in 0:j
+        # i=0,j=0 and i=0,j=1 will be the same except for the broadcasting.
+        # There should be a way to make use of this to avoid redoing computiation.
+        # It seems like once I do any i=i',j=j', I should be able to handle all subsequent
+        # cases of i=i',j=any at the same time. Investigate this (also only optimize slow things, don't dig
+        # into this prematurely).
+        #
+        # What I originally had (should work once I use a real history)
+        inner_prod_S = compute_inner_prod_S!(
+            view(w_mat, :, 1+i), lambda, asym_op, working_state_vector, prob.real_system_size
+        )
+        inner_prod_K = compute_inner_prod_K!(
+            view(w_mat, :, 1+i), lambda, sym_op, working_state_vector, prob.real_system_size
+        )
+
+        fact_j_minus_i = factorial(j-i)
+
+        grad_p = view(local_control_grad_real, :, 1+j-i)
+        @. grad_contrib += grad_p * inner_prod_K * coeff / ((j+1)*fact_j_minus_i)
+
+        grad_q = view(local_control_grad_imag, :, 1+j-i)
+        @. grad_contrib += grad_q * inner_prod_S * coeff / ((j+1)*fact_j_minus_i)
+    end
+
+    # Better to do in two loops. Makes it more clear how I can make the first
+    # loop more efficient by reusing computation.
+    # Could also make the loop over 1:j, since if i=0 then this doesn't execute
+    for i in 0:j
+        # Take special care about how factors are handled
+        # Move this outside the loop
+        right_inner = @view working_state_matrix[:,1+i]
+        right_inner .= 0
+
+        # Using views here might lead to type instability in next recursive_magic! call.
+        # Should check this with @code_warn
+        right_inner = view(working_state_matrix, :, 1+i)
+        working_state_matrix_reduced = view(working_state_matrix, :, 1:i)
+        right_inner .= 0
+        apply_hamiltonian!(right_inner, lambda, prob, control_vals_real, control_vals_imag;
+                           derivative_order=(j-i), use_adjoint=true)
+        
+        recursive_magic!(
+            grad_contrib, w_mat, right_inner, i, coeff/(j+1), prob,
+            controls, t, pcof, control_index, working_pcof,
+            working_state_vector, working_state_matrix_reduced,
+            control_vals_real, control_vals_imag,
+            local_control_grad_real, local_control_grad_imag,
         )
     end
 
