@@ -109,7 +109,6 @@ end
         fill_grad_q_mat!(base_grad_q_mat, control.base_control, t, this_carrier_pcof)
     end
     return nothing
-
 end
 
 function eval_p(control::CarrierControl, t::Real, pcof::AbstractVector{<: Real})
@@ -235,7 +234,7 @@ function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::Carrier
 end
 
 
-function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::CarrierControl{T}, t::Real, pcof::AbstractVector{<: Real}, order::Int64) where T
+function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::CarrierControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     update_carrier_vals!(control, t, order)
     update_base_gradients!(control, t, order, pcof)
 
@@ -260,4 +259,86 @@ function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::Carrier
         end 
     end
     return grad
+end
+
+function fill_grad_q_mat!(
+        grad_mat::AbstractMatrix{Float64}, control::CarrierControl, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+    # calculate derivatives up to (but not including) nderiv
+    nderiv = size(grad_mat, 2)  
+
+    update_carrier_vals!(control, t, nderiv-1)
+    update_base_gradients!(control, t, nderiv-1, pcof)
+
+    grad_mat .= 0
+
+    for (i, w) in enumerate(control.carrier_frequencies)
+        offset = (i-1)*control.base_control.N_coeff
+        this_carrier_pcof = view(pcof, 1+offset:offset+control.base_control.N_coeff)
+
+        for order in 0:nderiv-1
+            this_carrier_grad_vec = view(
+                grad_mat, 1+offset:offset+control.base_control.N_coeff, 1+order
+            )
+            for k in 0:order
+                # Could precompute factorials to make this faster
+                fact_k = factorial(k)
+                carrier_val_p = control.carrier_val_storage[1+k,1,i] * fact_k
+                carrier_val_q = control.carrier_val_storage[1+k,2,i] * fact_k
+
+                binomial_coeff = binomial(order, k)
+
+                grad_p = view(control.pcof_storage, :, 1+order-k, 1, i)
+                grad_q = view(control.pcof_storage, :, 1+order-k, 2, i)
+
+                # Most of the time is spent here. Could improve for Bsplines by
+                # only updating the necessary elements.
+                @. this_carrier_grad_vec += carrier_val_p * grad_q * binomial_coeff
+                @. this_carrier_grad_vec += carrier_val_q * grad_p * binomial_coeff
+            end 
+        end
+    end
+
+    return grad_mat
+end
+
+function fill_grad_p_mat!(
+        grad_mat::AbstractMatrix{Float64}, control::CarrierControl, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+    # calculate derivatives up to (but not including) nderiv
+    nderiv = size(grad_mat, 2)  
+
+    update_carrier_vals!(control, t, nderiv-1)
+    update_base_gradients!(control, t, nderiv-1, pcof)
+
+    grad_mat .= 0
+
+    for (i, w) in enumerate(control.carrier_frequencies)
+        offset = (i-1)*control.base_control.N_coeff
+        this_carrier_pcof = view(pcof, 1+offset:offset+control.base_control.N_coeff)
+
+        for order in 0:nderiv-1
+            this_carrier_grad_vec = view(
+                grad_mat, 1+offset:offset+control.base_control.N_coeff, 1+order
+            )
+            for k in 0:order
+                # Could precompute factorials to make this faster
+                fact_k = factorial(k)
+                carrier_val_p = control.carrier_val_storage[1+k,1,i] * fact_k
+                carrier_val_q = control.carrier_val_storage[1+k,2,i] * fact_k
+
+                binomial_coeff = binomial(order, k)
+
+                grad_p = view(control.pcof_storage, :, 1+order-k, 1, i)
+                grad_q = view(control.pcof_storage, :, 1+order-k, 2, i)
+
+                @. this_carrier_grad_vec += carrier_val_p * grad_p * binomial_coeff
+                @. this_carrier_grad_vec -= carrier_val_q * grad_q * binomial_coeff
+            end 
+        end
+    end
+
+    return grad_mat
 end
