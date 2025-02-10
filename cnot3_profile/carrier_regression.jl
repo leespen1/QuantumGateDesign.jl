@@ -9,6 +9,7 @@ rel_errors(A,B) = abs_errors(A,B) ./ abs.(B)
 max_abs_errors(A,B) = maximum(abs_errors(A,B))
 max_rel_errors(A,B) = maximum(clean_NaN(rel_errors(A,B)))
 
+use_new = true
 write_dlm = false
 
 degree = 14
@@ -48,12 +49,14 @@ println("Evaluating controls (old style) ...")
     vals_array_old[:,:,2,i] .= control_vals_mat
 end
 
-println("Evaluating controls (new style) ...")
-@time for (i,t) in enumerate(t_range)
-    fill_p_mat!(control_vals_mat, new_carrier_controls, t, pcof)
-    vals_array_new[:,:,1,i] .= control_vals_mat
-    fill_q_mat!(control_vals_mat, new_carrier_controls, t, pcof)
-    vals_array_new[:,:,2,i] .= control_vals_mat
+if use_new
+    println("Evaluating controls (new style) ...")
+    @time for (i,t) in enumerate(t_range)
+        fill_p_mat!(control_vals_mat, new_carrier_controls, t, pcof)
+        vals_array_new[:,:,1,i] .= control_vals_mat
+        fill_q_mat!(control_vals_mat, new_carrier_controls, t, pcof)
+        vals_array_new[:,:,2,i] .= control_vals_mat
+    end
 end
 
 vals_dlm_mat_old = reshape(vals_array_old, Nderiv, :)
@@ -99,14 +102,16 @@ println("Evaluating gradients (old style) ...")
     end
 end
 
-println("Evaluating gradients (new style) ...")
-@time for (i, t) in enumerate(t_range)
-    # Put in two more matrices
-    for order in 0:13
-        eval_grad_p_derivative!(grad_vec, new_carrier_controls[1], t, pcof, order)
-        grad_array_new[:,1+order,1,i] .= grad_vec
-        eval_grad_q_derivative!(grad_vec, new_carrier_controls[1], t, pcof, order)
-        grad_array_new[:,1+order,2,i] .= grad_vec
+if use_new
+    println("Evaluating gradients (new style) ...")
+    @time for (i, t) in enumerate(t_range)
+        # Put in two more matrices
+        for order in 0:13
+            eval_grad_p_derivative!(grad_vec, new_carrier_controls[1], t, pcof, order)
+            grad_array_new[:,1+order,1,i] .= grad_vec
+            eval_grad_q_derivative!(grad_vec, new_carrier_controls[1], t, pcof, order)
+            grad_array_new[:,1+order,2,i] .= grad_vec
+        end
     end
 end
 
