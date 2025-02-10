@@ -224,8 +224,8 @@ function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::Carrier
         this_carrier_grad = view(grad, 1+offset:offset+control.base_control.N_coeff)
 
         for k in 0:order
-            carrier_val_p =  control.carrier_val_storage[1+k,1,i] * factorial(k)
-            carrier_val_q = -control.carrier_val_storage[1+k,2,i] * factorial(k)
+            carrier_val_p = control.carrier_val_storage[1+k,1,i] * factorial(k)
+            carrier_val_q = control.carrier_val_storage[1+k,2,i] * factorial(k)
 
             binomial_coeff = binomial(order, k)
 
