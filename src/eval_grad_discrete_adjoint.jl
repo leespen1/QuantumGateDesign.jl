@@ -195,48 +195,8 @@ function accumulate_gradient!(gradient::AbstractVector{Float64},
         return gradient
     end
 
-
-    dt = prob.tf / prob.nsteps
-    N_derivatives = div(order, 2)
-
-    uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
-    uv_partial_mat = zeros(prob.real_system_size, 1+N_derivatives)
-
-    RHS = zeros(prob.real_system_size)
-    LHS = zeros(prob.real_system_size)
-
-    # If this is really all it takes, that's pretty easy.
-    for n in 0:prob.nsteps-1
-        # Used for both times
-        lambda_np1 = view(lambda_history, :, 1, 1+n+1)
-
-        # Handle RHS / "Explicit" Part
-
-        t = n*dt
-        uv_mat .= view(history, :, :, 1+n)
-
-        for pcof_index in 1:length(pcof)
-            compute_partial_derivative!(
-                uv_partial_mat, uv_mat, prob, controls, t, pcof, N_derivatives, pcof_index
-            )
-
-            build_RHS!(RHS, uv_partial_mat, dt, N_derivatives)
-            gradient[pcof_index] -= dot(RHS, lambda_np1)
-        end
-
-        # Handle LHS / "Explicit" Part
-        t = (n+1)*dt
-        uv_mat .= view(history, :, :, 1+n+1)
-
-        for pcof_index in 1:length(pcof)
-            compute_partial_derivative!(
-                uv_partial_mat, uv_mat, prob, controls, t, pcof, N_derivatives, pcof_index
-            )
-
-            build_LHS!(LHS, uv_partial_mat, dt, N_derivatives)
-            gradient[pcof_index] += dot(LHS, lambda_np1)
-        end
-    end
+    accumulate_gradient_arbitrary_fast!(gradient, prob, controls, pcof, history, lambda_history, order=order)
+    return gradient
 end
 
 """
@@ -246,6 +206,7 @@ function accumulate_gradient_order2!(gradient::AbstractVector{Float64},
         prob::SchrodingerProb, controls, pcof::AbstractVector{Float64},
         history::AbstractArray{Float64, 3}, lambda_history::AbstractArray{Float64, 3}
     )
+    println("This runs!")
 
     dt = prob.tf / prob.nsteps
 
@@ -269,16 +230,16 @@ function accumulate_gradient_order2!(gradient::AbstractVector{Float64},
         grad_p = zeros(control.N_coeff)
         grad_q = zeros(control.N_coeff)
 
+        t₀ = 0.0
+        eval_grad_p_derivative!(grad_p, control, t₀, local_pcof, 0)
+        eval_grad_q_derivative!(grad_q, control, t₀, local_pcof, 0)
+
         for n in 0:prob.nsteps-1
             lambda_u .= @view lambda_history[1:prob.N_tot_levels,     1, 1+n+1]
             lambda_v .= @view lambda_history[1+prob.N_tot_levels:end, 1, 1+n+1]
 
-            t = n*dt
             u .= @view history[1:prob.N_tot_levels,     1, 1+n]
             v .= @view history[1+prob.N_tot_levels:end, 1, 1+n]
-
-            eval_grad_p_derivative!(grad_p, control, t, local_pcof, 0)
-            eval_grad_q_derivative!(grad_q, control, t, local_pcof, 0)
 
             mul!(asym_op_lambda_u, asym_op, lambda_u)
             mul!(asym_op_lambda_v, asym_op, lambda_v)
@@ -288,12 +249,12 @@ function accumulate_gradient_order2!(gradient::AbstractVector{Float64},
             grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
             grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
 
-            t = (n+1)*dt
+            tₙ₊₁ = (n+1)*dt
             u .= @view history[1:prob.N_tot_levels,     1, 1+n+1]
             v .= @view history[1+prob.N_tot_levels:end, 1, 1+n+1]
 
-            eval_grad_p_derivative!(grad_p, control, t, local_pcof, 0)
-            eval_grad_q_derivative!(grad_q, control, t, local_pcof, 0)
+            eval_grad_p_derivative!(grad_p, control, tₙ₊₁, local_pcof, 0)
+            eval_grad_q_derivative!(grad_q, control, tₙ₊₁, local_pcof, 0)
 
             grad_contrib .+= grad_q .* -(dot(u, asym_op_lambda_u) + dot(v, asym_op_lambda_v))
             grad_contrib .+= grad_p .* (-dot(u, sym_op_lambda_v) + dot(v, sym_op_lambda_u))
@@ -591,13 +552,13 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
     wₙ   = zeros(prob.real_system_size, 1+N_derivatives) 
     wₙ₊₁ = zeros(prob.real_system_size, 1+N_derivatives) 
 
-    working_pcof = zeros(length(pcof))
     working_state_vector = zeros(prob.real_system_size)
     working_state_matrix = zeros(prob.real_system_size, N_derivatives)
 
     control_vals_real = zeros(1+N_derivatives, prob.N_operators)
     control_vals_imag = zeros(1+N_derivatives, prob.N_operators)
 
+    # Could move this up the loop heierarchy so I don't have to recompute control values
     for i in 1:prob.N_operators
         control = controls[i]
         grad_contrib = zeros(control.N_coeff)
@@ -605,12 +566,19 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
         local_pcof = get_control_vector_slice(pcof, controls, i)
         local_control_grad_real = zeros(control.N_coeff, 1+N_derivatives)
         local_control_grad_imag = zeros(control.N_coeff, 1+N_derivatives)
+        
+        # Initial control values
+        t₀ = 0.0
+        fill_p_mat!(control_vals_real, controls, t₀, pcof) 
+        fill_q_mat!(control_vals_imag, controls, t₀, pcof) 
+        fill_grad_p_mat!(local_control_grad_real, control, t₀, local_pcof)
+        fill_grad_q_mat!(local_control_grad_imag, control, t₀, local_pcof)
+
 
         for n in 0:prob.nsteps-1
             λₙ₊₁ .= @view lambda_history[:, 1, 1+n+1]
             wₙ   .= @view history[:, :, 1+n]
             wₙ₊₁ .= @view history[:, :, 1+n+1]
-            tₙ = n*dt
             tₙ₊₁ = (n+1)*dt
 
             #println("#"^20, "\nExplicit\n", "#"^20)
@@ -620,20 +588,21 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
                 c_implicit = -(-dt)^k * coefficient(k, N_derivatives, N_derivatives)
                 c_explicit = (dt)^k  * coefficient(k, N_derivatives, N_derivatives)
 
-                fill_p_mat!(control_vals_real, controls, tₙ, pcof) 
-                fill_q_mat!(control_vals_imag, controls, tₙ, pcof) 
-                fill_grad_p_mat!(local_control_grad_real, control, tₙ, pcof)
-                fill_grad_q_mat!(local_control_grad_imag, control, tₙ, pcof)
-
                 #println("#"^20, "\nOrder $k Contribution\n", "#"^20)
                 # Handle explicit
                 recursive_magic!(
-                    grad_contrib, wₙ, λₙ₊₁, k, c_explicit, prob, controls, tₙ,
-                    pcof, i, working_pcof, working_state_vector,
+                    grad_contrib, wₙ, λₙ₊₁, k, c_explicit, prob, i,
+                    working_state_vector,
                     working_state_matrix, control_vals_real, control_vals_imag, 
                     local_control_grad_real, local_control_grad_imag,
                 )
             end
+
+            # These values will be reused next iteration!
+            fill_p_mat!(control_vals_real, controls, tₙ₊₁, pcof) 
+            fill_q_mat!(control_vals_imag, controls, tₙ₊₁, pcof) 
+            fill_grad_p_mat!(local_control_grad_real, control, tₙ₊₁, local_pcof)
+            fill_grad_q_mat!(local_control_grad_imag, control, tₙ₊₁, local_pcof)
                 
             #println("#"^20, "\nImplicit\n", "#"^20)
             for k in 0:N_derivatives
@@ -642,16 +611,12 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
                 c_implicit = -(-dt)^k * coefficient(k, N_derivatives, N_derivatives)
                 c_explicit = (dt)^k  * coefficient(k, N_derivatives, N_derivatives)
 
-                fill_p_mat!(control_vals_real, controls, tₙ₊₁, pcof) 
-                fill_q_mat!(control_vals_imag, controls, tₙ₊₁, pcof) 
-                fill_grad_p_mat!(local_control_grad_real, control, tₙ₊₁, pcof)
-                fill_grad_q_mat!(local_control_grad_imag, control, tₙ₊₁, pcof)
 
                 #println("#"^20, "\nOrder $k Contribution\n", "#"^20)
                 # Handle implicit
                 recursive_magic!(
-                    grad_contrib, wₙ₊₁, λₙ₊₁, k, c_implicit, prob, controls,
-                    tₙ₊₁, pcof, i, working_pcof, working_state_vector,
+                    grad_contrib, wₙ₊₁, λₙ₊₁, k, c_implicit, prob, i, 
+                    working_state_vector,
                     working_state_matrix, control_vals_real, control_vals_imag,
                     local_control_grad_real, local_control_grad_imag,
                 )
@@ -677,10 +642,8 @@ Does the contribution of ⟨coeff*wⱼ₊₁, λ⟩
 """
 function recursive_magic!(grad_contrib::AbstractVector{<: Real},
         w_mat::AbstractMatrix{<: Real}, lambda::AbstractVector{<: Real},
-        derivative_order::Integer, coeff::Real,
-        prob::SchrodingerProb, controls, t::Real,
-        pcof::AbstractVector{<: Real}, control_index::Integer,
-        working_pcof::AbstractVector{<: Real},
+        derivative_order::Integer, coeff::Real, prob::SchrodingerProb,
+        control_index::Integer,
         working_state_vector::AbstractVector{<: Real},
         working_state_matrix::AbstractMatrix{<: Real},
         control_vals_real::AbstractMatrix{Float64},
@@ -688,7 +651,6 @@ function recursive_magic!(grad_contrib::AbstractVector{<: Real},
         local_control_grad_real::AbstractMatrix{Float64},
         local_control_grad_imag::AbstractMatrix{Float64},
     )
-    control = controls[control_index]
     asym_op = prob.asym_operators[control_index]
     sym_op = prob.sym_operators[control_index]
 
@@ -737,8 +699,7 @@ function recursive_magic!(grad_contrib::AbstractVector{<: Real},
                            derivative_order=(j-i), use_adjoint=true)
         
         recursive_magic!(
-            grad_contrib, w_mat, right_inner, i, coeff/(j+1), prob,
-            controls, t, pcof, control_index, working_pcof,
+            grad_contrib, w_mat, right_inner, i, coeff/(j+1), prob, control_index,
             working_state_vector, working_state_matrix_reduced,
             control_vals_real, control_vals_imag,
             local_control_grad_real, local_control_grad_imag,
