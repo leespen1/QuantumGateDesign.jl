@@ -66,7 +66,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
     avg_N_gmres_iterations /= prob.N_initial_conditions
     #println("#"^80, "\nAvg # Gmres Iterations $avg_N_gmres_iterations\n", "#"^80)
 
-    return nothing
+    return avg_N_gmres_iterations
 end
 
 """
