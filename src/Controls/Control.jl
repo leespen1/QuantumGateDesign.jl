@@ -61,6 +61,19 @@ end
 end
 
 
+@inline function check_indices_are_1_to_size(A::AbstractArray)
+    dim_lengths = size(A)
+    for (i, dim_length) in enumerate(dim_lengths)
+        if (firstindex(A, i) != 1) || (lastindex(A, i) != dim_length)
+            i_str = string(i)
+            error_str = "Array does not have indices 1:size(A," * "i" * ") along dimension " * "i" * "."
+            throw(DimensionMismatch(error_str))
+        end
+    end
+    return nothing
+end
+
+
 
 function check_pcof_length(control::AbstractControl, pcof::AbstractVector)
     pcof_length = length(pcof)
