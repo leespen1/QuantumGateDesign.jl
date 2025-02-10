@@ -314,7 +314,7 @@ struct FortranBSpline
     jbsplvd::Base.RefValue{Int64}
     knot_vector::Vector{Float64}
     work_array::Matrix{Float64}
-    output_array::Matrix{Float64}
+    output_array::Matrix{Float64} # For storing the output of bsplvd
     deltal::Vector{Float64}
     deltar::Vector{Float64}
     function FortranBSpline(degree::Integer, N_basis_functions::Integer)
@@ -496,6 +496,7 @@ function eval_grad_derivative!(
         grad::AbstractVector{Float64}, control::FortranBSplineControl2, t::Real,
         pcof::AbstractVector{<: Real}, order::Integer, extra_offset::Integer
     )
+    grad .= 0
     check_vector_indices_are_1_to_length(grad)
 
     t_scaled::Float64 = t / control.tf
