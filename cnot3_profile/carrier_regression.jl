@@ -1,7 +1,7 @@
 using QuantumGateDesign, DelimitedFiles, Dates
 using QuantumGateDesign: setup_cnot3, get_controls, fill_p_mat!, fill_q_mat!
 using Random: MersenneTwister
-using Profile, PProf, BenchmarkTools
+using Profile, PProf, BenchmarkTools, ProfileView
 
 clean_NaN(A) = replace(x -> isnan(x) ? 0 : x, A)
 abs_errors(A,B) = abs.(A .- B)
@@ -94,7 +94,7 @@ empty_grad_mat = fill(NaN, single_N_coeff, Nderiv)
 println("Evaluating gradients (old style) ...")
 @time for (i, t) in enumerate(t_range)
     # Put in two more matrices
-    for order in 0:13
+    for order in 0:Nderiv-1
         eval_grad_p_derivative!(grad_vec, controls[1], t, pcof, order)
         grad_array_old[:,1+order,1,i] .= grad_vec
         eval_grad_q_derivative!(grad_vec, controls[1], t, pcof, order)
@@ -105,13 +105,11 @@ end
 if use_new
     println("Evaluating gradients (new style) ...")
     @time for (i, t) in enumerate(t_range)
-        # Put in two more matrices
-        for order in 0:13
-            eval_grad_p_derivative!(grad_vec, new_carrier_controls[1], t, pcof, order)
-            grad_array_new[:,1+order,1,i] .= grad_vec
-            eval_grad_q_derivative!(grad_vec, new_carrier_controls[1], t, pcof, order)
-            grad_array_new[:,1+order,2,i] .= grad_vec
-        end
+        QuantumGateDesign.fill_grad_p_mat!(empty_grad_mat, new_carrier_controls[1], t, pcof)
+        grad_array_new[:,:,1,i] .= empty_grad_mat
+        QuantumGateDesign.fill_grad_q_mat!(empty_grad_mat, new_carrier_controls[1], t, pcof)
+        grad_array_new[:,:,2,i] .= empty_grad_mat
+
     end
 end
 
@@ -135,3 +133,22 @@ println("Maximum Relative Errors:")
 println("\tOld vs New: ", max_rel_errors(grad_array_old, grad_array_new))
 println("\tOld vs Reg: ", max_rel_errors(grad_dlm_mat_old, grad_dlm_mat_reg))
 println("\tNew vs Reg: ", max_rel_errors(grad_dlm_mat_new, grad_dlm_mat_reg))
+
+
+### Profiling
+#=
+function run_fill_grad_p_mat!(control, pcof) 
+    Nderiv = 14
+    N_points = 1_001
+    t_range = LinRange(0, control.tf, N_points)
+
+    grad_mat = fill(NaN, control.N_coeff, Nderiv)
+
+    for (i, t) in enumerate(t_range)
+        QuantumGateDesign.fill_grad_q_mat!(grad_mat, control, t, pcof)
+    end
+    return grad_mat
+end
+run_fill_grad_p_mat!(new_carrier_controls[1], pcof)
+@profview run_fill_grad_p_mat!(new_carrier_controls[1], pcof)
+=#
