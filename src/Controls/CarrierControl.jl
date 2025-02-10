@@ -12,21 +12,21 @@ struct CarrierControl{T} <: AbstractControl
     current_t::Base.RefValue{Float64}
     current_derivative_order::Base.RefValue{Int64}
     carrier_frequencies::Vector{Float64}
-    pcof_storage::Vector{Float64}
+    pcof_storage::Array{Float64,4}
     base_val_storage::Array{Float64,3} # Each column is a p_vec or q_vec for each of the base controls (with 1/derivative_order! factor)
     carrier_val_storage::Array{Float64,3} # Each column is a p_vec or q_vec for eⁱʷᵗ (with 1/derivative_order! factor)
     function CarrierControl(base_control::AbstractControl, carrier_frequencies::AbstractVector{<: Real})
         carrier_frequencies = convert(Vector{Float64}, carrier_frequencies)
 
         N_frequencies = length(carrier_frequencies)
-        N_coeffs_per_frequency = base_control.N_coeff
         N_coeff = base_control.N_coeff * N_frequencies
         tf = base_control.tf
 
         current_t = Ref(NaN)
         current_derivative_order = Ref(-1)
 
-        pcof_storage = fill(NaN, N_coeffs_per_frequency) # p and q gradients for up to 19 derivatives
+        # Ordering of this array could be improved for locality
+        pcof_storage = fill(NaN, base_control.N_coeff, vals_vec_storage_size, 2, N_frequencies) # p and q gradients for up to 19 derivatives
         base_val_storage = fill(NaN, vals_vec_storage_size, 2, N_frequencies)
         carrier_val_storage = fill(NaN, vals_vec_storage_size, 2, N_frequencies)
         
@@ -92,6 +92,27 @@ matrix.
 
         fill_p_vec!(base_p_vec, control.base_control, t, this_carrier_pcof)
         fill_q_vec!(base_q_vec, control.base_control, t, this_carrier_pcof)
+    end
+    return nothing
+end
+
+@inline function update_base_gradients!(control::CarrierControl, t::Real, nderiv::Integer, pcof::AbstractVector{<: Real})
+    # Should put in time checks here as well
+    for i in 1:control.N_frequencies
+        for k in 0:nderiv
+            pcof_offset = (i-1)*control.base_control.N_coeff
+            this_carrier_pcof = view(pcof, pcof_offset+1:pcof_offset+control.base_control.N_coeff)
+
+            base_p_grad = view(control.pcof_storage, :, 1+k, 1, i)
+            base_q_grad = view(control.pcof_storage, :, 1+k, 2, i)
+
+            eval_grad_p_derivative!(
+                base_p_grad, control.base_control, t, this_carrier_pcof, k
+            )
+            eval_grad_q_derivative!(
+                base_q_grad, control.base_control, t, this_carrier_pcof, k
+            )
+        end
     end
     return nothing
 end
@@ -193,6 +214,7 @@ end
 
 function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::CarrierControl, t::Real, pcof::AbstractVector{<: Real}, order::Int64)
     update_carrier_vals!(control, t, order)
+    update_base_gradients!(control, t, order, pcof)
 
     grad .= 0
 
@@ -202,28 +224,16 @@ function eval_grad_p_derivative!(grad::AbstractVector{<: Real}, control::Carrier
         this_carrier_grad = view(grad, 1+offset:offset+control.base_control.N_coeff)
 
         for k in 0:order
-            carrier_val1 =  control.carrier_val_storage[1+k,1,i] * factorial(k)
-            carrier_val2 = -control.carrier_val_storage[1+k,2,i] * factorial(k)
+            carrier_val_p =  control.carrier_val_storage[1+k,1,i] * factorial(k)
+            carrier_val_q = -control.carrier_val_storage[1+k,2,i] * factorial(k)
 
             binomial_coeff = binomial(order, k)
 
-            control.pcof_storage .= 0
-            eval_grad_p_derivative!(
-                control.pcof_storage, control.base_control, t,
-                this_carrier_pcof, order-k
-            )
+            grad_p = view(control.pcof_storage, :, 1+order-k, 1, i)
+            grad_q = view(control.pcof_storage, :, 1+order-k, 2, i)
 
-            control.pcof_storage .*= carrier_val1 * binomial_coeff
-            this_carrier_grad .+= control.pcof_storage
-
-            control.pcof_storage .= 0
-            eval_grad_q_derivative!(
-                control.pcof_storage, control.base_control, t,
-                this_carrier_pcof, order-k
-            )
-
-            control.pcof_storage .*= carrier_val2 * binomial_coeff
-            this_carrier_grad .+= control.pcof_storage
+            @. this_carrier_grad += carrier_val_p * binomial_coeff * grad_p
+            @. this_carrier_grad -= carrier_val_q * binomial_coeff * grad_q
         end 
     end
     return grad
@@ -232,6 +242,7 @@ end
 
 function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::CarrierControl{T}, t::Real, pcof::AbstractVector{<: Real}, order::Int64) where T
     update_carrier_vals!(control, t, order)
+    update_base_gradients!(control, t, order, pcof)
 
     grad .= 0
 
@@ -241,28 +252,16 @@ function eval_grad_q_derivative!(grad::AbstractVector{<: Real}, control::Carrier
         this_carrier_grad = view(grad, 1+offset:offset+control.base_control.N_coeff)
 
         for k in 0:order
-            carrier_val1 = control.carrier_val_storage[1+k,2,i] * factorial(k)
-            carrier_val2 = control.carrier_val_storage[1+k,1,i] * factorial(k)
+            carrier_val_p = control.carrier_val_storage[1+k,1,i] * factorial(k)
+            carrier_val_q = control.carrier_val_storage[1+k,2,i] * factorial(k)
 
             binomial_coeff = binomial(order, k)
 
-            control.pcof_storage .= 0
-            eval_grad_p_derivative!(
-                control.pcof_storage, control.base_control, t,
-                this_carrier_pcof, order-k
-            )
+            grad_p = view(control.pcof_storage, :, 1+order-k, 1, i)
+            grad_q = view(control.pcof_storage, :, 1+order-k, 2, i)
 
-            control.pcof_storage .*= carrier_val1 * binomial_coeff
-            this_carrier_grad .+= control.pcof_storage
-
-            control.pcof_storage .= 0
-            eval_grad_q_derivative!(
-                control.pcof_storage, control.base_control, t,
-                this_carrier_pcof, order-k
-            )
-
-            control.pcof_storage .*= carrier_val2 * binomial_coeff
-            this_carrier_grad .+= control.pcof_storage
+            @. this_carrier_grad += carrier_val_p * binomial_coeff * grad_q
+            @. this_carrier_grad += carrier_val_q * binomial_coeff * grad_p
         end 
     end
     return grad
