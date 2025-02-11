@@ -1,3 +1,6 @@
+using QuantumGateDesign, LinearAlgebra
+using QuantumGateDesign: FortranBSpline, FortranBSplineControl2
+
 """
 Raising / Creation Operator
 """
@@ -133,4 +136,40 @@ Hasym_ops = [a1 - a1', a2 - a2', a3 - a3']
 
 prob = SchrodingerProb(H_sys, Hsym_ops, Hasym_ops, U0, tf, nsteps, N_ess_levels)
 
-# The hamiltonians agree with Juqbox! And it all makes sense!
+degree = 8
+N_basis_functions = 14 # Number of bspline wavelets, I think it needs to be greater than the degree
+bspline = FortranBSpline(degree, N_basis_functions)
+base_control = FortranBSplineControl2(bspline, tf)
+carrier_frequencies = [
+    [1, 2, 3],
+    [4, 5, 6],
+    [7, 8, 9],
+]
+controls = [CarrierControl(base_control, freqs) for freqs in carrier_frequencies]
+
+N_coeff = get_number_of_control_parameters(controls)
+
+pcof = rand(N_coeff)
+prob.nsteps = 100
+order = 4
+pcof_ubound = 1
+pcof_lbound = -1
+
+
+ipopt_options = (
+    #"max_iter" => maxiter,
+    #"max_wall_time" => 60.0*60*time,
+    #"derivative_test" => "first-order",
+    "limited_memory_max_history" => 50,
+    #"output_file" => filename * ".txt"
+)
+
+
+optimization_history = optimize_gate(
+        prob, controls, pcof, target_unitary_rtf, order=order,
+        pcof_ubound=pcof_ubound, pcof_lbound=pcof_lbound,
+        #savename=filename,
+        ipopt_options = ipopt_options
+)
+
+
