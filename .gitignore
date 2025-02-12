@@ -12,5 +12,6 @@ Manifest.toml
 *.eps
 *.csv
 *.txt
+*.gz
 cnot3_stepsize/*/
 cnot3_optimization/*/
