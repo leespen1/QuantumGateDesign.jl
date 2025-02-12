@@ -5,3 +5,12 @@ Manifest.toml
 *.tex
 *.so
 *.o
+*.dlm
+*.svg
+*.png
+*.svg
+*.eps
+*.csv
+*.txt
+cnot3_stepsize/*/
+cnot3_optimization/*/
