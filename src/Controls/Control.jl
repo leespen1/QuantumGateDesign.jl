@@ -176,6 +176,30 @@ function fill_q_mat!(
     return vals_mat
 end
 
+function fill_grad_p_mat!(
+        vals_mat::AbstractMatrix{<: Real}, control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+    for (i, col) in enumerate(eachcol(vals_mat))
+        derivative_order = i-1
+        eval_grad_p_derivative!(col, control, t, pcof, derivative_order)
+    end
+
+    return vals_mat
+end
+
+function fill_grad_q_mat!(
+        vals_mat::AbstractMatrix{<: Real}, control::AbstractControl, t::Real,
+        pcof::AbstractVector{<: Real}
+    )
+    for (i, col) in enumerate(eachcol(vals_mat))
+        derivative_order = i-1
+        eval_grad_q_derivative!(col, control, t, pcof, derivative_order)
+    end
+
+    return vals_mat
+end
+
 
 """
 For human readable display of control objects.
