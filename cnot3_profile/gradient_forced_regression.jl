@@ -20,12 +20,12 @@ target_error_int = round(Int64, log10(target_error))
 target_error_index = abs(target_error_int)
 order_index = div(order, 2)
 
+cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1)
 
 run_cnot3 = false
 run_rand = true
 
 if run_cnot3
-    cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1)
     cnot3ret.qgd_prob.nsteps = 3
     controls = get_controls(degree, D1, cnot3ret.juqbox_params.Cfreq, cnot3ret.tf)
     N_coeff = QuantumGateDesign.get_number_of_control_parameters(controls)
@@ -54,22 +54,29 @@ end
 
 if run_rand
     rand_prob_size = 11
-    rand_tf = 550.0
-    rand_prob_N_operators = 3
-    rand_nsteps = 3
+    rand_tf = 10.0
+    rand_prob_N_operators = 1
+    rand_nsteps = 1
 
     rand_prob = QuantumGateDesign.construct_rand_prob(
         rand_prob_size, rand_prob_N_operators, tf=rand_tf, nsteps=rand_nsteps,
         gmres_abstol=1e-15, gmres_reltol=1e-15
     )
-    controls = get_controls(degree, D1, cnot3ret.juqbox_params.Cfreq, rand_tf)
+    #controls = get_controls(degree, D1, cnot3ret.juqbox_params.Cfreq, rand_tf)
+    controls = [GRAPEControl(1, rand_tf) for i in 1:rand_prob_N_operators]
     controls = controls[1:rand_prob_N_operators]
+    N_coeff = QuantumGateDesign.get_number_of_control_parameters(controls)
+    pcof = cnot3ret.amax * 2* (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
     target = rand(MersenneTwister(0), ComplexF64, rand_prob.N_tot_levels, rand_prob.N_initial_conditions)
 
+    #grad_da     =            discrete_adjoint(rand_prob, control, pcof, target, order=order)
+    #grad_forced =            eval_grad_forced(rand_prob, control, pcof, target, order=order)
+    #grad_finite = eval_grad_finite_difference(rand_prob, control, pcof, target, order=order)
     grad_da     =            discrete_adjoint(rand_prob, controls, pcof, target, order=order)
     grad_forced =            eval_grad_forced(rand_prob, controls, pcof, target, order=order)
     grad_finite = eval_grad_finite_difference(rand_prob, controls, pcof, target, order=order)
+
 
     println("\n")
     println("Gradient Regression Testing:")
