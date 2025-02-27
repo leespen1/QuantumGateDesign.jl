@@ -1,13 +1,13 @@
 function compute_terminal_condition(
-        prob::SchrodingerProb,
+        prob::SchrodingerProb{OpType, StateType, P},
         controls,
         pcof::AbstractVector{<: Real},
         target::AbstractVecOrMat{<: Real}, # This should be the real-valued one
         final_state::AbstractVecOrMat{<: Real};
         order::Integer=2,
         cost_type=:Infidelity,
-        forcing=missing
-    )
+        forcing=missing,
+    ) where {OpType, StateType, P}
 
     terminal_condition = zeros(size(target))
 
@@ -19,8 +19,13 @@ function compute_terminal_condition(
     uv_mat = zeros(prob.real_system_size, 1+N_derivatives)
     uv_vec = zeros(prob.real_system_size)
 
+    # ORIGINAL 
     R = target[:,:] # Copy target, converting to matrix if vector (will this code work for vectors?)
     T = vcat(R[1+prob.N_tot_levels:end,:], -R[1:prob.N_tot_levels,:])
+    
+    ## NEW (DOESN'T SEEM TO WORK)
+    #R = vcat(target[1:prob.N_tot_levels,:], -target[1+prob.N_tot_levels:end,:])
+    #T = vcat(target[1+prob.N_tot_levels:end,:], target[1:prob.N_tot_levels,:])
 
     # Set up terminal condition RHS
     if cost_type == :Infidelity
@@ -34,33 +39,44 @@ function compute_terminal_condition(
         throw("Invalid cost type: $cost_type")
     end
 
+    #@show terminal_RHS
+
     # Add forcing
     if !ismissing(forcing)
         terminal_RHS .+= forcing
     end
 
-    function LHS_func_wrapper(uv_out::AbstractVector{Float64}, uv_in::AbstractVector{Float64})
-        uv_mat[:,1] .= uv_in
-        compute_adjoint_derivatives!(uv_mat, prob, controls, t, pcof, N_derivatives)
-        # Do I need to make and adjoint version of this? I don't think so, considering before LHS only used adjoint for utvt!, not the quadrature
-        # But maybe there is a negative t I need to worry about. Maybe just provide dt as -dt
-        build_LHS!(uv_out, uv_mat, dt, N_derivatives)
+    # Do the adjoint solve
 
-        return nothing
-    end
+    lhs_holder = LHSHolderAdjoint(prob, N_derivatives, dt)
 
     # Create linear map out of LHS_func_wrapper, to use in GMRES
     LHS_map = LinearMaps.LinearMap(
-        LHS_func_wrapper,
+        lhs_holder,
         prob.real_system_size, prob.real_system_size,
         ismutating=true
     )
 
-    #TODO Add preconditioner to call
-    for i in 1:size(target, 2)
-        IterativeSolvers.gmres!(uv_vec, LHS_map, terminal_RHS[:,i],
-                                abstol=prob.gmres_abstol, reltol=prob.gmres_reltol)
-        terminal_condition[:,i] .= uv_vec
+    Pl = P(prob, order, true)
+
+    gmres_iterable = IterativeSolvers.gmres_iterable!(
+        zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
+        abstol=prob.gmres_abstol, reltol=prob.gmres_reltol, restart=prob.real_system_size,
+        initially_zero=false, Pl=Pl
+    )
+
+    fill_p_mat!(lhs_holder.control_vals_real, controls, prob.tf, pcof) 
+    fill_q_mat!(lhs_holder.control_vals_imag, controls, prob.tf, pcof) 
+
+    initial_guess = zeros(prob.real_system_size) # Use current timestep as initial guess for gmres
+    for i in 1:prob.N_initial_conditions
+        update_gmres_iterable!(gmres_iterable, initial_guess, terminal_RHS[:,i])
+
+        N_gmres_iterations = 0
+        for iter in gmres_iterable
+            N_gmres_iterations += 1
+        end
+        terminal_condition[:,i] .= gmres_iterable.x
     end
 
     return terminal_condition

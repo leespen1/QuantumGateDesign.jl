@@ -1,12 +1,20 @@
-using QuantumGateDesign, Random, IterativeSolvers, LinearAlgebra, Enzyme, Zygote
+using QuantumGateDesign, Random, IterativeSolvers, LinearAlgebra, Zygote
 
-function coeff(j,p,q) 
+function coeff(j::Integer,p::Integer,q::Integer) 
     return factorial(p)*factorial(p+q-j)/(factorial(p+q)*factorial(p-j))
+end
+
+function identity_mat(n::Integer)
+    id_mat = zeros(n,n)
+    for i = 1:n
+        id_mat[i,i] = 1
+    end
+    return id_mat
 end
 
 """
 """
-function hard_coded_eval_forward(prob::SchrodingerProb, pcof::AbstractVector{<: Real}, order::Integer)
+function hard_coded_eval_forward(prob::SchrodingerProb, pcof::AbstractVector{<: Real}, order::Integer, target=missing)
     q = div(order, 2)
     #@show q
     #@assert length(pcof) == 2*prob.N_operators
@@ -31,7 +39,6 @@ function hard_coded_eval_forward(prob::SchrodingerProb, pcof::AbstractVector{<: 
     LHS = zeros(prob.real_system_size, prob.real_system_size)
     RHS = zeros(prob.real_system_size, prob.real_system_size)
 
-
     for j=0:q
         LHS = LHS + ((-1)^j * coeff(j,q,q) * (Δt^j) * (D^j) / factorial(j))
         RHS = RHS + (coeff(j,q,q) * (Δt^j) * (D^j) / factorial(j))
@@ -52,6 +59,32 @@ function hard_coded_eval_forward(prob::SchrodingerProb, pcof::AbstractVector{<: 
         #UT[:,i] = LHS \ (RHS*U0[:,i])
     end
 
+    if !ismissing(target)
+        # Terminal Condition
+        # ORIGINAL
+        A = target[:,:] # Copy target, converting to matrix if vector (will this code work for vectors?)
+        B = vcat(target[1+prob.N_tot_levels:end,:], -target[1:prob.N_tot_levels,:])
+
+        ## NEW (MAY BE WRONG, NOT SURE)
+        #A = vcat(target[1:prob.N_tot_levels,:], -target[1+prob.N_tot_levels:end,:])
+        #B = vcat(target[1+prob.N_tot_levels:end,:], target[1:prob.N_tot_levels,:])
+        
+        terminal_RHS = (dot(UT, A)*A + dot(UT, B)*B)
+        terminal_RHS *= (2.0/(prob.N_ess_levels^2))
+
+        #@show terminal_RHS
+        @show cond(transpose(LHS))
+
+        ΛT = zeros(rand_prob.real_system_size, 0)
+        for i in 1:size(U0, 2)
+            ΛT_i = transpose(LHS) \ terminal_RHS[:,i]
+            ΛT = hcat(ΛT, ΛT_i)
+        end
+
+        # Gradient Accumulation
+        return UT, ΛT
+    end
+
     return UT
 end
 
@@ -61,38 +94,56 @@ function calc_infidelity(prob::SchrodingerProb, pcof::AbstractVector{<: Real}, o
 end
 
 rand_prob_size =11
-rand_tf = 10.0
+rand_tf = 100.0
 rand_prob_N_operators = 1
 rand_nsteps = 1
 order = 2
 
 rand_prob = QuantumGateDesign.construct_rand_prob(
     rand_prob_size, rand_prob_N_operators, tf=rand_tf, nsteps=rand_nsteps,
-    gmres_abstol=1e-16, gmres_reltol=0
+    gmres_abstol=0, gmres_reltol=1e-15
 )
-target = rand(rand_prob.real_system_size, rand_prob.N_initial_conditions)
+target = rand(MersenneTwister(0), rand_prob.real_system_size, rand_prob.N_initial_conditions)
 controls = [GRAPEControl(1, rand_tf) for _ in 1:rand_prob_N_operators]
 
 pcof = rand(MersenneTwister(0), 2*rand_prob_N_operators)
 
-UT_hard = hard_coded_eval_forward(rand_prob, pcof, order)
+UT_hard, ΛT_hard = hard_coded_eval_forward(rand_prob, pcof, order, target)
 println("Finished hard-coded")
-history = eval_forward(rand_prob, controls, pcof, order=order)
+
+history = zeros(rand_prob.real_system_size, 1+div(order,2), 1+rand_nsteps, rand_prob.N_initial_conditions)
+QuantumGateDesign.eval_forward!(history, rand_prob, controls, pcof, order=order)
+UT_soft = history[:,1,end,:] 
+#ΛT_soft = QuantumGateDesign.compute_terminal_condition(rand_prob, controls, pcof, target, UT_soft, order=order)
+ΛT_soft = QuantumGateDesign.compute_terminal_condition(rand_prob, controls, pcof, target, UT_soft, order=order)
+
+Λ_hist_soft = QuantumGateDesign.eval_adjoint(rand_prob, controls, pcof, ΛT_hard)
 println("Finished soft-coded")
-UT_soft = vcat(real(history[:,end,:]), imag(history[:,end,:]))
+
+
+
+
+#UT_soft = vcat(real(history[:,end,:]), imag(history[:,end,:]))
 @show norm(UT_hard - UT_soft)
+@show norm(ΛT_hard - ΛT_soft)
+@show norm(UT_hard - UT_soft)/norm(UT_hard)
+@show norm(ΛT_hard - ΛT_soft)/norm(ΛT_hard)
 #@assert isapprox(UT_hard, UT_soft, rtol=1e-15)
 
 @show calc_infidelity(rand_prob, pcof, order, target)
 f(x) = calc_infidelity(rand_prob, x, order, target)
 
 dpcof = zeros(size(pcof))
-#Enzyme.autodiff(Reverse, calc_infidelity, Active, Const(rand_prob), Duplicated(pcof, dpcof), Const(order), Const(target));
-#Enzyme.autodiff(set_runtime_activity(Reverse), calc_infidelity, Active, Const(rand_prob), Duplicated(pcof, dpcof), Const(order), Const(target));
-zygote_grad = Zygote.gradient(f, pcof)
+zygote_grad = Zygote.gradient(f, pcof)[1]
 discrete_adjoint_grad = discrete_adjoint(rand_prob, controls, pcof, real_to_complex(target), order=order)
 forced_grad = eval_grad_forced(rand_prob, controls, pcof, real_to_complex(target), order=order)
 
-@show zygote_grad
-@show discrete_adjoint_grad
-@show forced_grad
+@show norm(zygote_grad)
+@show norm(discrete_adjoint_grad)
+@show norm(forced_grad)
+@show norm(zygote_grad - discrete_adjoint_grad)
+@show norm(zygote_grad - forced_grad)
+@show norm(discrete_adjoint_grad - forced_grad)
+@show norm(zygote_grad - discrete_adjoint_grad) / norm(zygote_grad)
+@show norm(zygote_grad - forced_grad) / norm(zygote_grad)
+@show norm(discrete_adjoint_grad - forced_grad) / norm(forced_grad)
