@@ -163,3 +163,32 @@ function infidelity_plus_guard(
 
     return infidelity(final_state, target, N_ess) + guard_penalty(history, dt, T, W)
 end
+
+function calc_cost_function(prob, controls, pcof, order, target, cost_type)
+    history = eval_forward(prob, controls, pcof, order=order)
+    final_state = history[:,end,:]
+    return cost_function(final_state, target, prob.N_ess_levels, cost_type=cost_type)
+end
+
+function cost_function(final_state::AbstractVecOrMat{<: Number},
+        target::AbstractVecOrMat{<: Number}, N_ess::Integer; 
+        cost_type::Symbol=:Infidelity
+    )
+
+    if cost_type == :Infidelity
+        #cost = 1 - (1/N_ess^2)*abs(dot(final_state_real, target_real))^2
+        cost = 1 - (1/N_ess^2)*abs(dot(final_state, target))^2
+    elseif cost_type == :GeneralizedInfidelity
+        cost = (1/N_ess)*norm(final_state)^2
+        cost -= (1/N_ess^2)*abs(dot(final_state, target))^2
+    elseif cost_type == :Tracking
+        cost = 0.5*norm(final_state - target)^2
+    elseif cost_type == :Norm
+        cost = 0.5*norm(final_state)^2
+    else
+        throw("Invalid cost type: $cost_type")
+        cost = NaN
+    end
+
+    return cost
+end
