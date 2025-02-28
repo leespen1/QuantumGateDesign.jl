@@ -155,6 +155,13 @@ function eval_grad_forced(
                 gradient[global_control_param_index]  = dot(final_state, R)*dot(final_state_partial_derivative, R)
                 gradient[global_control_param_index] += dot(final_state, T)*dot(final_state_partial_derivative, T)
                 gradient[global_control_param_index] *= -(2/(prob.N_ess_levels^2))
+            elseif cost_type == :GeneralizedInfidelity
+                # The -1/E^2 |⟨U,V⟩|^2 term
+                gradient[global_control_param_index]  = dot(final_state, R)*dot(final_state_partial_derivative, R)
+                gradient[global_control_param_index] += dot(final_state, T)*dot(final_state_partial_derivative, T)
+                gradient[global_control_param_index] *= -(2/(prob.N_ess_levels^2))
+                # The 1/E ||U||^2 term
+                gradient[global_control_param_index] += (2/prob.N_ess_levels)*dot(final_state, final_state_partial_derivative)
             elseif cost_type == :Tracking
                 gradient[global_control_param_index] = dot(final_state_partial_derivative, final_state - target)
             elseif cost_type == :Norm

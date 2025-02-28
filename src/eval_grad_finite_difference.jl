@@ -39,30 +39,17 @@ function eval_grad_finite_difference(
         history_r = eval_forward(prob, controls, pcof_r; order=order)
         history_l = eval_forward(prob, controls, pcof_l; order=order)
 
-        cost_r = 0.0
-        cost_l = 0.0
 
         ψf_r = history_r[:, end, :]
         ψf_l = history_l[:, end, :]
 
-        if cost_type == :Infidelity
-            cost_r += infidelity(ψf_r, target, prob.N_ess_levels)
-            cost_l += infidelity(ψf_l, target, prob.N_ess_levels)
-        elseif cost_type == :Tracking
-            cost_r += 0.5*norm(ψf_r - target)^2
-            cost_l += 0.5*norm(ψf_l - target)^2
-        elseif cost_type == :Norm
-            cost_r += 0.5*norm(ψf_r)^2
-            cost_l += 0.5*norm(ψf_l)^2
-        else
-            throw(ArgumentError("Invalid cost type: $cost_type"))
-        end
+        cost_r = cost_function(ψf_r, target, prob.N_ess_levels, cost_type=cost_type)
+        cost_l = cost_function(ψf_l, target, prob.N_ess_levels, cost_type=cost_type)
 
         # Guard penalty
         dt = prob.tf/prob.nsteps
         cost_r += guard_penalty(history_r, dt, prob.tf, prob.guard_subspace_projector)
         cost_l += guard_penalty(history_l, dt, prob.tf, prob.guard_subspace_projector)
-
 
         # Calculate partial derivative by centered difference
         grad[i] = (cost_r - cost_l)/(2*dpcof)

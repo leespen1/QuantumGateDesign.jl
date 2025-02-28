@@ -31,6 +31,10 @@ function compute_terminal_condition(
     if cost_type == :Infidelity
         terminal_RHS = (dot(final_state, R)*R + dot(final_state, T)*T)
         terminal_RHS *= (2.0/(prob.N_ess_levels^2))
+    elseif cost_type == :GeneralizedInfidelity
+        terminal_RHS = (2.0 / prob.N_ess_levels) .* final_state
+        terminal_RHS .-= (2.0 / (prob.N_ess_levels^2)) .* (dot(final_state, R) .* R .+ dot(final_state, T) .* T)
+        terminal_RHS .*= -1
     elseif cost_type == :Tracking
         terminal_RHS = -(final_state - target)
     elseif cost_type == :Norm
