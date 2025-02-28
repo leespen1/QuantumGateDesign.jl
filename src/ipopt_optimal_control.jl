@@ -4,10 +4,14 @@ mutable struct OptimizationTracker
     last_forward_evolution_pcof::Vector{Float64}
     last_discrete_adjoint_pcof::Vector{Float64}
     last_objective::Float64
+    last_main_objective::Float64
     last_infidelity::Float64
+    last_generalized_infidelity::Float64
+    last_tracking_obj::Float64
+    last_norm_obj::Float64
     last_guard_penalty::Float64
     last_ridge_penalty::Float64
-    last_length_deviation::Float64
+    last_avg_state_length::Float64
     function OptimizationTracker(N_params::Integer)
         initial_pcof = fill(NaN, N_params)
         initial_grad_pcof = fill(NaN, N_params)
@@ -15,8 +19,67 @@ mutable struct OptimizationTracker
         initial_discrete_adjoint_pcof = fill(NaN, N_params)
 
         new(initial_pcof, initial_grad_pcof, initial_forward_evolution_pcof, 
-            initial_discrete_adjoint_pcof, NaN, NaN, NaN, NaN, NaN)
+            initial_discrete_adjoint_pcof, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN)
     end
+end
+
+function update!(opt::OptimizationTracker, schro_prob::SchrodingerProb,
+        state_history_real, pcof, target_complex, cost_type, ridge_penalty_strength
+    )
+
+    QN_complex = real_to_complex(state_history_real[:,1,end,:])
+
+    opt.last_main_objective = cost_function(
+        QN_complex, target_complex, schro_prob.N_ess_levels,
+        cost_type=cost_type
+    ) 
+
+    # Infidelity Term
+    opt.last_infidelity = cost_function(
+        QN_complex, target_complex, schro_prob.N_ess_levels,
+        cost_type=:Infidelity
+    ) 
+
+    opt.last_generalized_infidelity = cost_function(
+        QN_complex, target_complex, schro_prob.N_ess_levels,
+        cost_type=:GeneralizedInfidelity
+    ) 
+
+    opt.last_tracking_obj = cost_function(
+        QN_complex, target_complex, schro_prob.N_ess_levels,
+        cost_type=:Tracking
+    ) 
+
+    opt.last_norm_obj = cost_function(
+        QN_complex, target_complex, schro_prob.N_ess_levels,
+        cost_type=:Norm
+    ) 
+
+    # Guard Penalty Term
+    dt = schro_prob.tf / schro_prob.nsteps
+    opt.last_guard_penalty = guard_penalty_real(
+        state_history_real, dt, schro_prob.tf, schro_prob.guard_subspace_projector
+    )
+
+    # Ridge/L2 Penalty Term
+    ridge_pen_val = dot(pcof, pcof)*ridge_penalty_strength / length(pcof)
+    opt.last_ridge_penalty = ridge_pen_val
+
+    # Add all objective terms
+    opt.last_objective = sum((
+        opt.last_main_objective,
+        opt.last_guard_penalty,
+        opt.last_ridge_penalty,
+    ))
+    opt.last_pcof .= pcof
+
+    # State vector length preservation - Check how much the state vector length deviates from unity
+    total_length = 0.0
+    for state in eachcol(QN_complex)
+        state_length = LinearAlgebra.norm(state)
+        total_length += state_length
+    end
+    opt.last_avg_state_length = total_length / size(QN_complex, 2)
 end
 
 
@@ -105,13 +168,14 @@ the IPOPT API.
 """
 function optimize_gate(
         schro_prob::SchrodingerProb{M, VM}, controls,
-        pcof_init::AbstractVector{Float64}, target::AbstractMatrix{<: Number};
+        pcof_init::AbstractVector{Float64}, target_complex::AbstractMatrix{<: Number};
         order::Integer=4,
         pcof_lbound::Real=-Inf,
         pcof_ubound::Real=Inf,
         ridge_penalty_strength::Real=1e-2,
         savename::Union{Missing, String}=missing,
         ipopt_options=missing,
+        cost_type=:Infidelity,
     ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
 
 
@@ -134,7 +198,7 @@ function optimize_gate(
 
     # Other variables needed to interface with my code, also store information my way
     N_derivatives = div(order, 2)
-    target_real_valued = vcat(real(target), imag(target))
+    target_real_valued = vcat(real(target_complex), imag(target_complex))
     optimization_tracker = OptimizationTracker(N_coeff)
     initial_time = NaN # Will overwrite this just before starting the actual optimization
 
@@ -149,7 +213,7 @@ function optimize_gate(
     lambda_history = similar(state_history)
     adjoint_forcing = zeros(schro_prob.real_system_size, 1+schro_prob.nsteps, schro_prob.N_initial_conditions)
 
-    header = ["main_objective" "grad_norm" "infidelity" "guard_penalty" "ridge_penalty" "length_deviation" "elapsed_time" "alg_mod" "iter_count" "obj_value" "inf_pr" "inf_du" "mu" "d_norm" "regularization_size" "alpha_du" "alpha_pr" "ls_trials"]
+    header = ["objective" "main_objective" "grad_norm" "infidelity" "generalized_infidelity" "tracking_objective" "norm_objective" "guard_penalty" "ridge_penalty" "avg_state_length" "elapsed_time" "alg_mod" "iter_count" "obj_value" "inf_pr" "inf_du" "mu" "d_norm" "regularization_size" "alpha_du" "alpha_pr" "ls_trials"]
     if !ismissing(savename)
         open(savename * ".csv", "w") do io
             DelimitedFiles.writedlm(io, header, ',')
@@ -175,41 +239,11 @@ function optimize_gate(
         # objective function)
         if (pcof != optimization_tracker.last_pcof)
             eval_forward!(state_history, schro_prob, controls, pcof, order=order)
-            QN = @view state_history[:,1,end,:]
-            # Infidelity Term
-            optimization_tracker.last_infidelity = infidelity_real(
-                QN, target_real_valued, schro_prob.N_ess_levels
-            ) 
-
-            # Guard Penalty Term
-            dt = schro_prob.tf / schro_prob.nsteps
-            optimization_tracker.last_guard_penalty = guard_penalty_real(
-                state_history, dt, schro_prob.tf, schro_prob.guard_subspace_projector
-            )
-
-            # Ridge/L2 Penalty Term
-            ridge_pen_val = dot(pcof, pcof)*ridge_penalty_strength / length(pcof)
-            optimization_tracker.last_ridge_penalty = ridge_pen_val
-
-            # Add all objective terms
-            optimization_tracker.last_objective = sum((
-                optimization_tracker.last_infidelity,
-                optimization_tracker.last_guard_penalty,
-                optimization_tracker.last_ridge_penalty,
-            ))
-            optimization_tracker.last_pcof .= pcof
+            update!(optimization_tracker, schro_prob, state_history, pcof, 
+                    target_complex, cost_type, ridge_penalty_strength)
             optimization_tracker.last_forward_evolution_pcof .= pcof
-
-            # State vector length preservation - Check how much the state vector length deviates from unity
-            length_deviation = 0.0
-            for i in 1:size(QN, 2)
-                ψf =  @view QN[:,i]
-                ψf_length = LinearAlgebra.norm(ψf)
-                ψf_length_deviation = ψf_length - 1
-                length_deviation = abs(ψf_length_deviation) > abs(length_deviation) ? ψf_length_deviation : length_deviation
-            end
-            optimization_tracker.last_length_deviation = length_deviation
         end
+
 
         return optimization_tracker.last_objective
     end
@@ -233,51 +267,15 @@ function optimize_gate(
             discrete_adjoint!(
                 optimization_tracker.last_grad_pcof, state_history,
                 lambda_history, adjoint_forcing, schro_prob, controls, pcof,
-                target, order=order, history_precomputed=history_precomputed
+                target_complex, order=order, history_precomputed=history_precomputed,
+                cost_type=cost_type,
             )
             # Ridge Regression Penalty (not included in main discrete adjoint, not necessary since nothing depends on the states)
             N_coeff = length(pcof)
             @. optimization_tracker.last_grad_pcof += 2.0*ridge_penalty_strength*pcof / N_coeff
-
-            optimization_tracker.last_pcof .= pcof
+            update!(optimization_tracker, schro_prob, state_history, pcof, 
+                    target_complex, cost_type, ridge_penalty_strength)
             optimization_tracker.last_discrete_adjoint_pcof .= pcof
-
-            #
-            # Also calculate objective function, just because it's not expensive, it helps with eval_f
-            #
-            QN = @view state_history[:,1,end,:]
-            # Infidelity Term
-            optimization_tracker.last_infidelity = infidelity_real(
-                QN, target_real_valued, schro_prob.N_ess_levels
-            ) 
-
-            # Guard Penalty Term
-            dt = schro_prob.tf / schro_prob.nsteps
-
-            optimization_tracker.last_guard_penalty = guard_penalty_real(
-                state_history, dt, schro_prob.tf, schro_prob.guard_subspace_projector
-            )
-
-            # Ridge/L2 Penalty Term
-            ridge_pen_val = dot(pcof, pcof)*ridge_penalty_strength / length(pcof)
-            optimization_tracker.last_ridge_penalty = ridge_pen_val
-
-            # Add all objective terms
-            optimization_tracker.last_objective = sum((
-                optimization_tracker.last_infidelity,
-                optimization_tracker.last_guard_penalty,
-                optimization_tracker.last_ridge_penalty,
-            ))
-
-            # State vector length preservation - Check how much the state vector length deviates from unity
-            length_deviation = 0.0
-            for i in 1:size(QN, 2)
-                ψf =  @view QN[:,i]
-                ψf_length = LinearAlgebra.norm(ψf)
-                ψf_length_deviation = ψf_length - 1
-                length_deviation = abs(ψf_length_deviation) > abs(length_deviation) ? ψf_length_deviation : length_deviation
-            end
-            optimization_tracker.last_length_deviation = length_deviation
         end
 
         grad_f .= optimization_tracker.last_grad_pcof
@@ -300,7 +298,7 @@ function optimize_gate(
     )
         elapsed_time = time() - initial_time
         grad_norm = norm(optimization_tracker.last_grad_pcof)
-        data_row = [grad_norm optimization_tracker.last_objective optimization_tracker.last_infidelity optimization_tracker.last_guard_penalty optimization_tracker.last_ridge_penalty optimization_tracker.last_length_deviation elapsed_time alg_mod iter_count obj_value inf_pr inf_du mu d_norm regularization_size alpha_du alpha_pr ls_trials]
+        data_row = [optimization_tracker.last_objective optimization_tracker.last_main_objective grad_norm optimization_tracker.last_infidelity optimization_tracker.last_generalized_infidelity optimization_tracker.last_tracking_obj optimization_tracker.last_norm_obj optimization_tracker.last_guard_penalty optimization_tracker.last_ridge_penalty optimization_tracker.last_avg_state_length elapsed_time alg_mod iter_count obj_value inf_pr inf_du mu d_norm regularization_size alpha_du alpha_pr ls_trials]
         if !ismissing(savename)
             open(savename * ".csv", "a+") do io
                 DelimitedFiles.writedlm(io, data_row, ',')

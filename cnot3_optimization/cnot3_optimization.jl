@@ -8,7 +8,6 @@ function parse_commandline()
             help = "String to prepend output files with (will be followed by automatically generated fields)."
             arg_type = String
             default = ""
-
         "--atol", "-a"
             help = "Absolute tolerance to use in the linear solves."
             arg_type = Float64
@@ -33,6 +32,10 @@ function parse_commandline()
             help = "Maximum number of iterations to perform in IPOPT optimization."
             arg_type = Int64
             default = 10_000
+        "--cost_type", "-c"
+            help = "Cost type to use as the primary objective function. Valid options are Infidelity, GeneralizedInfidelity, Tracking, and Norm."
+            arg_type = Symbol
+            default = :Infidelity
         "order"
             help = "Method order to use"
             required = true
@@ -67,6 +70,7 @@ function main()
     maxiter = parsed_args["maxiter"]
     output_directory = parsed_args["output_directory"]
     file_identifier = parsed_args["file_identifier"]
+    cost_type = parsed_args["cost_type"]
 
     nthreads = Threads.nthreads()
     cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1)
@@ -79,7 +83,7 @@ function main()
     pcof = 0.2 * cnot3ret.amax * (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
     mkpath(output_directory)
-    filename = "cnot3OptimizationTest_order=$(order)_degree=$(degree)_seed=$(seed)_nsteps=$(nsteps)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_maxiter=$(maxiter)_nthreads=$(nthreads)"
+    filename = "cnot3OptimizationTest_order=$(order)_degree=$(degree)_seed=$(seed)_nsteps=$(nsteps)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_maxiter=$(maxiter)_nthreads=$(nthreads)_costType=$(cost_type)"
     if !isempty(file_identifier)
         filename = output_directory * "/" * file_identifier * "_" * filename
     else
@@ -98,7 +102,8 @@ function main()
         cnot3ret.qgd_prob, controls, pcof, cnot3ret.target, order=order,
         pcof_ubound=cnot3ret.amax, pcof_lbound=-cnot3ret.amax,
         savename=filename,
-        ipopt_options = ipopt_options
+        ipopt_options = ipopt_options,
+        cost_type = cost_type
     )
 
     return optimization_history
