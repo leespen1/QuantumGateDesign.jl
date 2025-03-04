@@ -32,6 +32,14 @@ function parse_commandline()
             help = "Maximum number of iterations to perform in IPOPT optimization."
             arg_type = Int64
             default = 10_000
+        "--levels_cavity", "-l"
+            help = "Number of energy levels to use for the cavity in the Hamiltonian model."
+            arg_type = Int64
+            default = 4
+        "--gate_duration", "-d"
+            help = "Duration of the gate, in nanoseconds."
+            arg_type = Float64
+            default = 550.0
         "--cost_type", "-c"
             help = "Cost type to use as the primary objective function. Valid options are Infidelity, GeneralizedInfidelity, Tracking, and Norm."
             arg_type = Symbol
@@ -71,9 +79,21 @@ function main()
     output_directory = parsed_args["output_directory"]
     file_identifier = parsed_args["file_identifier"]
     cost_type = parsed_args["cost_type"]
+    Tmax = parsed_args["gate_duration"]
+    N_osc_levels = parsed_args["levels_cavity"]
+
+    println("Running test with the following arguments:")
+    for (arg,val) in parsed_args
+        println(rpad(arg, 20), " => ", val)
+    end
 
     nthreads = Threads.nthreads()
-    cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1)
+    cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1, N_osc_levels=N_osc_levels, Tmax=Tmax)
+
+    println("Schrodinger Problem:")
+    display(cnot3ret.qgd_prob)
+
+
     cnot3ret.qgd_prob.nsteps = nsteps
     controls = get_controls(degree, D1, cnot3ret.juqbox_params.Cfreq, cnot3ret.tf)
 
@@ -83,7 +103,7 @@ function main()
     pcof = 0.2 * cnot3ret.amax * (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
     mkpath(output_directory)
-    filename = "cnot3OptimizationTest_order=$(order)_degree=$(degree)_seed=$(seed)_nsteps=$(nsteps)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_maxiter=$(maxiter)_nthreads=$(nthreads)_costType=$(cost_type)"
+    filename = "cnot3OptimizationTest_order=$(order)_degree=$(degree)_seed=$(seed)_nsteps=$(nsteps)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_maxiter=$(maxiter)_nthreads=$(nthreads)_costType=$(cost_type)_gateDuration=$(Tmax)_nCavityLevels=$(N_osc_levels)"
     if !isempty(file_identifier)
         filename = output_directory * "/" * file_identifier * "_" * filename
     else

@@ -42,7 +42,8 @@ struct CNOT3Ret{T}
 end
     
 
-function setup_cnot3(; seed::Integer=0, atol::Real=1e-10, rtol::Real=1e-12, D1::Integer=15, N_osc_levels::Integer=4, Tmax::Real=550.0)
+function setup_cnot3(; seed::Integer=0, atol::Real=1e-10, rtol::Real=1e-12,
+        D1::Integer=15, N_osc_levels::Integer=4, Tmax::Real=550.0, print_output=true)
     #==============================================================================
     #
     # Juqbox Problem Setup
@@ -135,7 +136,10 @@ function setup_cnot3(; seed::Integer=0, atol::Real=1e-10, rtol::Real=1e-12, D1::
     Pmin = 40 # should be 20 or higher
     nsteps = Juqbox.calculate_timestep(Tmax, H0, Hsym_ops, Hanti_ops, maxpar, Pmin)
 
-    println("Number of time steps = ", nsteps)
+    if print_output
+        println("\n*** Constructing CNOT3 Problem ***")
+        println("Number of time steps: ", nsteps)
+    end
 
     Nctrl = length(Hsym_ops)
 
@@ -157,9 +161,12 @@ function setup_cnot3(; seed::Integer=0, atol::Real=1e-10, rtol::Real=1e-12, D1::
         om[3,3] = -2.0*pi*xbs # carrier freq 2 for ctrl Hamiltonian #3
     end
 
-    println("Carrier frequencies 1st ctrl Hamiltonian [GHz]: ", om[1,:]./(2*pi))
-    println("Carrier frequencies 2nd ctrl Hamiltonian [GHz]: ", om[2,:]./(2*pi))
-    println("Carrier frequencies 3rd ctrl Hamiltonian [GHz]: ", om[3,:]./(2*pi))
+    if print_output
+        println("Carrier frequencies:")
+        println("\t1st ctrl Hamiltonian [GHz]: ", om[1,:]./(2*pi))
+        println("\t2nd ctrl Hamiltonian [GHz]: ", om[2,:]./(2*pi))
+        println("\t3rd ctrl Hamiltonian [GHz]: ", om[3,:]./(2*pi))
+    end
 
 
     # target for CNOT gate between oscillators 1 and 2
@@ -200,31 +207,39 @@ function setup_cnot3(; seed::Integer=0, atol::Real=1e-10, rtol::Real=1e-12, D1::
     # setup the initial parameter vector, randomized
     nCoeff = 2*Nctrl*Nfreq*D1 # Total number of parameters.
     pcof0 = amax*0.01 * rand(MersenneTwister(seed), nCoeff)
-    println("*** Starting from random pcof with amplitude ", amax*0.01)
+
+    if print_output
+        println("Using random initial pcof with maximum amplitude ", amax*0.01)
+    end
 
     # min and max B-spline coefficient values
     minCoeff, maxCoeff = Juqbox.assign_thresholds(juqbox_params,D1,maxpar)
 
     # output run information
-    println("*** Settings ***")
-    println("Frequencies: Alice = ", fa, " Bob = ", fb, " Storage = ", fs)
-    println("Anharmonic coefficients in the Hamiltonian: xa = ", xa, " xb = ", xb, " xs = ", xs)
-    println("Coupling coefficients in the Hamiltonian: xab = ", xab, " xas = ", xas, " xbs = ", xbs)
-    println("Essential states in osc = ", Ne, " Guard states in osc = ", Ng)
-    println("Total number of states, Ntot = ", Ntot, " Total number of guard states, Nguard = ", Nguard)
-    println("Number of B-spline parameters per spline = ", D1, " Total number of parameters = ", nCoeff)
-    println("Max parameter amplitudes: maxpar = ", maxpar)
-    println("Tikhonov coefficients: tik0 (L2) = ", juqbox_params.tik0)
-    println("Tolerance in Linear Solver = ", juqbox_params.linear_solver.tol)
-    if use_sparse
-        println("Using a sparse representation of the Hamiltonian matrices")
-    else
-        println("Using a dense representation of the Hamiltonian matrices")
+    if print_output
+        println("* Settings *")
+        println("Frequencies:\n\tAlice = ", fa, " Bob = ", fb, " Storage = ", fs)
+        println("Anharmonic coefficients in the Hamiltonian:\n\txa = ", xa, " xb = ", xb, " xs = ", xs)
+        println("Coupling coefficients in the Hamiltonian:\n\txab = ", xab, " xas = ", xas, " xbs = ", xbs)
+        println("Essential states in each subsystem = ", Ne)
+        println("Guard states in osc = ", Ng)
+        println("Total number of states, Ntot = ", Ntot)
+        println("Total number of guard states, Nguard = ", Nguard)
+        println("Number of B-spline parameters per spline = ", D1)
+        println("Total number of parameters = ", nCoeff)
+        println("Max parameter amplitudes: maxpar = ", maxpar)
+        println("Tikhonov coefficients: tik0 (L2) = ", juqbox_params.tik0)
+        println("Tolerance in Linear Solver = ", juqbox_params.linear_solver.tol)
+        if use_sparse
+            println("Using a sparse representation of the Hamiltonian matrices")
+        else
+            println("Using a dense representation of the Hamiltonian matrices")
+        end
+        println("*** Finished Constructing CNOT3 Problem ***\n")
     end
 
     juqbox_wa = Juqbox.Working_Arrays(juqbox_params,nCoeff)
 
-    println("Initial coefficient vector stored in 'pcof0'")
 
     #==============================================================================
     # Convert Juqbox Problem to QGD problem, get target
