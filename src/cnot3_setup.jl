@@ -13,7 +13,10 @@ method order.
 function get_controls(method_order::Integer, D1::Integer, Cfreq::AbstractMatrix{<: Real}, tf::Real)
     # A degree N BSpline has continuous derivatives up to order N-1 
     degree = method_order
-    base_control = FortranBSplineControl(degree, D1, tf)
+    #base_control = FortranBSplineControl(degree, D1, tf)
+
+    base_bspline = FortranBSpline(degree, D1)
+    base_control = FortranBSplineControl2(base_bspline, tf)
     controls = [CarrierControl(base_control, freqs) for freqs in eachrow(Cfreq)]
 
     return controls
