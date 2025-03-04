@@ -1,4 +1,39 @@
 """
+Type for keeping track of how many GMRES iterations occured throughout the 
+forward solves.
+"""
+mutable struct GMRESTracker
+    total_N_iterations::Int64
+    N_linear_solves::Int64
+    avg_N_iterations::Float64
+    max_N_iterations::Int64
+    min_N_iterations::Int64
+    function GMRESTracker()
+        new(0,0,NaN,-1,typemax(Int))
+    end
+end
+
+function update!(tracker::GMRESTracker, N_iter::Integer)
+    tracker.total_N_iterations += N_iter
+    tracker.N_linear_solves += 1
+    tracker.avg_N_iterations = tracker.total_N_iterations / tracker.N_linear_solves
+    tracker.max_N_iterations = max(N_iter, tracker.max_N_iterations)
+    tracker.min_N_iterations = min(N_iter, tracker.max_N_iterations)
+    return tracker
+end
+
+function merge(tracker1::GMRESTracker, tracker2::GMRESTracker)
+    merged_tracker = GMRESTracker()
+    merged_tracker.total_N_iterations = tracker1.total_N_iterations + tracker2.total_N_iterations
+    merged_tracker.N_linear_solves = tracker1.N_linear_solves + tracker2.N_linear_solves
+    merged_tracker.avg_N_iterations = merged_tracker.total_N_iterations / merged_tracker.N_linear_solves
+    merged_tracker.max_N_iterations = max(tracker1.max_N_iterations, tracker2.max_N_iterations)
+    merged_tracker.min_N_iterations = min(tracker1.min_N_iterations, tracker2.min_N_iterations)
+    return merged_tracker
+end
+
+
+"""
     eval_forward(prob, controls, pcof; [order=2, saveEveryNsteps=1, forcing=missing,])
 
 Simulate a `SchrodingerProb` forward in time. Return the history of the state
@@ -44,7 +79,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
 
 
     # Handle i-th initial condition (THREADS HERE)
-    avg_N_gmres_iterations = 0
+    gmres_trackers = Vector{GMRESTracker}(undef, prob.N_initial_conditions)
     Threads.@threads for initial_condition_index=1:prob.N_initial_conditions
         vector_prob = VectorSchrodingerProb(prob, initial_condition_index)
         controls_copy = deepcopy(controls) # Make copies of control, so that they work with multithreading
@@ -57,16 +92,19 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
             this_forcing = @view forcing[:, :, :, initial_condition_index]
         end
 
-        avg_N_gmres_iterations += eval_forward!(
+        gmres_tracker = eval_forward!(
             this_uv_history, vector_prob, controls_copy, pcof; order=order, 
             saveEveryNsteps=saveEveryNsteps, forcing=this_forcing
         )
+        gmres_trackers[initial_condition_index] = gmres_tracker
     end
 
-    avg_N_gmres_iterations /= prob.N_initial_conditions
-    #println("#"^80, "\nAvg # Gmres Iterations $avg_N_gmres_iterations\n", "#"^80)
+    full_gmres_tracker = reduce(merge, gmres_trackers)
+    if full_gmres_tracker.max_N_iterations >= prob.real_system_size
+        @warn "Maximum number of GMRES iterations performed ($(full_gmres_tracker.max_N_iterations)) equals or exceeds real system size ($(prob.real_system_size)). Specified GMRES tolerance may not have been reached."
+    end
 
-    return avg_N_gmres_iterations
+    return full_gmres_tracker
 end
 
 """
@@ -89,12 +127,11 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         prob::SchrodingerProb{M, V, P}, controls, pcof::AbstractVector{<: Real};
         order::Int=2, saveEveryNsteps::Int=1, 
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
-        use_taylor_guess=true, verbose=false,
+        use_taylor_guess=true,
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, P}
 
-    if verbose
-        println("Verbose output")
-    end
+
+    gmres_tracker = GMRESTracker()
 
     t = 0.0
     dt = prob.tf/prob.nsteps
@@ -142,17 +179,13 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
     gmres_iterable = IterativeSolvers.gmres_iterable!(
         zeros(prob.real_system_size), LHS_map, zeros(prob.real_system_size),
         abstol=prob.gmres_abstol, reltol=prob.gmres_reltol, restart=prob.real_system_size,
-        initially_zero=false, Pl=Pl
+        initially_zero=false, Pl=Pl, maxiter=prob.real_system_size
     )
 
     # Important to do this after setting up the linear map and gmres_iterable. One of those seems to be overwriting uv_mat
     uv_mat[1:prob.N_tot_levels,                       1] .= prob.u0
     uv_mat[prob.N_tot_levels+1:prob.real_system_size, 1] .= prob.v0
     uv_history[:, :, 1] .= uv_mat
-
-    max_N_gmres_iterations = 0
-    min_N_gmres_iterations = 100000
-    avg_N_gmres_iterations = 0
 
     # Get control function values for the initial time
     t = 0.0
@@ -212,20 +245,10 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         for iter in gmres_iterable
             N_gmres_iterations += 1
         end
-        avg_N_gmres_iterations += N_gmres_iterations
-        max_N_gmres_iterations = max(N_gmres_iterations, max_N_gmres_iterations)
-        min_N_gmres_iterations = min(N_gmres_iterations, min_N_gmres_iterations)
+        update!(gmres_tracker, N_gmres_iterations)
         # if !convergered(gmres_iterable) @warn
 
         uv_mat[:,1] .= gmres_iterable.x
-    end
-
-
-    avg_N_gmres_iterations /= prob.nsteps
-    if verbose
-        println("Average # of gmres iterations: ", avg_N_gmres_iterations)
-        println("Maximum # of gmres iterations: ", max_N_gmres_iterations)
-        println("Minimum # of gmres iterations: ", min_N_gmres_iterations)
     end
 
     # Compute the derivatives of uv at the final time and store them
@@ -241,7 +264,7 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         uv_history[:, :, 1+div(prob.nsteps, saveEveryNsteps)] .= uv_mat
     end
 
-    return avg_N_gmres_iterations
+    return gmres_tracker
 end
 
 
@@ -329,6 +352,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
 
 
     # Handle i-th initial condition (THREADS HERE)
+    gmres_trackers = Vector{GMRESTracker}(undef, prob.N_initial_conditions)
     Threads.@threads for initial_condition_index=1:prob.N_initial_conditions
         vector_prob = VectorSchrodingerProb(prob, initial_condition_index)
         controls_copy = deepcopy(controls)
@@ -342,11 +366,19 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
             this_forcing = @view forcing[:, :, initial_condition_index]
         end
 
-        eval_adjoint!(
+        gmres_tracker = eval_adjoint!(
             this_uv_history, vector_prob, controls_copy, pcof, terminal_condition_vec;
             order=order, forcing=this_forcing
         )
+        gmres_trackers[initial_condition_index] = gmres_tracker
     end
+
+    full_gmres_tracker = reduce(merge, gmres_trackers)
+    if full_gmres_tracker.max_N_iterations >= prob.real_system_size
+        @warn "Maximum number of GMRES iterations performed ($(full_gmres_tracker.max_N_iterations)) equals or exceeds real system size ($(prob.real_system_size)). Specified GMRES tolerance may not have been reached."
+    end
+
+    return full_gmres_tracker
 end
 
 function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
@@ -357,6 +389,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         use_taylor_guess=true, verbose=false,
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, P}
 
+    gmres_tracker = GMRESTracker()
     
     t = 0.0
     dt = prob.tf/prob.nsteps
@@ -413,10 +446,6 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
 
     uv_history[:, :, 1+prob.nsteps] .= uv_mat
 
-    max_N_gmres_iterations = 0
-    min_N_gmres_iterations = 100000
-    avg_N_gmres_iterations = 0
-
     # Perform the timesteps
     for n in prob.nsteps:-1:2
         # Compute the RHS (explicit part)
@@ -454,18 +483,9 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         for iter in gmres_iterable
             N_gmres_iterations += 1
         end
-        avg_N_gmres_iterations += N_gmres_iterations
-        max_N_gmres_iterations = max(N_gmres_iterations, max_N_gmres_iterations)
-        min_N_gmres_iterations = min(N_gmres_iterations, min_N_gmres_iterations)
+        update!(gmres_tracker, N_gmres_iterations)
 
         uv_mat[:,1] .= gmres_iterable.x
-    end
-
-    avg_N_gmres_iterations /= prob.nsteps
-    if verbose
-        println("Average # of gmres iterations: ", avg_N_gmres_iterations)
-        println("Maximum # of gmres iterations: ", max_N_gmres_iterations)
-        println("Minimum # of gmres iterations: ", min_N_gmres_iterations)
     end
 
     # Compute the derivatives of uv at n=1 and store them
@@ -479,7 +499,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
     )
     uv_history[:, :, 2] .= uv_mat
 
-    return nothing
+    return gmres_tracker
 end
 
 
@@ -505,58 +525,6 @@ function update_gmres_iterable!(iterable, x, b)
 end
 
 
-function eval_forward_new!(uv_history::AbstractArray{Float64, 3},
-        prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{<: Real}; order::Int=2,
-        forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
-        use_taylor_guess::Bool=true, verbose::Bool=false
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
-
-    #function TimestepHolder(system_size, N_derivatives, pcof, controls, prob)
-    
-    t = 0.0
-    dt = prob.tf/prob.nsteps
-    N_derivatives = div(order, 2)
-
-    # Check size of uv_history storage
-    @assert size(uv_history) == (prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
-
-    timestep_holder = TimestepHolder(prob, controls, pcof, N_derivatives)
-
-    # Set up forcing matrices if forcing is provided
-    if ismissing(forcing)
-        forcing_tn = missing
-        forcing_tnp1 = missing
-    else
-        forcing_tn = similar(forcing, size(forcing, 1), size(forcing, 2))
-        forcing_tnp1 = similar(forcing_tn)
-        forcing_tn .= 0
-        forcing_tnp1 .= 0
-    end
-
-    # Perform the timesteps
-    for n in 0:prob.nsteps-1
-        t = n*dt
-
-        if !ismissing(forcing)
-            forcing_tn .= view(forcing, :, :, 1+n)
-            forcing_tnp1 .= view(forcing, :, :, 1+n+1)
-        end
-
-        current_uv_mat_view = view(uv_history, :, :, 1+n)
-
-        perform_timestep!(timestep_holder, t, dt, current_uv_mat_view,
-                          forcing_mat_tn=forcing_tn, forcing_mat_tnp1=forcing_tnp1)
-    end
-
-
-    # Compute the derivatives of uv at the final time and store them
-    t = prob.nsteps*dt
-    compute_derivatives!(timestep_holder, t)
-    uv_history[:, :, 1+prob.nsteps] .= timestep_holder.uv_mat
-
-    return nothing
-end
 
 struct LHSHolder{T}
     N_derivatives::Int64
@@ -578,7 +546,7 @@ struct LHSHolder{T}
 end
 
 """
-Work in progress, callable struct
+Callable struct
 """
 function (self::LHSHolder)(out_vec, in_vec)
     self.uv_mat[:,1] .= in_vec
@@ -631,142 +599,6 @@ function (self::LHSHolderAdjoint)(out_vec, in_vec)
 
     return nothing
 end
-#= Old work, from when I was trying to have an object that could be iterated
-#over to perform timesteps. Decided to abandon it and just let eval_forward be
-#a pretty long function.
-
-"""
-Work in progress, trying to change from inline function
-"""
-mutable struct TimestepHolder{T1, T2, T3, T4}
-    N_derivatives::Int64
-    uv_mat::Matrix{Float64}
-    forcing_mat::Matrix{Float64}
-    uv_vec::Vector{Float64}
-    forcing_vec::Vector{Float64}
-    RHS::Vector{Float64}
-    pcof::Vector{Float64}
-    controls::T1
-    prob::T2
-    lhs_holder::T3
-    gmres_iterable::T4
-    # I don't think this really needs to be an inner constructor. Shouldn't be
-    # significant, and it would make the types easier if I do it as an outer constructor.
-    function TimestepHolder(prob::T2, controls::T1, pcof, N_derivatives)  where {T1, T2}
-        system_size = prob.real_system_size
-
-        uv_mat = zeros(system_size, 1+N_derivatives) 
-        forcing_mat = zeros(system_size, 1+N_derivatives) 
-
-        uv_vec = zeros(system_size) 
-        forcing_vec = zeros(system_size) 
-
-        RHS = zeros(system_size) 
-        t = 0.0
-        dt = prob.tf / prob.nsteps
-
-        lhs_holder = LHSHolder(t, dt, N_derivatives, uv_mat, pcof, controls, prob)
-
-        # Create linear map out of LHS_func_wrapper, to use in GMRES
-        LHS_map = LinearMaps.LinearMap(
-            lhs_holder,
-            system_size, system_size,
-            ismutating=true
-        )
-
-        gmres_iterable = IterativeSolvers.gmres_iterable!(
-            zeros(system_size), LHS_map, zeros(system_size),
-            abstol=prob.gmres_abstol, reltol=prob.gmres_reltol, restart=system_size,
-            initially_zero=false
-        )
-
-        # For some reason, it is important that I do this after creating the gmres_iterable
-        uv_vec[1:prob.N_tot_levels]                       .= prob.u0
-        uv_vec[prob.N_tot_levels+1:prob.real_system_size] .= prob.v0
-
-
-        new{T1, T2, typeof(lhs_holder), typeof(gmres_iterable)}(
-            N_derivatives, uv_mat, forcing_mat, uv_vec, forcing_vec, RHS, pcof, controls, prob,
-            lhs_holder, gmres_iterable)
-    end
-end
-
-
-
-
-function compute_derivatives!(timestep_holder::TimestepHolder, t; forcing_matrix=missing)
-    # Set first column to value of uv
-    #println("In compute_derivatives!: ", timestep_holder.uv_vec)
-    timestep_holder.uv_mat[:,1] .= timestep_holder.uv_vec
-    # Compute the derivatives
-    compute_derivatives!(
-        timestep_holder.uv_mat, timestep_holder.prob, timestep_holder.controls,
-        t, timestep_holder.pcof, timestep_holder.N_derivatives,
-        forcing_matrix=forcing_matrix
-    )
-end
-
-function compute_forcing_derivatives!(timestep_holder::TimestepHolder, t, forcing_matrix)
-    #timestep_holder.forcing_mat[:,1] .= 0
-    timestep_holder.forcing_mat .= 0
-    compute_derivatives!(
-        timestep_holder.forcing_mat, timestep_holder.prob, timestep_holder.controls,
-        t, timestep_holder.pcof, timestep_holder.N_derivatives,
-        forcing_matrix=forcing_matrix
-    )
-end
-
-function perform_timestep!(timestep_holder::TimestepHolder, t, dt,
-        uv_matrix_copy_storage=missing; forcing_mat_tn=missing, forcing_mat_tnp1=missing,
-        use_taylor_guess=true)
-
-    compute_derivatives!(timestep_holder, t, forcing_matrix=forcing_mat_tn)
-
-    # Optionally copy uv_matrix in a an outside matrix
-    if !ismissing(uv_matrix_copy_storage)
-        uv_matrix_copy_storage .= timestep_holder.uv_mat
-    end
-    
-    build_RHS!(timestep_holder.RHS, timestep_holder.uv_mat, dt, timestep_holder.N_derivatives)
-
-    if !ismissing(forcing_mat_tnp1)
-        compute_forcing_derivatives!(timestep_holder, t+dt, forcing_mat_tnp1)
-        build_LHS!(timestep_holder.forcing_vec,  timestep_holder.forcing_mat,
-                   dt, timestep_holder.N_derivatives)
-        axpy!(-1.0, timestep_holder.forcing_vec, timestep_holder.RHS)
-    end
-
-    if use_taylor_guess # Use taylor expansion as initial guess
-        taylor_expand!(timestep_holder.uv_vec, timestep_holder.uv_mat, dt,
-                       timestep_holder.N_derivatives) 
-    else # I think technically this isn't necessary
-        timestep_holder.uv_vec .= view(timestep_holder.uv_mat, 1:timestep_holder.prob.real_system_size, 1) # Use current timestep as initial guess for gmres
-    end
-
-    # Set up gmres/linear map to do the timestep
-    timestep_holder.lhs_holder.tnext = t+dt
-    timestep_holder.lhs_holder.dt = dt
-
-    update_gmres_iterable!(timestep_holder.gmres_iterable,
-                           timestep_holder.uv_vec, timestep_holder.RHS)
-
-    # Do the gmres solve
-    N_gmres_iterations = 0
-    for iter in timestep_holder.gmres_iterable
-        N_gmres_iterations += 1
-    end
-
-    # Grab solution from gmres iterable
-    timestep_holder.uv_vec .= timestep_holder.gmres_iterable.x
-
-    return nothing
-end
-=#
-
-
-
-
-
 
 
 function form_LHS_no_control(prob::SchrodingerProb, order::Int, adjoint=false)
