@@ -1,6 +1,7 @@
 using QuantumGateDesign, Random
 using QuantumGateDesign: setup_cnot3, get_controls
 using DelimitedFiles, Dates
+using LinearAlgebra: norm
 
 clean_NaN(A) = replace(x -> isnan(x) ? 0 : x, A)
 abs_errors(A,B) = abs.(A .- B)
@@ -13,7 +14,7 @@ rtol = 1e-15
 seed = 0
 D1 = 15
 degree = 14
-order = 2
+order = 6
 #target_error = 1e-1
 target_error = 1e-3
 
@@ -33,18 +34,18 @@ target_nsteps = NSTEPS_MATRIX[target_error_index, order_index]
 
 
 
-cnot3ret = setup_cnot3(seed=0, atol=NaN, rtol=NaN, D1=D1)
+cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1)
 controls = get_controls(degree, D1, cnot3ret.juqbox_params.Cfreq, cnot3ret.tf)
 
 fortran_bspline = QuantumGateDesign.FortranBSpline(degree, D1)
 new_bspline_control = QuantumGateDesign.FortranBSplineControl2(fortran_bspline, controls[1].tf) 
 new_carrier_controls = [CarrierControl(new_bspline_control, freqs) for freqs in eachrow(cnot3ret.juqbox_params.Cfreq)]
 
-cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1)
 controls = get_controls(degree, D1, cnot3ret.juqbox_params.Cfreq, cnot3ret.tf)
 N_coeff = QuantumGateDesign.get_number_of_control_parameters(controls)
 pcof = cnot3ret.amax * 2* (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
+#controls = new_carrier_controls
 
 println("\n\n")
 println("Doing dummy run")
@@ -56,6 +57,7 @@ cnot3ret.qgd_prob.nsteps = target_nsteps
 history = eval_forward(cnot3ret.qgd_prob, controls, pcof, order=order)
 history_dlm = reshape(history, :, size(history, 1))
 
+@show any(isnan.(history))
 @show size(history_dlm)
 
 now_str = now()
@@ -71,3 +73,5 @@ println("Maximum Absolute Errors:")
 println("\tNew vs Reg: ", max_abs_errors(history_dlm, history_reg))
 println("Maximum Relative Errors:")
 println("\tNew vs Reg: ", max_rel_errors(history_dlm, history_reg))
+println("Overall Absolute Error: ", norm(history_dlm - history_reg))
+println("Overall Relative Error: ", norm(history_dlm - history_reg)/norm(history_dlm))

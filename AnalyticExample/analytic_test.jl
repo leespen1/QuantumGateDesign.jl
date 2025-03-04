@@ -94,16 +94,17 @@ function calc_infidelity(prob::SchrodingerProb, pcof::AbstractVector{<: Real}, o
 end
 
 rand_prob_size =11
-rand_tf = 100.0
+rand_tf = 1000.0
 rand_prob_N_operators = 1
 rand_nsteps = 1
 order = 2
 
 rand_prob = QuantumGateDesign.construct_rand_prob(
     rand_prob_size, rand_prob_N_operators, tf=rand_tf, nsteps=rand_nsteps,
-    gmres_abstol=0, gmres_reltol=1e-15
+    gmres_abstol=0, gmres_reltol=1e-20
 )
 target = rand(MersenneTwister(0), rand_prob.real_system_size, rand_prob.N_initial_conditions)
+target_complex = QuantumGateDesign.real_to_complex(target)
 controls = [GRAPEControl(1, rand_tf) for _ in 1:rand_prob_N_operators]
 
 pcof = rand(MersenneTwister(0), 2*rand_prob_N_operators)
@@ -117,7 +118,7 @@ UT_soft = history[:,1,end,:]
 #ΛT_soft = QuantumGateDesign.compute_terminal_condition(rand_prob, controls, pcof, target, UT_soft, order=order)
 ΛT_soft = QuantumGateDesign.compute_terminal_condition(rand_prob, controls, pcof, target, UT_soft, order=order)
 
-Λ_hist_soft = QuantumGateDesign.eval_adjoint(rand_prob, controls, pcof, ΛT_hard)
+Λ_hist_soft = QuantumGateDesign.eval_adjoint(rand_prob, controls, pcof, ΛT_soft)
 println("Finished soft-coded")
 
 
@@ -132,7 +133,10 @@ println("Finished soft-coded")
 
 @show calc_infidelity(rand_prob, pcof, order, target)
 f(x) = calc_infidelity(rand_prob, x, order, target)
+@show QuantumGateDesign.calc_cost_function(rand_prob, controls, pcof, order, target_complex, :Infidelity)
+#f(x) = QuantumGateDesign.calc_cost_function(rand_prob, controls, x, order, target, :Infidelity)
 
+#=
 dpcof = zeros(size(pcof))
 zygote_grad = Zygote.gradient(f, pcof)[1]
 discrete_adjoint_grad = discrete_adjoint(rand_prob, controls, pcof, real_to_complex(target), order=order)
@@ -147,3 +151,4 @@ forced_grad = eval_grad_forced(rand_prob, controls, pcof, real_to_complex(target
 @show norm(zygote_grad - discrete_adjoint_grad) / norm(zygote_grad)
 @show norm(zygote_grad - forced_grad) / norm(zygote_grad)
 @show norm(discrete_adjoint_grad - forced_grad) / norm(forced_grad)
+=#

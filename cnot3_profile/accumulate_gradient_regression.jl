@@ -1,6 +1,7 @@
 using QuantumGateDesign, Random
 using QuantumGateDesign: setup_cnot3, get_controls
 using DelimitedFiles, Dates
+using LinearAlgebra: norm
 
 clean_NaN(A) = replace(x -> isnan(x) ? 0 : x, A)
 abs_errors(A,B) = abs.(A .- B)
@@ -65,3 +66,5 @@ println("Maximum Absolute Errors:")
 println("\tNew vs Reg: ", max_abs_errors(grad, grad_reg))
 println("Maximum Relative Errors:")
 println("\tNew vs Reg: ", max_rel_errors(grad, grad_reg))
+println("Overall Absolute Error: ", norm(grad - grad_reg))
+println("Overall Relative Error: ", norm(grad - grad_reg)/norm(grad_reg))
