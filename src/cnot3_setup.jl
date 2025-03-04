@@ -42,7 +42,7 @@ struct CNOT3Ret{T}
 end
     
 
-function setup_cnot3(; seed::Integer=0, atol=1e-10, rtol=1e-12, D1=15)
+function setup_cnot3(; seed::Integer=0, atol::Real=1e-10, rtol::Real=1e-12, D1::Integer=15, N_osc_levels::Integer=4, Tmax::Real=550.0)
     #==============================================================================
     #
     # Juqbox Problem Setup
@@ -56,7 +56,7 @@ function setup_cnot3(; seed::Integer=0, atol=1e-10, rtol=1e-12, D1=15)
 
     Ng1 = 2 # Osc-1, number of guard states
     Ng2 = 2 # Osc-2, number of guard states
-    Ng3 = 3 # 5 # Osc-3, number of guard states
+    Ng3 = N_osc_levels - 1 # Osc-3, number of guard states
 
     Ne = [Ne1, Ne2, Ne3]
     Ng = [Ng1, Ng2, Ng3]
@@ -65,8 +65,6 @@ function setup_cnot3(; seed::Integer=0, atol=1e-10, rtol=1e-12, D1=15)
     N = Ne1*Ne2*Ne3; # Total number of nonpenalized energy levels
     Ntot = Nt[1]*Nt[2]*Nt[3]
     Nguard = Ntot - N # Total number of guard states
-
-    Tmax = 550.0 # 700.0
 
     # frequencies (in GHz, will be multiplied by 2*pi to get angular frequencies in the Hamiltonian matrix)
     fa = 4.10595
