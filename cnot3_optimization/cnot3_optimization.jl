@@ -44,6 +44,9 @@ function parse_commandline()
             help = "Cost type to use as the primary objective function. Valid options are Infidelity, GeneralizedInfidelity, Tracking, and Norm."
             arg_type = Symbol
             default = :Infidelity
+        "--derivative_checker"
+            help = "Flag for running IPOPT finite-difference gradient checker."
+            action = :store_true
         "order"
             help = "Method order to use"
             required = true
@@ -81,6 +84,8 @@ function main()
     cost_type = parsed_args["cost_type"]
     Tmax = parsed_args["gate_duration"]
     N_osc_levels = parsed_args["levels_cavity"]
+    derivative_test = parsed_args["derivative_checker"] ? "first-order" : "none"
+
 
     println("Running test with the following arguments:")
     for (arg,val) in parsed_args
@@ -113,7 +118,7 @@ function main()
     ipopt_options = (
         "max_iter" => maxiter,
         "max_wall_time" => 60.0*60*time,
-        "derivative_test" => "first-order",
+        "derivative_test" => derivative_test,
         "limited_memory_max_history" => 50,
         "output_file" => filename * ".txt"
     )
