@@ -1,125 +1,108 @@
 module QuantumGateDesign
 
+import LinearMaps, IterativeSolvers, Plots, Ipopt, LinearAlgebra,
+       BenchmarkTools, SparseArrays, Dates, OrderedCollections, JLD2, Random,
+       DelimitedFiles, Juqbox
 
-import LinearMaps, IterativeSolvers, Plots, Ipopt, ForwardDiff, LinearAlgebra
-import BenchmarkTools, SparseArrays, Dates, OrderedCollections, JLD2, Random
-import DelimitedFiles
-import BSplines, BasicBSpline
-import Juqbox
 using Printf: @printf, @sprintf
-using LinearAlgebra: mul!, axpy!, dot, tr, norm
+using LinearAlgebra: mul!, axpy!, dot, tr, norm, issymmetric, Diagonal,
+      Bidiagonal, diagm
 using Random: rand, MersenneTwister
 using Base.Iterators: product
-using BasicBSpline: BSplineDerivativeSpace, BSplineSpace
 using LoopVectorization: @turbo
-
-# Export derivative computation functions
-export compute_derivatives!, compute_adjoint_derivatives!, compute_partial_derivative!, apply_hamiltonian!
-
-# Export schrodinger problem definition and forward evolution methods
-export SchrodingerProb, VectorSchrodingerProb
-export eval_forward, eval_forward_forced
-export convert_old_ordering_to_new
-
-# Export gradient evaulation methods
-export eval_grad_finite_difference, eval_grad_forced, discrete_adjoint
-export eval_hessian
-export discrete_adjoint, compute_terminal_condition
-export eval_grad_forced
-
-export control_ops, basis_state, create_initial_conditions, guard_projector, create_gate
-export lowering_operator_subsystem, lowering_operators_system
-export rotation_matrix
-
-# Export optimization callback
-export optimize_gate
-
-# Export helper for functions for dealing state vectors and histories
-export get_populations, target_helper, plot_populations, real_to_complex, complex_to_real
-
-# Export control types and constructors
-export AbstractControl, BSplineControl, GRAPEControl, GeneralGRAPEControl, HermiteControl, HermiteCarrierControl
-export bspline_control, ZeroControl, GeneralBSplineControl, CarrierControl
-export eval_p, eval_q, eval_p_derivative, eval_q_derivative, eval_grad_p_derivative, eval_grad_q_derivative, eval_grad_p_derivative!, eval_grad_q_derivative!
-
-export DispersiveProblem, JaynesCummingsProblem
+using SparseArrays: sparse
 
 
-# Export example problems and problem construction helpers
-export lowering_operator, raising_operator, subsytem_lowering_operator
-export composite_system_lowering_operators
-export rotating_frame_qubit, dahlquist_problem
 
-# Export testing functions
-export get_history_convergence, plot_history_convergence, plot_history_convergence_new
-
-# Export plotting functions
-export plot_control
-
-
-export initial_basis
-export infidelity
-
-export hermite_interp_poly
-
-export convert_juqbox
-
-export MySplineControl
+include("common.jl")
 
 include("preconditioners.jl")
+export IdentityPreconditioner, LUPreconditioner, DiagonalHamiltonianPreconditioner
+# Defining Schrodinger Optimal Control Problems
 include("SchrodingerProb.jl")
-include("../Daniel/hermite_map.jl")
+export SchrodingerProb, VectorSchrodingerProb
 
-
-include("Controls/Control.jl")
-include("Controls/bspline_backend.jl")
-include("Controls/bspline_control.jl")
-include("Controls/grape_control.jl")
-include("Controls/hermite_control.jl")
-include("Controls/sincos_control.jl")
-include("Controls/zero_control.jl")
-include("Controls/generalized_grape_control.jl")
-include("Controls/hermite_carrier.jl")
-include("Controls/GeneralBSplineControl.jl")
-include("Controls/FortranBSpline.jl")
-include("Controls/CarrierControl.jl")
-#include("Controls/BasicBSplineControl.jl")
-
-
+# Computing derivatives, Hermite quadrature
 include("hermite.jl")
 
+# Forward and Adjoint Evolution
 include("forward_evolution.jl")
+export eval_forward, eval_forward_forced
 
 include("infidelity.jl")
+export infidelity
 
+# Gradient evaulation methods
 include("eval_grad_discrete_adjoint.jl")
+export discrete_adjoint
 include("eval_grad_finite_difference.jl")
+export eval_grad_finite_difference
 include("eval_grad_forced.jl")
+export eval_grad_forced
+
+# IPOPT interface
+include("ipopt_optimal_control.jl")
+export optimize_gate
+
+# Common Operators
+include("common_operators.jl")
+export lower_op, raise_op, number_op, identity_op, basis_state,
+       compsys_basis_state, rot_frame_op, compsys_rot_frame_op,
+       promote_subsys_op, gate_initial_states, guard_projector_op
+
+# Controls
+include("Controls/Control.jl")
+include("Controls/grape_control.jl")
+include("Controls/sincos_control.jl")
+include("Controls/zero_control.jl")
+include("Controls/FortranBSpline.jl")
+include("Controls/CarrierControl.jl")
+export AbstractControl, CarrierControl, FortranBSplineControl,
+       FortranBSplineControl2, GRAPEControl, ZeroControl
+export eval_p, eval_q, eval_p_derivative, eval_q_derivative,
+       eval_grad_p_derivative, eval_grad_q_derivative, eval_grad_p_derivative!,
+       eval_grad_q_derivative!, get_number_of_control_parameters
 
 include("eval_hessian.jl")
+export eval_hessian
 
-include("ipopt_optimal_control.jl")
 include("gradient_descent.jl")
-
+# Helper for functions for dealing state vectors and histories
 include("state_vector_helpers.jl")
+export get_populations, target_helper, plot_populations, real_to_complex,
+       complex_to_real
 
 include("richardson_extrapolation.jl")
-
 include("cnot3_setup.jl")
 
-
-include("ProblemConstructors/multi_qudit_systems.jl")
-include("ProblemConstructors/rotating_frame_qubit.jl")
-include("ProblemConstructors/dahlquist_problem.jl")
-include("ProblemConstructors/juqbox_converter.jl")
-include("ProblemConstructors/rabi_oscillator.jl")
-include("ProblemConstructors/random_problem.jl")
-
-
-include("Tests/test_convergence.jl")
-
 include("plotting.jl")
+export plot_control
+
 include("calculate_timestep.jl")
+
+
+include("ProblemConstructors/dispersive_qudits.jl")
+export dispersive_qudits_problem
+include("ProblemConstructors/jaynes_cummings_qudits.jl")
+export jaynes_cummings_qudits_problem
+include("ProblemConstructors/jaynes_cummings_plus_kerr_qudits.jl")
+export jaynes_cummings_plus_kerr_qudits_problem
+include("ProblemConstructors/rotating_frame_qudit.jl")
+export rotating_frame_qubit_problem
+include("ProblemConstructors/dahlquist_problem.jl")
+export dahlquist_problem
+include("ProblemConstructors/rabi_oscillator.jl")
+export rabi_oscillator_problem
+include("ProblemConstructors/juqbox_converter.jl")
+export convert_juqbox
+include("ProblemConstructors/random_problem.jl")
+export random_problem
+
+
+# Testing Functions (not for CI, but for personal use)
+include("Tests/test_convergence.jl")
+export get_history_convergence, plot_history_convergence, plot_history_convergence_new
+
 
 
 # Define functions without methods, so that extensions can override them
@@ -128,8 +111,6 @@ export visualize_control
 export construct_ODEProb
 export convert_to_numpy, Qobj, unpack_Qobj, simulate_prob_no_control
 
-export get_number_of_control_parameters
-export multi_qudit_hamiltonian
 export control_ops
 export eval_p_single, eval_q_single
 

@@ -1,4 +1,7 @@
+export CarrierControl
+
 const vals_vec_storage_size::Int64 = 20
+
 
 """
 Be careful of mutating base_control. Ideally base_control should be immutable

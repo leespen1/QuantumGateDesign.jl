@@ -1,28 +1,3 @@
-"""
-Abstract supertype for preconditioners used in the forward evolution and adjoint
-evolution in the discrete adjoint method.
-
-This will be used as the left preconditioner in GMRES as implemented by the
-`IterativeSolvers` package. Consequently, for a concrete subtype P the
-following operations must be defined:
-- `ldiv!(y, P, x)`
-- `ldiv!(P, x)`
-- `P \\ x`.
-
-By default, it is assumed that an `AbstractQGDPreconditioner` has a parameter
-`P` which has these operations implemented (i.e. the type simply wraps another
-type which can be used as a preconditioner by `IterativeSolvers`).
-
-We must also define the constructor P(prob::SchrodingerProb, order, adjoint),
-which will be called each time a forward simulation or gradient calculation is
-performed to construct the preconditioners used for the forward and adjoint
-linear solves.
-
-This is done so that the preconditioner can easily be changed as the problem
-parameters and order of the method change.
-"""
-abstract type AbstractQGDPreconditioner end
-
 LinearAlgebra.ldiv!(P::AbstractQGDPreconditioner, x) = ldiv!(P.P, x)
 LinearAlgebra.ldiv!(y, P::AbstractQGDPreconditioner, x) = ldiv!(y, P.P, x)
 Base.:\(P::AbstractQGDPreconditioner, b) = Base.:\(P.P, b)
