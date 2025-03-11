@@ -11,8 +11,8 @@ the system Hamiltonian is time-independent.
 To get the lab frame hamiltonian, take `transition_freq=0`
 """
 function jaynes_cummings_plus_kerr_qudits_problem(
-        subsystem_sizes, # Maybe I should allow any iterable? I think tuples are reasonable
-        essential_subsystem_sizes, # Should I have a default? E.g. [2,2,2...]?
+        subsystem_sizes::IntegersType,
+        essential_subsystem_sizes::IntegersType,
         transition_freqs::AbstractVector{<: Real},
         rotation_freq::Real,
         kerr_coeffs::AbstractMatrix{<: Real},
