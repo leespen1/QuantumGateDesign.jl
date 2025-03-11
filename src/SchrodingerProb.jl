@@ -164,6 +164,7 @@ mutable struct SchrodingerProb{M, VM, P}
     end
 end
 
+# TODO (maybe) Let sym_ops and asym_ops be complex, convert to real (check hermitian)
 function SchrodingerProb(
         system_hamiltonian::AbstractMatrix{<: Number},
         sym_operators::Vector{<: AbstractMatrix{<: Real}},

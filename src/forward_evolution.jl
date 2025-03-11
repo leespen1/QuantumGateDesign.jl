@@ -48,7 +48,7 @@ vector for each initial condition as a 4D array.
 - `forcing::Union{AbstractArray{Float64}, Missing}`: Optional forcing array, ordered in same format as the returned history.
 """
 function eval_forward(
-        prob::SchrodingerProb{M1, M2, P}, controls, pcof::AbstractVector{<: Real};
+        prob::SchrodingerProb{M1, M2, P}, controls::ControlsType, pcof::AbstractVector{<: Real};
         order::Int=2, saveEveryNsteps::Int=1,
         forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
@@ -66,8 +66,8 @@ end
 
 
 function eval_forward!(uv_history::AbstractArray{Float64, 4},
-        prob::SchrodingerProb{M1, M2, P}, controls, pcof::AbstractVector{<: Real};
-        order::Int=2, saveEveryNsteps::Int=1,
+        prob::SchrodingerProb{M1, M2, P}, controls::ControlsType,
+        pcof::AbstractVector{<: Real}; order::Int=2, saveEveryNsteps::Int=1,
         forcing::Union{AbstractArray{Float64, 4}, Missing}=missing
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
 
@@ -124,8 +124,8 @@ like most entries differed by less than 1e-14.
 I plan to make an adjoint version of this.
 """
 function eval_forward!(uv_history::AbstractArray{Float64, 3},
-        prob::SchrodingerProb{M, V, P}, controls, pcof::AbstractVector{<: Real};
-        order::Int=2, saveEveryNsteps::Int=1, 
+        prob::SchrodingerProb{M, V, P}, controls::ControlsType,
+        pcof::AbstractVector{<: Real}; order::Int=2, saveEveryNsteps::Int=1,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
         use_taylor_guess=true,
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, P}
@@ -268,64 +268,13 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
 end
 
 
-"""
-Evolve a vector SchrodingerProblem forward in time. Return the history of the
-state vector (u/v) in a 3-index array, where the first index of
-corresponds to the vector component, the second index corresponds to the
-derivative to be taken, and the third index corresponds to the timestep number.
-"""
-function eval_forward(
-        prob::SchrodingerProb{M, V}, controls, pcof::AbstractVector{<: Real};
-        order::Int=2, saveEveryNsteps::Int=1,
-        forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
-
-    N_derivatives = div(order, 2)
-
-    # Allocate memory for storing u,v, and their derivatives over all points in time
-    uv_history = Array{Float64, 3}(undef, prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
-
-    eval_forward!(uv_history, prob, controls, pcof, order=order;
-                  saveEveryNsteps=saveEveryNsteps, forcing=forcing)
-
-    return real_to_complex(uv_history[:,1,:])
-end
-
-
-"""
-Evolve a vector SchrodingerProblem forward in time. Return the history of the
-state vector (u/v) in a 3-index array, where the first index of
-corresponds to the vector component, the second index corresponds to the
-derivative to be taken, and the third index corresponds to the timestep number.
-"""
-function eval_adjoint(prob::SchrodingerProb{M, V}, controls,
-        pcof::AbstractVector{<: Real},
-        terminal_condition::AbstractVector{Float64}; 
-        forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
-        order::Int=2
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}}
-
-    N_derivatives = div(order, 2)
-
-    # Allocate memory for storing u,v, and their derivatives over all points in time
-    #uv_history = Array{Float64, 3}(undef, prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
-    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps)
-
-    eval_adjoint!(uv_history, prob, controls, pcof, terminal_condition;
-                  order=order, forcing=forcing)
-
-    return uv_history
-end
-
-
-
 
 function eval_adjoint(
-        prob::SchrodingerProb{M1, M2}, controls,
+        prob::SchrodingerProb{M1, M2, P}, controls::ControlsType,
         pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64};
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
         order::Int=2
-    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
+    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
 
     N_derivatives = div(order, 2)
     uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
@@ -337,11 +286,10 @@ function eval_adjoint(
     return uv_history
 end
 
-
 function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
-        prob::SchrodingerProb{M1, M2}, controls,
-        pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64}
-        ; order::Int=2,
+        prob::SchrodingerProb{M1, M2}, controls::ControlsType,
+        pcof::AbstractVector{<: Real},
+        terminal_condition::AbstractMatrix{Float64} ; order::Int=2,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
@@ -381,12 +329,14 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
     return full_gmres_tracker
 end
 
+
+
 function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
-        prob::SchrodingerProb{M, V, P}, controls, pcof::AbstractVector{<: Real},
+        prob::SchrodingerProb{M, V, P}, controls::ControlsType,
+        pcof::AbstractVector{<: Real},
         terminal_condition::AbstractVector{Float64};
         forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
-        order::Int=2,
-        use_taylor_guess=true, verbose=false,
+        order::Int=2, use_taylor_guess=true, verbose=false,
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, P}
 
     gmres_tracker = GMRESTracker()

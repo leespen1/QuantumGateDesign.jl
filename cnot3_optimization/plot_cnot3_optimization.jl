@@ -57,9 +57,12 @@ _nsteps=(\d+)
 _atol=(-?[1-9](?:\.\d+)?[Ee][-+]?\d+|\d+)
 _rtol=(-?[1-9](?:\.\d+)?[Ee][-+]?\d+|\d+)
 _D1=(\d+)
-_time=12.0
+_time=(-?[1-9](?:\.\d+)?[Ee][-+]?\d+|\d+)
 _maxiter=(\d+)
 _nthreads=(\d+)
+_costType=(.+)
+_gateDuration=(-?[1-9](?:\.\d+)?[Ee][-+]?\d+|\d+)
+_nCavityLevels=(\d+)
 .txt"""x # 'x' tag ignores whitespace and comments
 
 #'targetError=1e-1_cnot3OptimizationTest_order=10_degree=14_seed=3_nsteps=175_atol=1.0e-15_r

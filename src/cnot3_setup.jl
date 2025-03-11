@@ -30,13 +30,13 @@ function get_D1(pcof_length::Integer, N_freq::Integer, N_controls::Integer)
     return D1
 end
 
-struct CNOT3Ret{T}
+struct CNOT3Ret{ProbT}
     juqbox_params::Juqbox.objparams
     juqbox_wa::Juqbox.Working_Arrays
-    qgd_prob::T
+    qgd_prob::ProbT
     target::Matrix{ComplexF64}
     pcof0::Vector{Float64}
-    D1::Integer
+    D1::Int
     amax::Float64
     tf::Float64
 end
@@ -92,9 +92,9 @@ function setup_cnot3(; seed::Integer=0, atol::Real=1e-10, rtol::Real=1e-12,
     a2 = Array(Bidiagonal(zeros(Nt[2]),sqrt.(collect(1:Nt[2]-1)),:U))
     a3 = Array(Bidiagonal(zeros(Nt[3]),sqrt.(collect(1:Nt[3]-1)),:U))
 
-    I1 = Array{Float64, 2}(I, Nt[1], Nt[1])
-    I2 = Array{Float64, 2}(I, Nt[2], Nt[2])
-    I3 = Array{Float64, 2}(I, Nt[3], Nt[3])
+    I1 = Array{Float64, 2}(LinearAlgebra.I, Nt[1], Nt[1])
+    I2 = Array{Float64, 2}(LinearAlgebra.I, Nt[2], Nt[2])
+    I3 = Array{Float64, 2}(LinearAlgebra.I, Nt[3], Nt[3])
 
     # create the a, a^\dag, b and b^\dag vectors
     amat = kron(I3, kron(I2, a1))

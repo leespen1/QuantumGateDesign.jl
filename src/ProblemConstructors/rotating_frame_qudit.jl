@@ -5,14 +5,14 @@ rotating frame.
 Frequencies should be in GHz, and will be multiplied by 2pi to get angular
 frequencies in the Hamiltonian.
 """
-function rotating_frame_qubit(N_ess_levels::Int, N_guard_levels::Int;
+function rotating_frame_qubit_problem(N_ess_levels::Integer, N_guard_levels::Integer;
         tf::Float64=1.0, nsteps::Int64=10, detuning_frequency::Float64=1.0,
         self_kerr_coefficient::Float64=1.0
     )
 
     N_tot_levels = N_ess_levels + N_guard_levels
 
-    a = lowering_operator(N_tot_levels)
+    a = lower_op(N_tot_levels)
 
     system_sym  = zeros(N_tot_levels, N_tot_levels)
     system_sym .+= 2*pi*detuning_frequency .* (a'*a)

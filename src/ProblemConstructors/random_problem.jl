@@ -1,9 +1,9 @@
-function random_sym_matrix(rng, N)
+function random_sym_matrix(rng, N::Integer)
     rand_mat = rand(rng, N, N)
     return rand_mat + rand_mat'
 end
 
-function random_asym_matrix(rng, N)
+function random_asym_matrix(rng, N::Integer)
     rand_mat = rand(rng, N, N)
     return rand_mat - rand_mat'
 end
@@ -12,7 +12,10 @@ end
 Construct a problem where all the matrices are initialized randomly (but seeded
 so that results are reporducible).
 """
-function construct_rand_prob(complex_system_size, N_operators; tf=2.0, nsteps=100, gmres_abstol=1e-10, gmres_reltol=1e-10)
+function random_problem(complex_system_size::Integer, N_operators::Integer;
+        tf::Real=2.0, nsteps::Integer=100, gmres_abstol::Real=1e-10,
+        gmres_reltol::Real=1e-10
+    )
     U0 = rand(MersenneTwister(0), ComplexF64, complex_system_size, complex_system_size)
 
     system_sym = random_sym_matrix(MersenneTwister(2), complex_system_size)

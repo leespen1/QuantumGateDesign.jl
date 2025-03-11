@@ -256,28 +256,6 @@ end
 
 
 """
-Bezier degree elevations: 
-    https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node13.html
-B-spline degree elevation description: 
-    https://pages.mtu.edu/~shene/COURSES/cs3621/LAB/curve/elevation.html
-Knot Insertion and Removal for BSplines:
-    https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node18.html
-
-Degree elevation of a BSpline can be done by knot insertion:
-1. Insert knots at internal knots until each segment of the B-spline is a bezier curve.
-2. Perform degree elevation of the bezier curves (which also results in new
-   control points, so pcof is updated)
-3. "combining them together back to a single B-spline". Does combining them
-    together mean knot removal? Because I want smoothness. So I can't have
-    internal knots with multiplicity > 1. But I think the knot removal may be exact.
-"""
-function elevate_degree(control::FortranBSplineControl, pcof::AbstractVector{<: Real})
-    
-end
-
-
-
-"""
 From Netlib pppack
 
 From  * a practical guide to splines *  by c. de Boor (7 may 92)    
