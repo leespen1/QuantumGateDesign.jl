@@ -98,6 +98,10 @@ export convert_juqbox
 include("ProblemConstructors/random_problem.jl")
 export random_problem
 
+include("common_gates.jl")
+export PauliX_gate, PauliY_gate, PauliZ_gate, Hadamard_gate, Phase_gate,
+       T_gate, CNOT_gate, SWAP_gate, ControlledZ_gate, QFT_gate, Toffoli_gate
+
 
 # Testing Functions (not for CI, but for personal use)
 include("Tests/test_convergence.jl")
