@@ -23,9 +23,14 @@ function non_watchdog_iterations(log_filename::String)
 
     # A data row has the right number of entries, and the first entry is an integer
     N_columns = length(header_entries)
+    @show N_columns
+    @show log_filename
+    @show start_line
+    @show end_line
     data_regex = Regex(raw"^\s*\d+" * repeat(raw"\s+\S+", N_columns-1) * raw"\s*$")
 
-    for line in lines[start_line:end_line]
+    #for line in lines[start_line:end_line]
+    for line in lines[start_line:end]
         # Only do iteration lines (which start with whitespace, followed by digits)
         if occursin(data_regex, line)
             columns = split(line)
@@ -57,27 +62,28 @@ _nsteps=(\d+)
 _atol=(-?[1-9](?:\.\d+)?[Ee][-+]?\d+|\d+)
 _rtol=(-?[1-9](?:\.\d+)?[Ee][-+]?\d+|\d+)
 _D1=(\d+)
-_time=(-?[1-9](?:\.\d+)?[Ee][-+]?\d+|\d+)
+_time=(.+)
 _maxiter=(\d+)
 _nthreads=(\d+)
 _costType=(.+)
-_gateDuration=(-?[1-9](?:\.\d+)?[Ee][-+]?\d+|\d+)
+_gateDuration=(.+)
 _nCavityLevels=(\d+)
 .txt"""x # 'x' tag ignores whitespace and comments
 
 #'targetError=1e-1_cnot3OptimizationTest_order=10_degree=14_seed=3_nsteps=175_atol=1.0e-15_r
 #tol=1.0e-15_D1=15_time=12.0_maxiter=10000_nthreads=4.csv'
 
-directory = "49349033"
+#directory = "49349033"
+directory = "51458828"
 data = missing
 header = missing
 iter_vec = missing
-infidelity_vec = missing
+objective_vec = missing
 
-target_errors = ("1e-1", "1e-5", "1e-7")
+target_errors = ("1e-1", "1e-3", "1e-5", "1e-7")
 orders = (2,4,6,8,10,12)
 
-N_files_found = zeros(length(orders), length(target_errors))
+N_files_found = zeros(Int64, length(orders), length(target_errors))
 
 inch = 96
 #fig = CairoMakie.Figure(size=(12inch, 6inch), fontsize=12, figure_padding=5)
@@ -88,7 +94,7 @@ for i in eachindex(target_errors)
         push!(
             fig_axes,
             Axis(
-                fig[1,i], xlabel="# of IPOPT Iterations", ylabel="|Gate Infidelity|", yscale=log10,
+                fig[1,i], ylabel="Generalized Gate Infidelity", yscale=log10,
                 title="Target Error = $(target_errors[i])",
                 yticks=(10.0 .^ (-15:15), [L"10^{%$i}" for i in -15:15]),
                 yminorticks=IntervalsBetween(10), yminorticksvisible=true,
@@ -99,16 +105,17 @@ for i in eachindex(target_errors)
         push!(
             fig_axes,
             Axis(
-                fig[1,i], xlabel="# of IPOPT Iterations", yscale=log10,
+                fig[1,i], yscale=log10,
                 title="Target Error = $(target_errors[i])",
-                yticks=(10.0 .^ (-15:15), [L"10^{%$i}" for i in -15:15]), # Labels
-                #yticks=(10.0 .^ (-15:15), ["" for i in -15:15]), # No labels
+                #yticks=(10.0 .^ (-15:15), [L"10^{%$i}" for i in -15:15]), # Labels
+                yticks=(10.0 .^ (-15:15), ["" for i in -15:15]), # No labels
                 yminorticks=IntervalsBetween(10), yminorticksvisible=true,
                 yminorgridvisible=false,
             )
         )
     end
 end
+Label(fig[2, :], "Number of IPOPT Iterations Completed", valign=:top)
 
 line_opacity = 0.9
 line_width = 1.0
@@ -119,12 +126,12 @@ line_width = 1.0
 for (i, order) in enumerate(orders)
     lines!(fig_axes[1], [1], [1], color=(wong_colors()[i], line_opacity), label="Order $order")
 end
-Legend(fig[2,:], fig_axes[1], orientation=:horizontal, framevisible=false)
+Legend(fig[3,:], fig_axes[1], orientation=:horizontal, framevisible=false)
 
 
 
 iter_vecs = Vector{Int64}[]
-infidelity_vecs = Vector{Float64}[]
+objective_vecs = Vector{Float64}[]
 i_target_vec = Int[]
 i_order_vec = Int[]
 
@@ -135,7 +142,7 @@ for file in readdir(directory)
         order = parse(Int, regex_match[2])
 
         csv_file = replace(file, ".txt" => ".csv")
-        data, header = readdlm(directory * "/" * csv_file, ',', header=true)
+        global data, header = readdlm(directory * "/" * csv_file, ',', header=true)
         #@show header
         #@show file
         
@@ -145,19 +152,24 @@ for file in readdir(directory)
 
         header_vec = reshape(header, :)
         i_iter = findfirst(x -> x == "iter_count", header_vec)
-        i_infidelity = findfirst(x -> x == "infidelity", header_vec) 
+        objective_type = "infidelity"
+        i_objective = findfirst(x -> x == objective_type, header_vec) 
 
-        iter_vec = non_wdog_data[:, i_iter]
-        # Absolute value so log scale doesn't mess up
-        infidelity_vec = abs.(non_wdog_data[:, i_infidelity])
+        global iter_vec = non_wdog_data[:, i_iter]
+        if objective_type == "infidelity"
+            # Absolute value so log scale doesn't mess up
+            global objective_vec = abs.(non_wdog_data[:, i_objective])
+        else
+            global objective_vec = non_wdog_data[:, i_objective]
+        end
 
         i_target = findfirst(x -> x == target_err, target_errors)
         i_order = findfirst(x -> x == order, orders)
 
-        #lines!(fig_axes[i_target], iter_vec, infidelity_vec, color=(wong_colors()[i_order], line_opacity))
+        #lines!(fig_axes[i_target], iter_vec, objective_vec, color=(wong_colors()[i_order], line_opacity))
 
         push!(iter_vecs, iter_vec)
-        push!(infidelity_vecs, infidelity_vec)
+        push!(objective_vecs, objective_vec)
         push!(i_target_vec, i_target)
         push!(i_order_vec, i_order)
 
@@ -165,20 +177,22 @@ for file in readdir(directory)
         N_files_found[i_order, i_target] += 1
     end
 end
+@show N_files_found
 
 
 # Draw the lowest order lines first, highest order lines last
 for desired_i_order in reverse(eachindex(orders))
 #for desired_i_order in eachindex(orders)
-    for (iter_vec, infidelity_vec, i_target, i_order) in zip(iter_vecs, infidelity_vecs, i_target_vec, i_order_vec)
+    for (iter_vec, objective_vec, i_target, i_order) in zip(iter_vecs, objective_vecs, i_target_vec, i_order_vec)
         if i_order == desired_i_order
-            lines!(fig_axes[i_target], iter_vec, infidelity_vec, color=(wong_colors()[i_order], line_opacity), linewidth=line_width)
+            lines!(fig_axes[i_target], iter_vec, objective_vec, color=(wong_colors()[i_order], line_opacity), linewidth=line_width)
         end
     end
 end
 
 for ax in fig_axes
-    ylims!(ax, (1e-6,1e0))
+    #ylims!(ax, (1e-6,1e0))
+    ylims!(ax, (1e-7,1e0))
 end
 
 fig
