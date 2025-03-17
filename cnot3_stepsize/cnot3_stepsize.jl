@@ -30,14 +30,15 @@ function parse_commandline()
             default = "Data"
         "--use_juqbox"
             help = "Use Juqbox to perform the timestepping."
-            action = :store_true
+            arg_type = Bool
+            default = false
         "order"
             help = "Method order to use"
             required = true
             arg_type = Int64
         "degree"
             help = "Degree of B-spline to use"
-            required= true
+            required = true
             arg_type = Int64
         "seed"
             help = "Seed to use when generating control vector."
@@ -72,7 +73,7 @@ function main()
     pcof = cnot3ret.amax * 2* (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
     mkpath(output_directory)
-    filename = output_directory * "/cnot3StepsizeTest_order=$(order)_degree=$(degree)_seed=$(seed)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)"
+    filename = output_directory * "/cnot3StepsizeTest_order=$(order)_degree=$(degree)_seed=$(seed)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)_usejuqbox=$(use_juqbox)"
 
     if use_juqbox
         @assert order == 2
