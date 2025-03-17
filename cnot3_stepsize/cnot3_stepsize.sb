@@ -39,6 +39,7 @@ DEGREE=14
 D1=15
 RTOL=1e-15
 ATOL=1e-15
+USE_JUQBOX=false
 
 # To avoid Pkg errors
 unset LD_LIBRARY_PATH
@@ -63,7 +64,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
     METHOD_ORDER=${METHOD_ORDERS[$METHOD_ORDER_INDEX]}
 
 
-    CMD_STRING="julia --project=$PROJECTENV --threads=$SLURM_CPUS_PER_TASK ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --output_directory=$SLURM_ARRAY_JOB_ID"
+    CMD_STRING="julia --project=$PROJECTENV --threads=$SLURM_CPUS_PER_TASK ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX --output_directory=$SLURM_ARRAY_JOB_ID  "
     echo $CMD_STRING
     eval $CMD_STRING
 else
@@ -82,7 +83,7 @@ else
         METHOD_ORDER_INDEX=$(( SLURM_ARRAY_TASK_ID % NUM_ORDERS ))
         METHOD_ORDER=${METHOD_ORDERS[$METHOD_ORDER_INDEX]}
 
-        CMD_STRING="julia --project=$PROJECTENV --threads=4 ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL"
+        CMD_STRING="julia --project=$PROJECTENV --threads=4 ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX"
         echo $CMD_STRING
         eval $CMD_STRING
     done
