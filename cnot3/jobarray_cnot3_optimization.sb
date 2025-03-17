@@ -4,7 +4,7 @@
 #SBATCH --mail-user=leespen1@msu.edu # Where to send mail. 
 #SBATCH --nodes=1                    # Maximum number of nodes to be allocated
 #SBATCH --ntasks-per-node=1          # Maximum number of tasks on each node
-#SBATCH --cpus-per-task=1            # Number of processors for each task (want several because the BLAS is multithreaded, even though my Julia code is not)
+#SBATCH --cpus-per-task=4            # Number of processors for each task (want several because the BLAS is multithreaded, even though my Julia code is not)
 #SBATCH --mem=16G                    # Memory (i.e. RAM) per NODE
 #SBATCH --export=NONE                 # HPCC suggests setting to NONE for HPCC reasons, but I don't think it's necessary, and I want ALL so that I can load julia and have it transfer to all nodes
 #SBATCH --constraint=intel18         # Run on the
@@ -23,10 +23,10 @@ echo "Number of CPUs Per Task       = $SLURM_CPUS_PER_TASK"
 echo ""
 
 
-ARTIFACT_HASH=43964d8fde379b95f9b4bdc214b688bc394cd4ac 
-export LD_LIBRARY_PATH=$HOME/.julia/artifacts/$ARTIFACT_HASH/lib:$LD_LIBRARY_PATH
+#ARTIFACT_HASH=43964d8fde379b95f9b4bdc214b688bc394cd4ac 
+#export LD_LIBRARY_PATH=$HOME/.julia/artifacts/$ARTIFACT_HASH/lib:$LD_LIBRARY_PATH
 
 PROJECTENV=/mnt/home/leespen1/Research/QuantumGateDesign.jl
 julia --project=$PROJECTENV -e 'using Pkg; Pkg.instantiate()' # Set up project enviornment
 
-julia --project=$PROJECTENV ./cnot3_optimization.jl --seed $SLURM_ARRAY_TASK_ID --output_dir Order2 --max_time 1 -max_iter 4 --target_error 1e-2 --order 4
+julia --project=$PROJECTENV --threads=4 ./cnot3_optimization.jl --seed $SLURM_ARRAY_TASK_ID --output_dir Order2 --max_time 1 -max_iter 4 --target_error 1e-2 --order 4
