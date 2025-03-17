@@ -15,6 +15,7 @@ using SparseArrays: sparse
 
 
 include("common.jl")
+export AbstractControl, ControlsType
 
 include("preconditioners.jl")
 export IdentityPreconditioner, LUPreconditioner, DiagonalHamiltonianPreconditioner
@@ -74,6 +75,7 @@ export get_populations, target_helper, plot_populations, real_to_complex,
 
 include("richardson_extrapolation.jl")
 include("cnot3_setup.jl")
+export get_controls, get_D1, setup_cnot3
 
 include("plotting.jl")
 export plot_control
