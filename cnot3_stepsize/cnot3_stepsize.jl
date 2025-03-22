@@ -103,11 +103,18 @@ function collect_data(prob::SchrodingerProb, controls::ControlsType,
     
     filename_csv = filename_base * ".csv"
     filename_final_states_csv = filename_base * "_finalStates.csv"
-    filename_state_saves_csv = filename_base * "_Nsaves=$(N_timestep_saves).csv"
 
-    csv_data::Matrix{Any} = ["nsteps" "stepsize" "R_abs_err_L1" "R_abs_err_L2" "R_rel_err_L1" "R_rel_err_L2" "R_abs_err_Linf" "elapsed_time"]
-    final_states = Matrix{ComplexF64}(undef, 0, prob.N_tot_levels*prob.N_initial_conditions)
-    state_saves = Matrix{ComplexF64}(undef, 0, prob.N_tot_levels*prob.N_initial_conditions*(1+N_timestep_saves))
+    header = hcat(
+        "nsteps", "stepsize", "N_converged_gmres", "avg_gmres_residual",
+        "R_abs_err_L1", "R_abs_err_L2", "R_rel_err_L1", "R_rel_err_L2",
+        "R_abs_err_Linf", "elapsed_time", "avg_N_gmres_iter",
+    )
+    writedlm(stdout, header)
+
+    writedlm(filename_csv, header, ',')
+
+    final_states_vec = Vector{ComplexF64}(undef, length(prob.u0))
+    gmres_tracker = GMRESTracker()
 
     # Run simulation
     prob.nsteps = 2
@@ -116,68 +123,56 @@ function collect_data(prob::SchrodingerProb, controls::ControlsType,
     # Run simulation once just to get compilation out of the way
     dummy_history = eval_forward(prob, controls, pcof, order=order)
 
-    # Start of actual recorded stepsizes
-    t1 = time()
-    history_2h = eval_forward(prob, controls, pcof, order=order)
-    t2 = time()
-    elapsed_time = t2 - t1
-    # Store/process data
-    final_states = [final_states; reshape(history_2h[:,end,:], 1, :)]
-    state_saves = [state_saves; parse_history_for_csv(history_2h, N_timestep_saves)]
-
-    csv_row = transpose([prob.nsteps, stepsize, NaN, NaN, NaN, NaN, NaN, elapsed_time])
-    csv_data = [csv_data; csv_row]
-
-    # Log data (CSV)
-    writedlm(filename_csv, csv_data, ',')
-    writedlm(filename_final_states_csv, final_states, ',')
-    writedlm(filename_state_saves_csv, state_saves, ',')
+    is_first_step = true
+    history_2h = nothing
+    history_h = nothing
+    elapsed_time = 0.0
 
     # Loop until time runs out (with estimator for when we will go overtime on next simulation)
     while (time()-initial_time) < (max_walltime - 2*elapsed_time)
-        # Set new problem parameters
-        prob.nsteps *= 2
-        stepsize = prob.tf / prob.nsteps
-
-        # Check that we have enough memory
-        estimated_memory = sizeof(history_2h)*div(order,2)*2
-        free_memory = Sys.free_memory()
-        if  estimated_memory > free_memory
-            @warn "Ending early because iteration with $(prob.nsteps) steps is estimated to use $estimated_memory bytes of memory, but only $free_memory bytes of RAM remain."
-            break
-        end
-
         # Run simulation
         t1 = time()
-        history_h = eval_forward(prob, controls, pcof, order=order)
+        history_h = eval_forward(prob, controls, pcof, order=order,
+                                 gmres_tracker=gmres_tracker, verbose=true)
         t2 = time()
         elapsed_time = t2 - t1
 
-        # Store/process data
-        final_states = [final_states; reshape(history_h[:,end,:], 1, :)]
-        state_saves = [state_saves; parse_history_for_csv(history_2h, N_timestep_saves)]
-
-        R = QuantumGateDesign.RichardsonExtrapolation(history_h[:,1:2:end,:], history_2h, order)
-        csv_row = [prob.nsteps stepsize R.abs_err_L1 R.abs_err_L2 R.rel_err_L1 R.rel_err_L2 R.abs_err_Linf elapsed_time]
-        csv_data = [csv_data; csv_row]
+        # Collect data into a row
+        if !is_first_step
+            R = RichardsonExtrapolation(history_h[:,1:2:end,:], history_2h, order)
+            csv_row = hcat(
+                prob.nsteps, stepsize, elapsed_time,
+                avg_N_iterations(gmres_tracker), gmres_tracker.N_converged,
+                avg_residual(gmres_tracker), R.abs_err_L1, R.abs_err_L2,
+                R.rel_err_L1, R.rel_err_L2, R.abs_err_Linf,
+            )
+        else
+            csv_row = hcat(
+                prob.nsteps, stepsize, elapsed_time,
+                avg_N_iterations(gmres_tracker), gmres_tracker.N_converged,
+                avg_residual(gmres_tracker), NaN, NaN, NaN, NaN, NaN, 
+            )
+            is_first_step = false
+        end
 
         # Log data (CSV)
-        writedlm(filename_csv, csv_data, ',')
-        writedlm(filename_final_states_csv, final_states, ',')
-        writedlm(filename_state_saves_csv, state_saves, ',')
+        open(filename_csv, "a+") do io
+            writedlm(io, csv_row, ',')
+        end
+        open(filename_final_states_csv, "a+") do io
+            writedlm(io, final_states_vec, ',')
+        end
+        println(csv_row) # Print row
 
-        println("Size of csv_data:\t", sizeof(csv_data))
-        println("Size of history_h:\t", sizeof(history_h))
-        println("Size of free memory:\t", Int(Sys.free_memory()))
-        println("Data:")
-        println(csv_row)
-
-
+        # Prepare for next iteration
         history_2h = history_h
+        prob.nsteps *= 2
+        stepsize = prob.tf / prob.nsteps
     end
 
     return readdlm(filename_csv, ',')
 end
+
 
 function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
         wa::Juqbox.Working_Arrays, max_walltime::Real,
@@ -185,7 +180,6 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
     )
     order = 2
 
-    # Make a local function that makes it easy to get history from Juqbox
     function eval_forward_juqbox()
         verbose = true
         evaladjoint = false
@@ -200,13 +194,18 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
     
     filename_csv = filename_base * ".csv"
     filename_final_states_csv = filename_base * "_finalStates.csv"
-    filename_state_saves_csv = filename_base * "_Nsaves=$(N_timestep_saves).csv"
 
-    csv_data::Matrix{Any} = ["nsteps" "stepsize" "R_abs_err_L1" "R_abs_err_L2" "R_rel_err_L1" "R_rel_err_L2" "R_abs_err_Linf" "elapsed_time"]
+    header = hcat(
+        "nsteps", "stepsize", "N_converged_gmres", "avg_gmres_residual",
+        "R_abs_err_L1", "R_abs_err_L2", "R_rel_err_L1", "R_rel_err_L2",
+        "R_abs_err_Linf", "elapsed_time", "avg_N_gmres_iter",
+    )
+    writedlm(stdout, header)
 
-    state_matrix_size = (params.N+params.Nguard)*size(params.Uinit, 2)
-    final_states = Matrix{ComplexF64}(undef, 0, state_matrix_size)
-    state_saves = Matrix{ComplexF64}(undef, 0, state_matrix_size*(1+N_timestep_saves))
+    writedlm(filename_csv, header, ',')
+
+    final_states_vec = Vector{ComplexF64}(undef, length(params.Uinit))
+    gmres_tracker = GMRESTracker()
 
     # Run simulation
     params.nsteps = 2
@@ -215,64 +214,47 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
     # Run simulation once just to get compilation out of the way
     dummy_history = eval_forward_juqbox()
 
-    # Start of actual recorded stepsizes
-    t1 = time()
-    history_2h = eval_forward_juqbox()
-    t2 = time()
-    elapsed_time = t2 - t1
-    # Store/process data
-    final_states = [final_states; reshape(history_2h[:,end,:], 1, :)]
-    state_saves = [state_saves; parse_history_for_csv(history_2h, N_timestep_saves)]
-
-    csv_row = transpose([params.nsteps, stepsize, NaN, NaN, NaN, NaN, NaN, elapsed_time])
-    csv_data = [csv_data; csv_row]
-
-    # Log data (CSV)
-    writedlm(filename_csv, csv_data, ',')
-    writedlm(filename_final_states_csv, final_states, ',')
-    writedlm(filename_state_saves_csv, state_saves, ',')
+    is_first_step = true
+    history_2h = nothing
+    history_h = nothing
 
     # Loop until time runs out (with estimator for when we will go overtime on next simulation)
     while (time()-initial_time) < (max_walltime - 2*elapsed_time)
-        # Set new problem parameters
-        params.nsteps *= 2
-        stepsize = params.T / params.nsteps
-
-        # Check that we have enough memory
-        estimated_memory = sizeof(history_2h)*div(order,2)*2
-        free_memory = Sys.free_memory()
-        if  estimated_memory > free_memory
-            @warn "Ending early because iteration with $(params.nsteps) steps is estimated to use $estimated_memory bytes of memory, but only $free_memory bytes of RAM remain."
-            break
-        end
-
         # Run simulation
         t1 = time()
         history_h = eval_forward_juqbox()
         t2 = time()
         elapsed_time = t2 - t1
 
-        # Store/process data
-        final_states = [final_states; reshape(history_h[:,end,:], 1, :)]
-        state_saves = [state_saves; parse_history_for_csv(history_2h, N_timestep_saves)]
-
-        R = QuantumGateDesign.RichardsonExtrapolation(history_h[:,1:2:end,:], history_2h, order)
-        csv_row = [params.nsteps stepsize R.abs_err_L1 R.abs_err_L2 R.rel_err_L1 R.rel_err_L2 R.abs_err_Linf elapsed_time]
-        csv_data = [csv_data; csv_row]
+        # Collect data into a row
+        if !is_first_step
+            R = RichardsonExtrapolation(history_h[:,1:2:end,:], history_2h, order)
+            csv_row = hcat(
+                params.nsteps, stepsize, elapsed_time,
+                avg_N_iterations(gmres_tracker), gmres_tracker.N_converged,
+                avg_residual(gmres_tracker), R.abs_err_L1, R.abs_err_L2,
+                R.rel_err_L1, R.rel_err_L2, R.abs_err_Linf,
+            )
+        else
+            csv_row = hcat(
+                params.nsteps, stepsize, elapsed_time, NaN, NaN, NaN, NaN, NaN,
+            )
+            is_first_step = false
+        end
 
         # Log data (CSV)
-        writedlm(filename_csv, csv_data, ',')
-        writedlm(filename_final_states_csv, final_states, ',')
-        writedlm(filename_state_saves_csv, state_saves, ',')
+        open(filename_csv, "a+") do io
+            writedlm(io, csv_row, ',')
+        end
+        open(filename_final_states_csv, "a+") do io
+            writedlm(io, final_states_vec, ',')
+        end
+        println(csv_row) # Print row
 
-        println("Size of csv_data:\t", sizeof(csv_data))
-        println("Size of history_h:\t", sizeof(history_h))
-        println("Size of free memory:\t", Int(Sys.free_memory()))
-        println("Data:")
-        println(csv_row)
-
-
+        # Prepare for next iteration
         history_2h = history_h
+        params.nsteps *= 2
+        stepsize = params.tf / params.nsteps
     end
 
     return readdlm(filename_csv, ',')
