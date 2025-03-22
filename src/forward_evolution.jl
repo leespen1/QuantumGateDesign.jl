@@ -3,35 +3,68 @@ Type for keeping track of how many GMRES iterations occured throughout the
 forward solves.
 """
 mutable struct GMRESTracker
-    total_N_iterations::Int64
     N_linear_solves::Int64
-    avg_N_iterations::Float64
+    N_converged::Int64
+    total_N_iterations::Int64
     max_N_iterations::Int64
-    min_N_iterations::Int64
+    accumulated_residuals::Float64
+    max_residual::Float64
     function GMRESTracker()
-        new(0,0,NaN,-1,typemax(Int))
+        new(0, 0, 0, -1, 0.0, 0.0)
     end
 end
 
-function update!(tracker::GMRESTracker, N_iter::Integer)
-    tracker.total_N_iterations += N_iter
+# TODO use functions for averages  
+@inline function avg_residual(tracker::GMRESTracker)
+    return tracker.accumulated_residuals / tracker.N_linear_solves
+end
+
+@inline function avg_N_iterations(tracker::GMRESTracker)
+    return tracker.total_N_iterations / tracker.N_linear_solves
+
+end
+
+
+function update_gmres_tracker!(tracker::GMRESTracker, N_iter::Integer, residual::Real, converged::Bool)
     tracker.N_linear_solves += 1
-    tracker.avg_N_iterations = tracker.total_N_iterations / tracker.N_linear_solves
+    tracker.N_converged += converged ? 1 : 0
+    tracker.total_N_iterations += N_iter
     tracker.max_N_iterations = max(N_iter, tracker.max_N_iterations)
-    tracker.min_N_iterations = min(N_iter, tracker.max_N_iterations)
+    tracker.accumulated_residuals += residual
+    tracker.max_residual = max(residual, tracker.max_residual)
     return tracker
 end
 
-function merge(tracker1::GMRESTracker, tracker2::GMRESTracker)
+
+function merged_gmres_tracker(trackers::Vararg{GMRESTracker})
     merged_tracker = GMRESTracker()
-    merged_tracker.total_N_iterations = tracker1.total_N_iterations + tracker2.total_N_iterations
-    merged_tracker.N_linear_solves = tracker1.N_linear_solves + tracker2.N_linear_solves
-    merged_tracker.avg_N_iterations = merged_tracker.total_N_iterations / merged_tracker.N_linear_solves
-    merged_tracker.max_N_iterations = max(tracker1.max_N_iterations, tracker2.max_N_iterations)
-    merged_tracker.min_N_iterations = min(tracker1.min_N_iterations, tracker2.min_N_iterations)
+    for tracker in trackers
+        merge_gmres_trackers!(merged_tracker, tracker)
+    end
     return merged_tracker
 end
 
+function merge_gmres_trackers!(gt1::GMRESTracker, gt2::GMRESTracker)
+    gt1.N_linear_solves += gt2.N_linear_solves
+    gt1.N_converged += gt2.N_converged
+    gt1.total_N_iterations += gt2.total_N_iterations
+    gt1.max_N_iterations = max(gt1.max_N_iterations, gt2.max_N_iterations)
+    gt1.accumulated_residuals += gt2.accumulated_residuals
+    gt1.max_residual = max(gt1.max_residual, gt2.max_residual)
+
+    return gt1
+end
+
+function copyto_gmres_tracker!(gt1::GMRESTracker, gt2::GMRESTracker)
+    gt1.N_linear_solves = gt2.N_linear_solves
+    gt1.N_converged = gt2.N_converged
+    gt1.total_N_iterations = gt2.total_N_iterations
+    gt1.max_N_iterations = gt2.max_N_iterations
+    gt1.accumulated_residuals = gt2.accumulated_residuals
+    gt1.max_residual = gt2.max_residual
+
+    return gt1
+end
 
 """
     eval_forward(prob, controls, pcof; [order=2, saveEveryNsteps=1, forcing=missing,])
@@ -50,7 +83,8 @@ vector for each initial condition as a 4D array.
 function eval_forward(
         prob::SchrodingerProb{M1, M2, P}, controls::ControlsType, pcof::AbstractVector{<: Real};
         order::Int=2, saveEveryNsteps::Int=1,
-        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
+        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing, verbose::Bool=false,
+        gmres_tracker::Union{GMRESTracker, Missing}=missing,
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
 
     N_derivatives = div(order, 2)
@@ -58,7 +92,8 @@ function eval_forward(
     uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_save, prob.N_initial_conditions)
 
     eval_forward!(uv_history, prob, controls, pcof, order=order,
-                  saveEveryNsteps=saveEveryNsteps; forcing=forcing)
+                  saveEveryNsteps=saveEveryNsteps; forcing=forcing,
+                  verbose=verbose, gmres_tracker=gmres_tracker)
 
     return real_to_complex(uv_history[:,1,:,:])
 end
@@ -68,7 +103,8 @@ end
 function eval_forward!(uv_history::AbstractArray{Float64, 4},
         prob::SchrodingerProb{M1, M2, P}, controls::ControlsType,
         pcof::AbstractVector{<: Real}; order::Int=2, saveEveryNsteps::Int=1,
-        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing
+        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
+        verbose::Bool=false, gmres_tracker::Union{GMRESTracker, Missing}=missing
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
 
     N_derivatives = div(order, 2)
@@ -92,16 +128,20 @@ function eval_forward!(uv_history::AbstractArray{Float64, 4},
             this_forcing = @view forcing[:, :, :, initial_condition_index]
         end
 
-        gmres_tracker = eval_forward!(
+        local_gmres_tracker = eval_forward!(
             this_uv_history, vector_prob, controls_copy, pcof; order=order, 
             saveEveryNsteps=saveEveryNsteps, forcing=this_forcing
         )
-        gmres_trackers[initial_condition_index] = gmres_tracker
+        gmres_trackers[initial_condition_index] = local_gmres_tracker
     end
 
-    full_gmres_tracker = reduce(merge, gmres_trackers)
-    if full_gmres_tracker.max_N_iterations >= prob.real_system_size
-        @warn "Maximum number of GMRES iterations performed ($(full_gmres_tracker.max_N_iterations)) equals or exceeds real system size ($(prob.real_system_size)). Specified GMRES tolerance may not have been reached."
+    full_gmres_tracker = merged_gmres_tracker(gmres_trackers...)
+    if verbose && (full_gmres_tracker.N_converged != full_gmres_tracker.N_linear_solves)
+        @warn "Only $(full_gmres_tracker.N_converged)/$(full_gmres_tracker.N_linear_solves) GMRES linear solves converged."
+    end
+
+    if !ismissing(gmres_tracker)
+        copyto_gmres_tracker!(gmres_tracker, full_gmres_tracker)
     end
 
     return full_gmres_tracker
@@ -238,15 +278,16 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
             axpy!(-1.0, forcing_helper_vec, RHS)
         end
 
-
         update_gmres_iterable!(gmres_iterable, uv_vec, RHS)
 
         N_gmres_iterations = 0
         for iter in gmres_iterable
             N_gmres_iterations += 1
         end
-        update!(gmres_tracker, N_gmres_iterations)
-        # if !convergered(gmres_iterable) @warn
+
+        update_gmres_tracker!(gmres_tracker, N_gmres_iterations,
+                              gmres_iterable.residual.current,
+                              IterativeSolvers.converged(gmres_iterable))
 
         uv_mat[:,1] .= gmres_iterable.x
     end
@@ -273,14 +314,14 @@ function eval_adjoint(
         prob::SchrodingerProb{M1, M2, P}, controls::ControlsType,
         pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64};
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
-        order::Int=2
+        order::Int=2, verbose::Bool=false
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
 
     N_derivatives = div(order, 2)
     uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
 
     eval_adjoint!(uv_history, prob, controls, pcof, terminal_condition;
-        order=order, forcing=forcing
+        order=order, forcing=forcing, verbose=verbose
     )
 
     return uv_history
@@ -291,6 +332,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
         pcof::AbstractVector{<: Real},
         terminal_condition::AbstractMatrix{Float64} ; order::Int=2,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
+        verbose::Bool=false
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_derivatives = div(order, 2)
@@ -322,8 +364,8 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
     end
 
     full_gmres_tracker = reduce(merge, gmres_trackers)
-    if full_gmres_tracker.max_N_iterations >= prob.real_system_size
-        @warn "Maximum number of GMRES iterations performed ($(full_gmres_tracker.max_N_iterations)) equals or exceeds real system size ($(prob.real_system_size)). Specified GMRES tolerance may not have been reached."
+    if verbose && (full_gmres_tracker.N_converged != full_gmres_tracker.N_linear_solves)
+        @warn "Only $(full_gmres_tracker.N_converged)/$(full_gmres_tracker.N_linear_solves) GMRES linear solves converged."
     end
 
     return full_gmres_tracker
@@ -336,7 +378,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         pcof::AbstractVector{<: Real},
         terminal_condition::AbstractVector{Float64};
         forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
-        order::Int=2, use_taylor_guess=true, verbose=false,
+        order::Int=2, use_taylor_guess=true, verbose::Bool=false,
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, P}
 
     gmres_tracker = GMRESTracker()
@@ -433,7 +475,10 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
         for iter in gmres_iterable
             N_gmres_iterations += 1
         end
-        update!(gmres_tracker, N_gmres_iterations)
+
+        update_gmres_tracker!(gmres_tracker, N_gmres_iterations,
+                              gmres_iterable.residual.current,
+                              IterativeSolvers.converged(gmres_iterable))
 
         uv_mat[:,1] .= gmres_iterable.x
     end
