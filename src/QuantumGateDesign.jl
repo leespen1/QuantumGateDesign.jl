@@ -29,6 +29,7 @@ include("hermite.jl")
 # Forward and Adjoint Evolution
 include("forward_evolution.jl")
 export eval_forward, eval_forward_forced
+export GMRESTracker, avg_N_iterations, avg_residual
 
 include("infidelity.jl")
 export infidelity
@@ -74,6 +75,8 @@ export get_populations, target_helper, plot_populations, real_to_complex,
        complex_to_real
 
 include("richardson_extrapolation.jl")
+export RichardsonExtrapolation
+
 include("cnot3_setup.jl")
 export get_controls, get_D1, setup_cnot3
 

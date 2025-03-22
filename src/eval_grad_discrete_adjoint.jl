@@ -182,16 +182,6 @@ end
     
 
 
-#=
-function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
-        prob::SchrodingerProb{M, V, P}, controls, pcof::AbstractVector{<: Real},
-        terminal_condition::AbstractVector{Float64};
-        forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
-        order::Int=2,
-        use_taylor_guess=true, verbose=false,
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, P}
-=#
-
 """
 Change name to 'accumulate gradient' or something
 
