@@ -332,7 +332,7 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
         pcof::AbstractVector{<: Real},
         terminal_condition::AbstractMatrix{Float64} ; order::Int=2,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
-        verbose::Bool=false
+        verbose::Bool=false, gmres_tracker::Union{Missing, GMRESTracker}=missing
     ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
 
     N_derivatives = div(order, 2)
@@ -363,9 +363,14 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
         gmres_trackers[initial_condition_index] = gmres_tracker
     end
 
-    full_gmres_tracker = reduce(merge, gmres_trackers)
+    full_gmres_tracker = merged_gmres_tracker(gmres_trackers...)
     if verbose && (full_gmres_tracker.N_converged != full_gmres_tracker.N_linear_solves)
         @warn "Only $(full_gmres_tracker.N_converged)/$(full_gmres_tracker.N_linear_solves) GMRES linear solves converged."
+    end
+
+
+    if !ismissing(gmres_tracker)
+        copyto_gmres_tracker!(gmres_tracker, full_gmres_tracker)
     end
 
     return full_gmres_tracker
