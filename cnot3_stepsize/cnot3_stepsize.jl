@@ -85,7 +85,7 @@ function main()
         @assert degree == 2
         collect_data_juqbox(
             cnot3ret.pcof0, cnot3ret.juqbox_params, cnot3ret.juqbox_wa, time,
-            filename, N_timestep_saves
+            filename, N_timestep_saves, compute_gradient
         )
     else
         if compute_gradient
@@ -191,15 +191,16 @@ end
 
 function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
         wa::Juqbox.Working_Arrays, max_walltime::Real,
-        filename_base::AbstractString, N_timestep_saves::Integer
+        filename_base::AbstractString, N_timestep_saves::Integer, gradient::Bool=false
     )
     order = 2
 
-    function eval_forward_juqbox()
+    function eval_forward_juqbox(gradient::Bool)
         verbose = true
-        evaladjoint = false
-        objfv, history, mfidelityrot = traceobjgrad(pcof0, params, wa, verbose, evaladjoint)
+        evaladjoint = gradient
+        returned_tup = traceobjgrad(pcof0, params, wa, verbose, evaladjoint)
         # juqbox_history is ordered differently than QuantumGateDesign
+        history = gradient ? returned_tup[3] : returned_tup[2]
         history_reordered = permutedims(history, (1,3,2))
         return history_reordered
     end
