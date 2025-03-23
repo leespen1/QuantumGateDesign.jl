@@ -32,6 +32,10 @@ function parse_commandline()
             help = "Use Juqbox to perform the timestepping."
             arg_type = Bool
             default = false
+        "--gradient"
+            help = "Calculate gradient in addition to forward evolution."
+            arg_type = Bool
+            default = false
         "order"
             help = "Method order to use"
             required = true
@@ -62,6 +66,7 @@ function main()
     N_timestep_saves = parsed_args["nsaves"]
     output_directory = parsed_args["output_directory"]
     use_juqbox = parsed_args["use_juqbox"]
+    compute_gradient = parsed_args["gradient"]
 
     nthreads = Threads.nthreads()
     cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1)
@@ -73,7 +78,7 @@ function main()
     pcof = cnot3ret.amax * 2* (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
     mkpath(output_directory)
-    filename = output_directory * "/cnot3StepsizeTest_order=$(order)_degree=$(degree)_seed=$(seed)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)_usejuqbox=$(use_juqbox)"
+    filename = output_directory * "/cnot3StepsizeTest_order=$(order)_degree=$(degree)_seed=$(seed)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)_usejuqbox=$(use_juqbox)_gradient=$(compute_gradient)"
 
     if use_juqbox
         @assert order == 2
@@ -83,8 +88,17 @@ function main()
             filename, N_timestep_saves
         )
     else
-        collect_data(cnot3ret.qgd_prob, controls, cnot3ret.pcof0, order, time,
-                     filename, N_timestep_saves)
+        if compute_gradient
+            collect_data_grad(
+                cnot3ret.qgd_prob, controls, cnot3ret.pcof0, cnot3ret.target,
+                order, time, filename, N_timestep_saves
+            )
+        else
+            collect_data(
+                cnot3ret.qgd_prob, controls, cnot3ret.pcof0, order, time,
+                filename, N_timestep_saves
+            )
+        end
     end
     println("Finished! Stored results at:\n\t", filename)
 
@@ -105,9 +119,10 @@ function collect_data(prob::SchrodingerProb, controls::ControlsType,
     filename_final_states_csv = filename_base * "_finalStates.csv"
 
     header = hcat(
-        "nsteps", "stepsize", "N_converged_gmres", "avg_gmres_residual",
+        "nsteps", "stepsize", "elapsed_time", "avg_N_gmres_iter",
+        "N_converged_gmres", "avg_gmres_residual", "max_gmres_residual",
         "R_abs_err_L1", "R_abs_err_L2", "R_rel_err_L1", "R_rel_err_L2",
-        "R_abs_err_Linf", "elapsed_time", "avg_N_gmres_iter",
+        "R_abs_err_Linf",
     )
     writedlm(stdout, header)
 
@@ -196,16 +211,17 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
     filename_final_states_csv = filename_base * "_finalStates.csv"
 
     header = hcat(
-        "nsteps", "stepsize", "N_converged_gmres", "avg_gmres_residual",
+        "nsteps", "stepsize", "elapsed_time", "avg_N_gmres_iter",
+        "N_converged_gmres", "avg_gmres_residual", "max_gmres_residual",
         "R_abs_err_L1", "R_abs_err_L2", "R_rel_err_L1", "R_rel_err_L2",
-        "R_abs_err_Linf", "elapsed_time", "avg_N_gmres_iter",
+        "R_abs_err_Linf",
     )
     writedlm(stdout, header)
 
     writedlm(filename_csv, header, ',')
 
     final_states_vec = Vector{ComplexF64}(undef, length(params.Uinit))
-    gmres_tracker = GMRESTracker()
+    gmres_tracker = GMRESTracker() # Defaults to NaN values
 
     # Run simulation
     params.nsteps = 2
@@ -260,6 +276,110 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
     return readdlm(filename_csv, ',')
 end
 
+
+function collect_data_grad(prob::SchrodingerProb, controls::ControlsType,
+        pcof::AbstractVector{<: Real}, target::AbstractMatrix{<: Number}, order::Integer, max_walltime::Real,
+        filename_base::AbstractString, N_timestep_saves::Integer
+    )
+    prob = copy(prob) # Copy problem, just to make sure there are no mutability issues.
+
+    initial_time = time()
+    max_walltime *= 60*60 # convert walltime from hours to seconds
+    
+    filename_csv = filename_base * ".csv"
+    filename_final_states_csv = filename_base * "_finalStates.csv"
+
+    header = hcat(
+        "nsteps", "stepsize", "elapsed_time", "forward_time", "adjoint_time",
+        "grad_accum_time", "avg_N_gmres_iter_fwd", "N_converged_gmres_fwd",
+        "avg_gmres_residual_fwd", "avg_N_gmres_iter_adj", "N_converged_gmres_adj",
+        "avg_gmres_residual_adj", "R_abs_err_L1", "R_abs_err_L2", "R_rel_err_L1",
+        "R_rel_err_L2", "R_abs_err_Linf",
+    )
+    writedlm(stdout, header)
+
+    writedlm(filename_csv, header, ',')
+
+    final_states_vec = Vector{ComplexF64}(undef, length(prob.u0))
+    forward_gmres_tracker = GMRESTracker()
+    adjoint_gmres_tracker = GMRESTracker()
+
+    # Run simulation
+    prob.nsteps = 2
+    stepsize = prob.tf / prob.nsteps
+
+    # Run simulation once just to get compilation out of the way
+    dummy_history = eval_forward(prob, controls, pcof, order=order)
+
+    timer = QuantumGateDesign.DiscreteAdjointTimes()
+    is_first_step = true
+    history_2h = nothing
+    history_h = nothing
+    elapsed_time = 0.0
+    N_derivatives = div(order,2)
+    grad = zeros(get_number_of_control_parameters(controls))
+
+    # Loop until time runs out (with estimator for when we will go overtime on next simulation)
+    while (time()-initial_time) < (max_walltime - 2*elapsed_time)
+        # Run simulation
+        history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
+        lambda_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
+        adjoint_forcing = zeros(prob.real_system_size, 1+prob.nsteps, prob.N_initial_conditions)
+
+        QuantumGateDesign.discrete_adjoint!(
+            grad, history, lambda_history, adjoint_forcing, prob, controls,
+            pcof, target, order=order, timer=timer,
+            forward_gmres_tracker=forward_gmres_tracker,
+            adjoint_gmres_tracker=adjoint_gmres_tracker,
+        )
+        history_h = QuantumGateDesign.real_to_complex(history[:,1,:,:])
+
+        # Collect data into a row
+        if !is_first_step
+            R = RichardsonExtrapolation(history_h[:,1:2:end,:], history_2h, order)
+            csv_row = hcat(
+                prob.nsteps, stepsize, QuantumGateDesign.total_time(timer),
+                timer.forward, timer.adjoint, timer.grad_accum,
+                avg_N_iterations(forward_gmres_tracker),
+                forward_gmres_tracker.N_converged,
+                avg_residual(forward_gmres_tracker),
+                avg_N_iterations(adjoint_gmres_tracker),
+                adjoint_gmres_tracker.N_converged,
+                avg_residual(adjoint_gmres_tracker), R.abs_err_L1,
+                R.abs_err_L2, R.rel_err_L1, R.rel_err_L2, R.abs_err_Linf,
+            )
+        else
+            csv_row = hcat(
+                prob.nsteps, stepsize, QuantumGateDesign.total_time(timer),
+                timer.forward, timer.adjoint, timer.grad_accum,
+                avg_N_iterations(forward_gmres_tracker),
+                forward_gmres_tracker.N_converged,
+                avg_residual(forward_gmres_tracker),
+                avg_N_iterations(adjoint_gmres_tracker),
+                adjoint_gmres_tracker.N_converged,
+                avg_residual(adjoint_gmres_tracker), NaN,
+                NaN, NaN, NaN, NaN,
+            )
+            is_first_step = false
+        end
+
+        # Log data (CSV)
+        open(filename_csv, "a+") do io
+            writedlm(io, csv_row, ',')
+        end
+        open(filename_final_states_csv, "a+") do io
+            writedlm(io, final_states_vec, ',')
+        end
+        println(csv_row) # Print row
+
+        # Prepare for next iteration
+        history_2h = history_h
+        prob.nsteps *= 2
+        stepsize = prob.tf / prob.nsteps
+    end
+
+    return readdlm(filename_csv, ',')
+end
 
 
 
