@@ -4,7 +4,7 @@ using IterTools
 import Makie
 CairoMakie.set_theme!(CairoMakie.theme_latexfonts())
 
-function get_data(x_header, y_header, out_order, data_directory=missing)
+function get_data(x_header, y_header, out_order, data_directory=missing, juqbox=false)
     file_pattern= r"""cnot3StepsizeTest
     _order=(\d+)
     _degree=(\d+)
@@ -14,7 +14,8 @@ function get_data(x_header, y_header, out_order, data_directory=missing)
     _D1=(\d+)
     _time=(.*)
     _nthreads=(\d+)
-    .csv
+    (?:_usejuqbox=(true|false))? # Optionally match , doesn't appear in older files
+    \.csv
     """x # 'x' tag ignores whitespace and comments
 
     x_data_entries = Any[]
@@ -37,8 +38,9 @@ function get_data(x_header, y_header, out_order, data_directory=missing)
             D1       = parse(Int,     regex_match[6])
             time     = parse(Float64, regex_match[7])
             nthreads = parse(Int,     regex_match[8])
+            usejuqbox = regex_match[9] == "true" ? true : false
 
-            if order == out_order
+            if ((order == out_order) && (juqbox == usejuqbox))
                 files_found += 1
                 filepath = data_directory * "/" * file
 
@@ -78,7 +80,7 @@ function get_x_vec_y_mat(x_data_entries, y_data_entries)
         @warn "Not all x_data entries are the same length. Max is $max_length, min is $min_length."
     end
 
-    # Use the longest one
+    # Get the vector from x_data_entries with the longest length
     x_vec = argmax(length, x_data_entries)
 
     n_entries = length(x_data_entries)
@@ -96,7 +98,7 @@ function get_x_vec_y_mat(x_data_entries, y_data_entries)
     return x_vec, x_mat, y_mat
 end
 
-function get_data_final_states(out_order, data_directory=missing)
+function get_data_final_states(out_order, data_directory=missing, juqbox=false)
     file_pattern= r"""cnot3StepsizeTest
     _order=(\d+)
     _degree=(\d+)
@@ -106,8 +108,9 @@ function get_data_final_states(out_order, data_directory=missing)
     _D1=(\d+)
     _time=(.*)
     _nthreads=(\d+)
+    (?:_usejuqbox=(true|false))? # Optionally match , doesn't appear in older files
     _finalStates
-    .csv
+    \.csv
     """x # 'x' tag ignores whitespace and comments
 
 
@@ -125,12 +128,17 @@ function get_data_final_states(out_order, data_directory=missing)
         if occursin(file_pattern, file)
             regex_match = match(file_pattern, file)
             order    = parse(Int,     regex_match[1])
+            usejuqbox = regex_match[9] == "true" ? true : false
 
-            if order == out_order
+            if (order == out_order) && (usejuqbox == juqbox)
                 files_found += 1
                 filepath = data_directory * "/" * file
 
-                final_states = readdlm(filepath, ',', ComplexF64)
+                # Read as String first, then convert. Otherwise NaN+NaN*im
+                # won't be interpreted correctly
+                final_states = readdlm(filepath, ',', String)
+                final_states = map(x -> x == "NaN + NaN*im" ? NaN + NaN*im : parse(ComplexF64, x),
+                                   final_states)
 
                 true_final_state = final_states[end,:]
                 true_final_state_size = norm(true_final_state)
@@ -176,114 +184,171 @@ end
 
 #data_directory = "Data"
 #data_directory = "48854734"
-data_directory = "./49076519/49076519/"
+#data_directory = "./49076519/49076519/"
+data_directory = "./DataMar18/"
 makie_stddev = Any[]
 makie_spaghetti = Any[]
 
 #ticks_10f(i) = (i < 0) ? L"10^{\text{-}%$(-i)}" : L"10^{%$i}"
 ticks_10f(i) = L"10^{%$i}"
 
-unlabeled_xticks = (2 .^ (5:5:20), ["" for i in 5:5:20])
-labeled_xticks = (2 .^ (5:5:20), [L"2^{%$i}" for i in 5:5:20])
-minor_xticks = 2 .^ (0:20)
+unlabeled_timestep_ticks = (2 .^ (5:5:20), ["" for i in 5:5:20])
+labeled_timestep_ticks = (2 .^ (5:5:20), [L"2^{%$i}" for i in 5:5:20])
+minor_timestep_ticks = 2 .^ (0:20)
 
-my_yticks = (10.0 .^ (-15:15), ticks_10f.(-15:15))
+log10_ticks = (10.0 .^ (-15:15), ticks_10f.(-15:15))
 #my_minoryticks = (10.0 .^ (-15:5:15), ticks_10f.(-15:5:15))
 # Getting correct figure, font size: https://docs.makie.org/stable/how-to/match-figure-size-font-sizes-and-dpi
 inch = 96
-fig = CairoMakie.Figure(size=(3.25inch, 4.5inch), fontsize=12, figure_padding=5)
-#fig = CairoMakie.Figure(size=(4inch, 4.5inch), fontsize=12, figure_padding=5)
+#fig = CairoMakie.Figure(size=(3.25inch, 4.5inch), fontsize=12, figure_padding=5)
+fig = CairoMakie.Figure(size=(6inch, 4inch), fontsize=12, figure_padding=5)
+fig2 = CairoMakie.Figure(size=(4inch, 4inch), fontsize=12, figure_padding=5)
+
 
 ax_error = CairoMakie.Axis(
     fig[1,1],
     xscale=CairoMakie.log2,
     yscale=CairoMakie.log10,
-    #xlabel="Number of Timesteps",
+    xlabel="Number of Timesteps",
     ylabel="Mean Relative Error",
-    xticks=unlabeled_xticks,
-    xminorticks = minor_xticks,
+    xticks=labeled_timestep_ticks,
+    xminorticks = minor_timestep_ticks,
     xminorticksvisible = true,
     xminorgridvisible = true,
-    yticks=my_yticks,
+    yticks=log10_ticks,
+    limits=(nothing, (10.0^(-11.25), 10.0^0.25)),
 )
 
 ax_timing = CairoMakie.Axis(
-    fig[2,1],
+    fig[1,2],
     xscale=CairoMakie.log2,
     yscale=CairoMakie.log10,
     xlabel="Number of Timesteps",
-    ylabel="Mean Wall Time (s)",
-    xticks=labeled_xticks,
-    xminorticks = minor_xticks,
+    ylabel="Mean Elapsed Wall Time (s)",
+    xticks=labeled_timestep_ticks,
+    xminorticks = minor_timestep_ticks,
     xminorticksvisible = true,
     xminorgridvisible = true,
     #xticks=(my_xticks, my_xticklabels),
-    yticks=my_yticks,
+    yticks=log10_ticks,
     #title="Elapsed Time Plot",
 )
 
-linkxaxes!(ax_error, ax_timing)
+#linkxaxes!(ax_error, ax_timing)
+
+ax_err_vs_timing = CairoMakie.Axis(
+    fig2[1,1],
+    xscale=CairoMakie.log10,
+    yscale=CairoMakie.log10,
+    xlabel="Mean Relative Error",
+    ylabel="Mean Elapsed Wall Time (s)",
+    #xminorticksvisible = true,
+    #xminorgridvisible = true,
+    xticks=log10_ticks,
+    yticks=log10_ticks,
+    #title="Elapsed Time Plot",
+    limits=((10.0^(-10.25), 10.0^(-0.75)), (1e-1,1e5)),
+)
 
 
 
 
-orders = [2,4,6,8,10,12]
-# Timing Plot
+
+#orders = [2,4,6,8,10,12]
+orders = [2,4,6,8,10,12, "2 (Stormer-Verlet)"]
+#orders = [2,4,6,8,"2 (Stormer-Verlet)"]
+colors = vcat(Makie.wong_colors()[1:6], :darkkhaki)
+
+# TODO: merge the two for-loops into one, but this all into a function so I don't need to write `local` so many times
 for (k, order) in enumerate(orders)
-    local nsteps_vec_entries, elapsedtime_vec_entries = get_data("nsteps", "elapsed_time", order, data_directory)
 
-    local full_nsteps_vec, nsteps_mat, elapsedtime_mat = get_x_vec_y_mat(nsteps_vec_entries, elapsedtime_vec_entries)
-    local elapsedtime_mean =  mean(elapsedtime_mat, dims=2) |> vec
-    local elapsedtime_stddev = std(elapsedtime_mat, dims=2) |> vec
-
-    local lines_obj = lines!(ax_timing, full_nsteps_vec[5:end], elapsedtime_mean[5:end]; color=Makie.wong_colors()[k], linewidth=0.95)
-    CairoMakie.translate!(lines_obj, 0, 0, -k) # Draw the high-order methods in the back
-    #= 
-    #For Spaghetti Style
-    for (nsteps_vec, elapsedtime_vec) in zip(nsteps_vec_entries, elapsedtime_vec_entries)
-        CairoMakie.lines!(ax_timing, nsteps_vec[5:end], elapsedtime_vec[5:end]; color=(Makie.wong_colors()[k], 0.5))
+    ##=== Nsteps Vs Relative Error Plot ===##
+    
+    println("\nNsteps Vs Relative Eror Plot")
+    if order == "2 (Stormer-Verlet)"
+        local nsteps_vec_entries, relerr_vec_entries = get_data_final_states(2, data_directory, true)
+    else
+        local nsteps_vec_entries, relerr_vec_entries = get_data_final_states(order, data_directory)
     end
-    =#
-end
+    @show maximum(length, nsteps_vec_entries)
 
-# Err Plot Plot
-for (k, order) in enumerate(orders)
-    local nsteps_vec_entries, relerr_vec_entries = get_data_final_states(order, data_directory)
     local full_nsteps_vec, nsteps_mat, relerr_mat = get_x_vec_y_mat(nsteps_vec_entries, relerr_vec_entries)
 
     local relerr_mean =  mean(relerr_mat, dims=2) |> vec
     local relerr_stddev = std(relerr_mat, dims=2) |> vec
 
-    local full_nsteps_vec = full_nsteps_vec[5:end]
-    local relerr_mean = relerr_mean[5:end]
-    local relerr_stddev = relerr_stddev[5:end]
+    @show length(full_nsteps_vec) 
+    @show full_nsteps_vec
 
-    local lines_obj = lines!(ax_error, full_nsteps_vec, relerr_mean; color=Makie.wong_colors()[k], label="Order $order")
-    CairoMakie.translate!(lines_obj, 0, 0, -k)
+    local lines_obj = lines!(ax_error, full_nsteps_vec[5:end], relerr_mean[5:end]; color=colors[k], label="Order $order")
+    CairoMakie.translate!(lines_obj, 0, 0, -k) # Put the lines in the right z-order
 
-    #band!(ax_error, full_nsteps_vec, relerr_mean - relerr_stddev, relerr_mean + relerr_stddev; color=(Makie.wong_colors()[k], 0.5))
+    ##=== Nsteps Vs Wall Time Plot ===##
+    #
+    println("\nNsteps Vs Wall Time Plot")
+    
+    if order == "2 (Stormer-Verlet)"
+        local nsteps_vec_entries, elapsedtime_vec_entries = get_data("nsteps", "elapsed_time", 2, data_directory, true)
+    else
+        local nsteps_vec_entries, elapsedtime_vec_entries = get_data("nsteps", "elapsed_time", order, data_directory)
+    end
+    @show maximum(length, nsteps_vec_entries)
+
+    local full_nsteps_vec, nsteps_mat, elapsedtime_mat = get_x_vec_y_mat(nsteps_vec_entries, elapsedtime_vec_entries)
+    local elapsedtime_mean =  mean(elapsedtime_mat, dims=2) |> vec
+    local elapsedtime_stddev = std(elapsedtime_mat, dims=2) |> vec
+
+    local lines_obj = lines!(ax_timing, full_nsteps_vec[5:end], elapsedtime_mean[5:end]; color=colors[k])
+    CairoMakie.translate!(lines_obj, 0, 0, -k) # Draw the high-order methods in the back
+
+    ##=== Relative Error Vs Wall Time Plot ===##
+
+    @show length(full_nsteps_vec) 
+    @show full_nsteps_vec
+    @show length(relerr_mean)
+    @show length(elapsedtime_mean)
+    local scatter_obj = lines!(ax_err_vs_timing, relerr_mean[5:end], elapsedtime_mean[6:end]; color=colors[k], label="Order $order")
+    local dummy_relerr_mean = [10.0 ^(-i) for i in 5:10]
+    local dummy_elapsedtime_mean = 0.5 .* (dummy_relerr_mean .^ -0.47)
+    local scatter_obj = lines!(ax_err_vs_timing, dummy_relerr_mean, dummy_elapsedtime_mean; color=colors[k], label="Order $order", linestyle=:dot)
+    CairoMakie.translate!(scatter_obj, 0, 0, -k) # Put the lines in the right z-order
+
+    #band!(ax_error, full_nsteps_vec, relerr_mean - relerr_stddev, relerr_mean + relerr_stddev; color=colors[k], 0.5))
 
     #= 
     #Spaghetti Style
     for (nsteps_vec, relerr_vec) in zip(nsteps_vec_entries, relerr_vec_entries)
-        CairoMakie.lines!(ax_spaghetti, nsteps_vec[5:end], relerr_vec[5:end]; color=(Makie.wong_colors()[k], 0.5))
+        CairoMakie.lines!(ax_spaghetti, nsteps_vec[5:end], relerr_vec[5:end]; color=colors[k], 0.5))
     end
     =#
 end
 
 
-# Table
-# Err Plot Plot
+##=== Getting the target error vs nsteps relationship ===##
 target_errors = collect(-1:-1:-7)
 target_nsteps_mat = fill(NaN, length(target_errors), length(orders))
 target_time_mat = fill(NaN, length(target_errors), length(orders))
 
 for (k, order) in enumerate(orders)
+    if order == "2 (Stormer-Verlet)"
+        local nsteps_vec_entries, relerr_vec_entries = get_data_final_states(2, data_directory, true)
+    else
+        local nsteps_vec_entries, relerr_vec_entries = get_data_final_states(order, data_directory)
+    end
 
-    local nsteps_vec_entries, relerr_vec_entries = get_data_final_states(order, data_directory)
     local full_nsteps_vec, nsteps_mat, relerr_mat = get_x_vec_y_mat(nsteps_vec_entries, relerr_vec_entries)
 
-    local nsteps_vec_entries2, elapsedtime_vec_entries = get_data("nsteps", "elapsed_time", order, data_directory)
+    if order == "2 (Stormer-Verlet)"
+        @show full_nsteps_vec
+        @show nsteps_mat[:,1]
+        @show relerr_mat[:,1]
+    end
+
+    if order == "2 (Stormer-Verlet)"
+        local nsteps_vec_entries2, elapsedtime_vec_entries = get_data("nsteps", "elapsed_time", 2, data_directory, true)
+    else
+        local nsteps_vec_entries2, elapsedtime_vec_entries = get_data("nsteps", "elapsed_time", order, data_directory)
+    end
     local full_nsteps_vec2, nsteps_mat, elapsedtime_mat = get_x_vec_y_mat(nsteps_vec_entries2, elapsedtime_vec_entries)
 
     local elapsedtime_mean = mean(elapsedtime_mat, dims=2) |> vec
@@ -344,62 +409,9 @@ end
 target_time_ratios = 1 ./ target_time_ratios
 
 
-#categories = repeat(target_errors, inner=length(orders))
-#heights = reshape(target_time_ratios', :)
-#grp = repeat(orders, length(target_errors))
-
-categories = repeat(target_errors, inner=length(orders)-1)
-heights = reshape(target_time_ratios[:,2:end]', :)
-grp = repeat(orders[2:end], length(target_errors))
-
-@show categories
-@show heights
-@show length(categories)
-@show length(heights)
-
-fig2 = CairoMakie.Figure(size=(3.25inch, 4.5inch), fontsize=12, figure_padding=5)
-ax_barplot = Axis(
-    fig2[1,1],
-    #fig[1:2,2],
-    ylabel = "Target Error",
-    xlabel = "Speedup over 2nd Order Method",
-    yticks = (target_errors, [L"10^{%$i}" for i in target_errors]),
-    xticks = 0:50:250,
-    xminorticks = 0:10:250,
-    xminorticksvisible = true,
-    xminorgridvisible = true,
-    #xlims = (0,100),
-    #xscale = CairoMakie.log10,
-)
-# Set xlimits by hand so the labels don't get clipped
-#xlims!(ax_barplot, (0,100))
-xlims!(ax_barplot, (0,230))
-
-barplot!(
-    ax_barplot,
-    categories, heights,
-    dodge = grp,
-    color = grp,
-    colormap = [Makie.wong_colors()[k] for k in 2:length(orders)] ,
-    #color_over_background=:red,
-    #color_over_bar=:white,
-    #flip_labels_at=0.85,
-    direction=:x,
-    gap=0.25,
-    #width=20.0,
-    bar_labels=:y,
-    label_size=8,
-    label_formatter = x -> round(x, digits=1),
-    label_offset = [5 for i in 1:length(categories)],
-    #flip_labels_at = 100,
-)
-#colsize!(fig.layout, 2, Relative(1/3))
-
-
-
-Legend(fig[3,:], ax_error, orientation = :horizontal, tellwidth = false, nbanks=2, framevisible=false)
-rowgap!(fig.layout, 2, 0)
-rowsize!(fig.layout, 2, Relative(1/3))
+Legend(fig[2,:], ax_error, orientation = :horizontal, tellwidth = false, nbanks=2, framevisible=false)
+rowgap!(fig.layout, 1, 0)
+#rowsize!(fig.layout, 2, Relative(1/3))
 
 fig
 
