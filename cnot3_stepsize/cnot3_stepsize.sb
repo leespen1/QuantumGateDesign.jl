@@ -8,9 +8,9 @@
 #SBATCH --mem=32G                    # Memory (i.e. RAM) per NODE
 #SBATCH --export=NONE                 # HPCC suggests setting to NONE for HPCC reasons, but I don't think it's necessary, and I want ALL so that I can load julia and have it transfer to all nodes
 #SBATCH --constraint=intel18         # Run on the
-#SBATCH --time=3:30:00                           # Wall time limit (days-hrs:min:sec)
+#SBATCH --time=12:30:00                           # Wall time limit (days-hrs:min:sec)
 #SBATCH --output=%A/cnot3_stepsize_%A_%a.log     # Path to the standard output and error files relative to the working directory
-#SBATCH --array=0-24 # 25 jobs per order
+#SBATCH --array=0-124 # 25 jobs per order
 
 # We get about 56 GB of RAM on the dev nodes. But also, I think it is better to
 # keep things to one test per node so I don't have competition for memory (e.g.
@@ -30,18 +30,19 @@ echo "Memory per node                = $SLURM_MEM_PER_NODE"
 echo ""
 
 # Define the options for arg1 and arg2
-#METHOD_ORDERS=(2 4 6 8 10 12)
-METHOD_ORDERS=(2)
+METHOD_ORDERS=(2 4 6 8 10 12)
+#METHOD_ORDERS=(2)
 NUM_ORDERS=${#METHOD_ORDERS[@]}
 
-TIME=3
+TIME=12
 
-#DEGREE=14
-DEGREE=2
+DEGREE=14
+#DEGREE=2
 D1=15
 RTOL=1e-15
 ATOL=1e-15
-USE_JUQBOX=true
+USE_JUQBOX=false
+GRADIENT=true
 
 # To avoid Pkg errors
 unset LD_LIBRARY_PATH
@@ -66,7 +67,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
     METHOD_ORDER=${METHOD_ORDERS[$METHOD_ORDER_INDEX]}
 
 
-    CMD_STRING="julia --project=$PROJECTENV --threads=$SLURM_CPUS_PER_TASK ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX --output_directory=$SLURM_ARRAY_JOB_ID  "
+    CMD_STRING="julia --project=$PROJECTENV --threads=$SLURM_CPUS_PER_TASK ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX --gradient $GRADIENT --output_directory=$SLURM_ARRAY_JOB_ID"
     echo $CMD_STRING
     eval $CMD_STRING
 else
@@ -85,7 +86,7 @@ else
         METHOD_ORDER_INDEX=$(( SLURM_ARRAY_TASK_ID % NUM_ORDERS ))
         METHOD_ORDER=${METHOD_ORDERS[$METHOD_ORDER_INDEX]}
 
-        CMD_STRING="julia --project=$PROJECTENV --threads=4 ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX"
+        CMD_STRING="julia --project=$PROJECTENV --threads=4 ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX --gradient $GRADIENT"
         echo $CMD_STRING
         eval $CMD_STRING
     done
