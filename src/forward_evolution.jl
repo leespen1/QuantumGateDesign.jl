@@ -356,18 +356,17 @@ function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
             this_forcing = @view forcing[:, :, initial_condition_index]
         end
 
-        gmres_tracker = eval_adjoint!(
+        local_gmres_tracker = eval_adjoint!(
             this_uv_history, vector_prob, controls_copy, pcof, terminal_condition_vec;
-            order=order, forcing=this_forcing
+            order=order, forcing=this_forcing, 
         )
-        gmres_trackers[initial_condition_index] = gmres_tracker
+        gmres_trackers[initial_condition_index] = local_gmres_tracker
     end
 
     full_gmres_tracker = merged_gmres_tracker(gmres_trackers...)
     if verbose && (full_gmres_tracker.N_converged != full_gmres_tracker.N_linear_solves)
         @warn "Only $(full_gmres_tracker.N_converged)/$(full_gmres_tracker.N_linear_solves) GMRES linear solves converged."
     end
-
 
     if !ismissing(gmres_tracker)
         copyto_gmres_tracker!(gmres_tracker, full_gmres_tracker)
