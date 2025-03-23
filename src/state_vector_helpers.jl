@@ -77,6 +77,7 @@ end
 
 
 function real_to_complex(x)
+    @assert iseven(size(x, 1))
     N = div(size(x, 1), 2)
 
     # Get "upper" and "lower" parts of vector, matrix, or 3D-array, 

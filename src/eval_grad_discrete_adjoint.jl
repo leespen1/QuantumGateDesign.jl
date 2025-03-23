@@ -1,3 +1,17 @@
+mutable struct DiscreteAdjointTimes
+    forward::Float64
+    adjoint::Float64
+    grad_accum::Float64
+    function DiscreteAdjointTimes()
+        new(NaN, NaN, NaN)
+    end
+end
+
+function total_time(timer::DiscreteAdjointTimes)
+    return timer.forward + timer.adjoint + timer.grad_accum
+end
+
+
 function compute_terminal_condition(
         prob::SchrodingerProb{OpType, StateType, P},
         controls,
@@ -106,6 +120,7 @@ function discrete_adjoint(
         pcof::AbstractVector{<: Real},
         target::AbstractMatrix{<: Number}; 
         order=2, cost_type=:Infidelity,
+        timer::Union{Missing, DiscreteAdjointTimes}=missing
     ) where P
     N_derivatives = div(order, 2)
 
@@ -117,7 +132,7 @@ function discrete_adjoint(
 
     discrete_adjoint!(
         grad, history, lambda_history, adjoint_forcing, prob, controls, pcof,
-        target, order=order, cost_type=cost_type
+        target, order=order, cost_type=cost_type, timer=timer
     )
 end
 
@@ -131,7 +146,10 @@ function discrete_adjoint!(
         controls,
         pcof::AbstractVector{<: Real},
         target::AbstractMatrix{<: Number}; 
-        order=2, cost_type=:Infidelity, history_precomputed=false 
+        order=2, cost_type=:Infidelity, history_precomputed=false,
+        timer::Union{Missing, DiscreteAdjointTimes}=missing,
+        forward_gmres_tracker::Union{GMRESTracker, Missing}=missing,
+        adjoint_gmres_tracker::Union{GMRESTracker, Missing}=missing,
     ) where P
 
     # Set pre-allocated arrays equal to zero (may not be necessary, but being safe)
@@ -146,10 +164,14 @@ function discrete_adjoint!(
     target = complex_to_real(target)
 
     # FORWARD EVOLUTION (if needed)
+    t_start_forward = ismissing(timer) ? NaN : time()
     if !history_precomputed
-        eval_forward!(history, prob, controls, pcof; order=order)
+        eval_forward!(history, prob, controls, pcof; order=order,
+                      gmres_tracker=forward_gmres_tracker)
     end
+    t_end_forward = ismissing(timer) ? NaN : time()
 
+    t_start_adjoint = ismissing(timer) ? NaN : time()
     # COMPUTE FORCING
     compute_guard_forcing!(adjoint_forcing, prob, history)
 
@@ -162,9 +184,11 @@ function discrete_adjoint!(
 
     # ADJOINT EVOLUTION
     eval_adjoint!(lambda_history, prob, controls, pcof, terminal_condition;
-        order=order, forcing=adjoint_forcing
+        order=order, forcing=adjoint_forcing, gmres_tracker=adjoint_gmres_tracker
     )
+    t_end_adjoint = ismissing(timer) ? NaN : time()
 
+    t_start_grad_accum = ismissing(timer) ? NaN : time()
     # GRADIENT ACCUMULATION (Could be multithreaded)
     grad .= 0
     for initial_condition_index = 1:size(prob.u0,2)
@@ -174,6 +198,13 @@ function discrete_adjoint!(
         accumulate_gradient!(
             grad, prob, controls, pcof, this_history, this_lambda_history, order=order
         )
+    end
+    t_end_grad_accum = ismissing(timer) ? NaN : time()
+
+    if !ismissing(timer)
+        timer.forward = t_end_forward - t_start_forward
+        timer.adjoint = t_end_adjoint - t_start_adjoint
+        timer.grad_accum = t_end_grad_accum - t_start_grad_accum
     end
 
     return grad
