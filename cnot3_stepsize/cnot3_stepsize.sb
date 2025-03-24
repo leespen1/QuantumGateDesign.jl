@@ -30,7 +30,8 @@ echo "Memory per node                = $SLURM_MEM_PER_NODE"
 echo ""
 
 # Define the options for arg1 and arg2
-METHOD_ORDERS=(2 4 6 8 10 12)
+#METHOD_ORDERS=(2 4 6 8 10 12)
+METHOD_ORDERS=(2 4)
 #METHOD_ORDERS=(2)
 NUM_ORDERS=${#METHOD_ORDERS[@]}
 
@@ -74,6 +75,8 @@ else
     echo "You are not in a SLURM environment. Running script over a loop."
 
     PROJECTENV=/home/spencer/Research/QuantumGateDesign.jl
+    OUTPUTDIR="$RANDOM"
+
 
     # Set up project environment, if needed
     INSTANTIATE_STRING="julia --project=$PROJECTENV -e 'using Pkg; Pkg.instantiate()'"
@@ -86,7 +89,7 @@ else
         METHOD_ORDER_INDEX=$(( SLURM_ARRAY_TASK_ID % NUM_ORDERS ))
         METHOD_ORDER=${METHOD_ORDERS[$METHOD_ORDER_INDEX]}
 
-        CMD_STRING="julia --project=$PROJECTENV --threads=4 ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX --gradient $GRADIENT"
+        CMD_STRING="julia --project=$PROJECTENV --threads=4 ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX --gradient $GRADIENT --output_directory=$OUTPUTDIR"
         echo $CMD_STRING
         eval $CMD_STRING
     done
