@@ -234,6 +234,7 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
     is_first_step = true
     history_2h = nothing
     history_h = nothing
+    elapsed_time = 0.0
 
     # Loop until time runs out (with estimator for when we will go overtime on next simulation)
     while (time()-initial_time) < (max_walltime - 2*elapsed_time)
@@ -271,7 +272,7 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
         # Prepare for next iteration
         history_2h = history_h
         params.nsteps *= 2
-        stepsize = params.tf / params.nsteps
+        stepsize = params.T / params.nsteps
     end
 
     return readdlm(filename_csv, ',')
