@@ -229,7 +229,7 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
     stepsize = params.T / params.nsteps
 
     # Run simulation once just to get compilation out of the way
-    dummy_history = eval_forward_juqbox()
+    dummy_history = eval_forward_juqbox(gradient)
 
     is_first_step = true
     history_2h = nothing
@@ -239,7 +239,7 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
     while (time()-initial_time) < (max_walltime - 2*elapsed_time)
         # Run simulation
         t1 = time()
-        history_h = eval_forward_juqbox()
+        history_h = eval_forward_juqbox(gradient)
         t2 = time()
         elapsed_time = t2 - t1
 
