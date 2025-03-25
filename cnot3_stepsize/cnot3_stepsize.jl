@@ -100,7 +100,7 @@ function main()
             )
         end
     end
-    println("Finished! Stored results at:\n\t", filename)
+    println(stdout, "Finished! Stored results at:\n\t", filename)
 
 end
 
@@ -124,7 +124,7 @@ function collect_data(prob::SchrodingerProb, controls::ControlsType,
         "R_abs_err_L1", "R_abs_err_L2", "R_rel_err_L1", "R_rel_err_L2",
         "R_abs_err_Linf",
     )
-    writedlm(stdout, header)
+    println(stdout, header)
 
     writedlm(filename_csv, header, ',')
 
@@ -179,7 +179,7 @@ function collect_data(prob::SchrodingerProb, controls::ControlsType,
         open(filename_final_states_csv, "a+") do io
             writedlm(io, transpose(final_states_vec), ',')
         end
-        println(csv_row) # Print row
+        println(stdout, csv_row) # Print row
 
         # Prepare for next iteration
         history_2h = history_h
@@ -219,7 +219,7 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
         "R_abs_err_L1", "R_abs_err_L2", "R_rel_err_L1", "R_rel_err_L2",
         "R_abs_err_Linf",
     )
-    writedlm(stdout, header)
+    println(stdout, header)
 
     writedlm(filename_csv, header, ',')
 
@@ -271,7 +271,7 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
         open(filename_final_states_csv, "a+") do io
             writedlm(io, transpose(final_states_vec), ',')
         end
-        println(csv_row) # Print row
+        println(stdout, csv_row) # Print row
 
         # Prepare for next iteration
         history_2h = history_h
@@ -302,7 +302,7 @@ function collect_data_grad(prob::SchrodingerProb, controls::ControlsType,
         "avg_gmres_residual_adj", "R_abs_err_L1", "R_abs_err_L2", "R_rel_err_L1",
         "R_rel_err_L2", "R_abs_err_Linf",
     )
-    writedlm(stdout, header)
+    println(stdout, header)
 
     writedlm(filename_csv, header, ',')
 
@@ -379,7 +379,7 @@ function collect_data_grad(prob::SchrodingerProb, controls::ControlsType,
         open(filename_final_states_csv, "a+") do io
             writedlm(io, transpose(final_states_vec), ',')
         end
-        println(csv_row) # Print row
+        println(stdout, csv_row) # Print row
 
         # Prepare for next iteration
         history_2h = history_h
