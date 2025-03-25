@@ -129,6 +129,7 @@ function collect_data(prob::SchrodingerProb, controls::ControlsType,
     writedlm(filename_csv, header, ',')
 
     final_states_vec = Vector{ComplexF64}(undef, length(prob.u0))
+    final_states_vec .= NaN
     gmres_tracker = GMRESTracker()
 
     # Run simulation
@@ -174,8 +175,9 @@ function collect_data(prob::SchrodingerProb, controls::ControlsType,
         open(filename_csv, "a+") do io
             writedlm(io, csv_row, ',')
         end
+        final_states_vec .= reshape(history_h[:,end,:], :)
         open(filename_final_states_csv, "a+") do io
-            writedlm(io, final_states_vec, ',')
+            writedlm(io, transpose(final_states_vec), ',')
         end
         println(csv_row) # Print row
 
@@ -222,6 +224,7 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
     writedlm(filename_csv, header, ',')
 
     final_states_vec = Vector{ComplexF64}(undef, length(params.Uinit))
+    final_states_vec .= NaN
     gmres_tracker = GMRESTracker() # Defaults to NaN values
 
     # Run simulation
@@ -264,8 +267,9 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
         open(filename_csv, "a+") do io
             writedlm(io, csv_row, ',')
         end
+        final_states_vec .= reshape(history_h[:,end,:], :)
         open(filename_final_states_csv, "a+") do io
-            writedlm(io, final_states_vec, ',')
+            writedlm(io, transpose(final_states_vec), ',')
         end
         println(csv_row) # Print row
 
@@ -303,6 +307,8 @@ function collect_data_grad(prob::SchrodingerProb, controls::ControlsType,
     writedlm(filename_csv, header, ',')
 
     final_states_vec = Vector{ComplexF64}(undef, length(prob.u0))
+    final_states_vec .= NaN
+
     forward_gmres_tracker = GMRESTracker()
     adjoint_gmres_tracker = GMRESTracker()
 
@@ -369,8 +375,9 @@ function collect_data_grad(prob::SchrodingerProb, controls::ControlsType,
         open(filename_csv, "a+") do io
             writedlm(io, csv_row, ',')
         end
+        final_states_vec .= reshape(history_h[:,end,:], :)
         open(filename_final_states_csv, "a+") do io
-            writedlm(io, final_states_vec, ',')
+            writedlm(io, transpose(final_states_vec), ',')
         end
         println(csv_row) # Print row
 
