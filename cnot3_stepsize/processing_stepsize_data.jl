@@ -35,12 +35,17 @@ function get_data(target_labels, out_order::Integer; data_directory=missing,
                 files_found += 1
                 filepath = data_directory * "/" * file
 
+                @show filepath
                 dlm_data, dlm_header = readdlm(filepath, ',', Float64, header=true)
                 dlm_header = vec(dlm_header)
 
                 for (data_entries, label) in zip(data_entries_collection, target_labels)
                     index = findfirst(x -> x == label, dlm_header)
-                    target_data = dlm_data[:,index]
+                    if isnothing(index)
+                        target_data = fill(NaN, size(dlm_data, 1))
+                    else
+                        target_data = dlm_data[:,index]
+                    end
                     push!(data_entries, target_data)
                 end
             end
