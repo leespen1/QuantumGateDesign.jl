@@ -126,7 +126,7 @@ function collect_data(prob::SchrodingerProb, controls::ControlsType,
     )
     println(stdout, header)
 
-    writedlm(filename_csv, header, ',')
+    writedlm(filename_csv, rpad.(header, 24), ',')
 
     final_states_vec = Vector{ComplexF64}(undef, length(prob.u0))
     final_states_vec .= NaN
@@ -173,11 +173,11 @@ function collect_data(prob::SchrodingerProb, controls::ControlsType,
 
         # Log data (CSV)
         open(filename_csv, "a+") do io
-            writedlm(io, csv_row, ',')
+            writedlm(io, rpad.(csv_row, 24), ',')
         end
         final_states_vec .= reshape(history_h[:,end,:], :)
         open(filename_final_states_csv, "a+") do io
-            writedlm(io, transpose(final_states_vec), ',')
+            writedlm(io, rpad.(transpose(final_states_vec), 53), ',')
         end
         println(stdout, csv_row) # Print row
 
@@ -214,14 +214,12 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
     filename_final_states_csv = filename_base * "_finalStates.csv"
 
     header = hcat(
-        "nsteps", "stepsize", "elapsed_time", "avg_N_gmres_iter",
-        "N_converged_gmres", "avg_gmres_residual", "max_gmres_residual",
-        "R_abs_err_L1", "R_abs_err_L2", "R_rel_err_L1", "R_rel_err_L2",
-        "R_abs_err_Linf",
+        "nsteps", "stepsize", "elapsed_time", "R_abs_err_L1", "R_abs_err_L2",
+        "R_rel_err_L1", "R_rel_err_L2", "R_abs_err_Linf",
     )
     println(stdout, header)
 
-    writedlm(filename_csv, header, ',')
+    writedlm(filename_csv, rpad.(header, 24), ',')
 
     final_states_vec = Vector{ComplexF64}(undef, length(params.Uinit))
     final_states_vec .= NaN
@@ -251,10 +249,8 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
         if !is_first_step
             R = RichardsonExtrapolation(history_h[:,1:2:end,:], history_2h, order)
             csv_row = hcat(
-                params.nsteps, stepsize, elapsed_time,
-                avg_N_iterations(gmres_tracker), gmres_tracker.N_converged,
-                avg_residual(gmres_tracker), R.abs_err_L1, R.abs_err_L2,
-                R.rel_err_L1, R.rel_err_L2, R.abs_err_Linf,
+                params.nsteps, stepsize, elapsed_time, R.abs_err_L1,
+                R.abs_err_L2, R.rel_err_L1, R.rel_err_L2, R.abs_err_Linf,
             )
         else
             csv_row = hcat(
@@ -265,11 +261,11 @@ function collect_data_juqbox(pcof0::Vector{Float64}, params::Juqbox.objparams,
 
         # Log data (CSV)
         open(filename_csv, "a+") do io
-            writedlm(io, csv_row, ',')
+            writedlm(io, rpad.(csv_row, 24), ',')
         end
         final_states_vec .= reshape(history_h[:,end,:], :)
         open(filename_final_states_csv, "a+") do io
-            writedlm(io, transpose(final_states_vec), ',')
+            writedlm(io, rpad.(transpose(final_states_vec), 53), ',')
         end
         println(stdout, csv_row) # Print row
 
@@ -304,7 +300,7 @@ function collect_data_grad(prob::SchrodingerProb, controls::ControlsType,
     )
     println(stdout, header)
 
-    writedlm(filename_csv, header, ',')
+    writedlm(filename_csv, rpad.(header, 24), ',')
 
     final_states_vec = Vector{ComplexF64}(undef, length(prob.u0))
     final_states_vec .= NaN
@@ -357,6 +353,14 @@ function collect_data_grad(prob::SchrodingerProb, controls::ControlsType,
                 R.abs_err_L2, R.rel_err_L1, R.rel_err_L2, R.abs_err_Linf,
             )
         else
+            # Rerun to update timing (now that precompilation is out of the way)
+            QuantumGateDesign.discrete_adjoint!(
+                grad, history, lambda_history, adjoint_forcing, prob, controls,
+                pcof, target, order=order, timer=timer,
+                forward_gmres_tracker=forward_gmres_tracker,
+                adjoint_gmres_tracker=adjoint_gmres_tracker,
+            )
+
             csv_row = hcat(
                 prob.nsteps, stepsize, QuantumGateDesign.total_time(timer),
                 timer.forward, timer.adjoint, timer.grad_accum,
@@ -373,11 +377,11 @@ function collect_data_grad(prob::SchrodingerProb, controls::ControlsType,
 
         # Log data (CSV)
         open(filename_csv, "a+") do io
-            writedlm(io, csv_row, ',')
+            writedlm(io, rpad.(csv_row, 24), ',')
         end
         final_states_vec .= reshape(history_h[:,end,:], :)
         open(filename_final_states_csv, "a+") do io
-            writedlm(io, transpose(final_states_vec), ',')
+            writedlm(io, rpad.(transpose(final_states_vec), 53), ',')
         end
         println(stdout, csv_row) # Print row
 
