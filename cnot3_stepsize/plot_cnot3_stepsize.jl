@@ -6,8 +6,9 @@ include("processing_stepsize_data.jl")
     
 
 #data_directory = "./49076519/49076519/"
-data_directory = "./DataMar18/"
-orders = [2,4,6,8,10,12, "2 (Stormer-Verlet)"]
+data_directory = "./52547452/"
+#orders = [2,4,6,8,10,12, "2 (Stormer-Verlet)"]
+orders = [2,4,6,8,10,12]
 colors = vcat(Makie.wong_colors()[1:6], :darkkhaki)
 
 ### Set up Makie Figures, Axes
@@ -83,7 +84,7 @@ for (k, order) in enumerate(orders)
     target_labels = ("nsteps", "elapsed_time", "R_rel_err_L2")
     target_symbols = Symbol.(target_labels)
     entries = NamedTuple{target_symbols}(
-        get_data(target_labels, order, data_directory=data_directory, juqbox=juqbox)
+        get_data(target_labels, order, data_directory=data_directory, juqbox=juqbox, gradient=gradient)
     )
 
     ### Process data, grabbing data columns from multiple files (possibly with

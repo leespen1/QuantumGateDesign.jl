@@ -1,7 +1,7 @@
 using DelimitedFiles, LinearAlgebra
 
 function get_data(target_labels, out_order::Integer; data_directory=missing,
-        juqbox::Bool=false)
+        juqbox::Bool=false, gradient::Bool=true)
 
     file_pattern= r"""cnot3StepsizeTest
     _order=(\d+)
@@ -30,8 +30,9 @@ function get_data(target_labels, out_order::Integer; data_directory=missing,
             regex_match = match(file_pattern, file)
             order    = parse(Int,     regex_match[1])
             usejuqbox = regex_match[9] == "true" ? true : false
+            calcgradient = regex_match[10] == "true" ? true : false
 
-            if ((order == out_order) && (juqbox == usejuqbox))
+            if ((order == out_order) && (juqbox == usejuqbox) && (gradient == calcgradient))
                 files_found += 1
                 filepath = data_directory * "/" * file
 
@@ -126,7 +127,7 @@ Using the final state with the highest number of timesteps as the "true"
 solution, return vector of nsteps vectors and a vector of relerr vectors, with
 an inner vector for each file.
 """
-function get_nsteps_errors_final_states(out_order; data_directory=missing, juqbox=false)
+function get_nsteps_errors_final_states(out_order; data_directory=missing, juqbox=false, gradient=false)
     file_pattern = r"""cnot3StepsizeTest
     _order=(\d+)
     _degree=(\d+)
@@ -157,8 +158,9 @@ function get_nsteps_errors_final_states(out_order; data_directory=missing, juqbo
             regex_match = match(file_pattern, file)
             order    = parse(Int,     regex_match[1])
             usejuqbox = regex_match[9] == "true" ? true : false
+            calcgradient = regex_match[10] == "true" ? true : false
 
-            if (order == out_order) && (usejuqbox == juqbox)
+            if (order == out_order) && (usejuqbox == juqbox) && (calcgradient == gradient)
                 files_found += 1
                 filepath = data_directory * "/" * file
 

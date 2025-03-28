@@ -622,6 +622,9 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
             wₙ₊₁ .= @view history[:, :, 1+n+1]
             tₙ₊₁ = (n+1)*dt
 
+            #TODO Make this twice as efficient by moving hamiltonians to the
+            #λₙ₊₁ side, as suggested in the paper.
+
             #println("#"^20, "\nExplicit\n", "#"^20)
             for k in 0:N_derivatives
                 #c_implicit = (-0.5*dt)^k * coefficient(k, N_derivatives, N_derivatives)
@@ -638,6 +641,7 @@ function accumulate_gradient_arbitrary_fast!(gradient::AbstractVector{Float64},
                     local_control_grad_real, local_control_grad_imag,
                 )
             end
+
 
             # These values will be reused next iteration!
             fill_p_mat!(control_vals_real, controls, tₙ₊₁, pcof) 
