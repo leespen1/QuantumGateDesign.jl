@@ -36,9 +36,8 @@ function get_data(target_labels, out_order::Integer; data_directory=missing,
                 files_found += 1
                 filepath = data_directory * "/" * file
 
-                @show filepath
                 dlm_data, dlm_header = readdlm(filepath, ',', Float64, header=true)
-                dlm_header = vec(dlm_header)
+                dlm_header = strip.(vec(dlm_header)) # Remove whitespace, convert to vector
 
                 for (data_entries, label) in zip(data_entries_collection, target_labels)
                     index = findfirst(x -> x == label, dlm_header)
@@ -55,14 +54,21 @@ function get_data(target_labels, out_order::Integer; data_directory=missing,
 
     if files_found == 0
         @warn "No files found matching conditions!"
+    else 
+        println("Files found: ", files_found)
     end
+
 
     return data_entries_collection
 end
 
 function combined_x_vec(x_data_entries::Vector{<: Vector})
-    combined_x_vec = sort(unique(vcat(x_data_entries...)))
-    return combined_x_vec
+    if isempty(x_data_entries)
+        combined_x_vec_ret = eltype(eltype(x_data_entries))[]
+    else
+        combined_x_vec_ret = sort(unique(vcat(x_data_entries...)))
+    end
+    return combined_x_vec_ret
 end
 
 
@@ -90,8 +96,6 @@ function get_y_mat(x_data_entries::Vector{<: Vector},
         @assert length(x_entry) == length(y_entry)
     end
 
-    max_length = maximum(length, x_data_entries)
-    min_length = minimum(length, x_data_entries)
     if !allequal(x_data_entries) 
         @warn "Not all x_data entries are the same."
     end
@@ -127,7 +131,7 @@ Using the final state with the highest number of timesteps as the "true"
 solution, return vector of nsteps vectors and a vector of relerr vectors, with
 an inner vector for each file.
 """
-function get_nsteps_errors_final_states(out_order; data_directory=missing, juqbox=false, gradient=false)
+function get_nsteps_errors_final_states(out_order; data_directory=missing, juqbox::Bool=false, gradient::Bool=true)
     file_pattern = r"""cnot3StepsizeTest
     _order=(\d+)
     _degree=(\d+)
@@ -167,7 +171,7 @@ function get_nsteps_errors_final_states(out_order; data_directory=missing, juqbo
                 # Read as String first, then convert. Otherwise NaN+NaN*im
                 # won't be interpreted correctly
                 final_states = readdlm(filepath, ',', String)
-                final_states = map(x -> x == "NaN + NaN*im" ? NaN + NaN*im : parse(ComplexF64, x),
+                final_states = map(x -> strip(x) == "NaN + NaN*im" ? NaN + NaN*im : parse(ComplexF64, x),
                                    final_states) 
 
                 true_final_state = final_states[end,:]
@@ -187,6 +191,8 @@ function get_nsteps_errors_final_states(out_order; data_directory=missing, juqbo
 
     if files_found == 0
         @warn "No files found matching conditions!"
+    else
+        println("Files found: ", files_found)
     end
 
     return nsteps_vec_entries, relerr_vec_entries
