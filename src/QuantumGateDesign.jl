@@ -52,6 +52,9 @@ export lower_op, raise_op, number_op, identity_op, basis_state,
        compsys_basis_state, rot_frame_op, compsys_rot_frame_op,
        promote_subsys_op, gate_initial_states, guard_projector_op
 
+include("state_indexing.jl")
+export index_to_state, state_to_index
+
 # Controls
 include("Controls/Control.jl")
 include("Controls/grape_control.jl")
