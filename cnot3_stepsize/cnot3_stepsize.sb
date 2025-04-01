@@ -41,6 +41,7 @@ RTOL=1e-15
 ATOL=1e-15
 USE_JUQBOX=false
 GRADIENT=true
+LEVELS_CAVITY=10
 SEEDOFFSET=0
 
 # To avoid Pkg errors
@@ -53,11 +54,9 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
 
     module purge
 
-    PROJECTENV=/mnt/home/leespen1/Research/QuantumGateDesign.jl
-
-    # Set up project environment, if needed
-    INSTANTIATE_STRING="julia --project=$PROJECTENV -e 'using Pkg; Pkg.instantiate()'"
-    echo $INSTANTIATE_STRING
+    # Set up project environment, if needed (may not be instantiated)
+    INSTANTIATE_STRING="julia --project -e 'using Pkg; Pkg.instantiate()'"
+    echo $INSTANTIATE_STRING 
     eval $INSTANTIATE_STRING
 
     # Calculate the indices for this task
@@ -66,19 +65,16 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
     METHOD_ORDER=${METHOD_ORDERS[$METHOD_ORDER_INDEX]}
 
 
-    CMD_STRING="julia --project=$PROJECTENV --threads=$SLURM_CPUS_PER_TASK ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX --gradient $GRADIENT --output_directory=$SLURM_ARRAY_JOB_ID"
+    CMD_STRING="julia --project --threads=$SLURM_CPUS_PER_TASK ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX --gradient $GRADIENT --output_directory=$SLURM_ARRAY_JOB_ID --levels_cavity $LEVELS_CAVITY"
     echo $CMD_STRING
     eval $CMD_STRING
 else
     echo "You are not in a SLURM environment. Running script over a loop."
 
-    #PROJECTENV=/home/spencer/Research/QuantumGateDesign.jl
-    PROJECTENV=/mnt/home/leespen1/Research/QuantumGateDesign.jl
     OUTPUTDIR="$RANDOM"
 
-
     # Set up project environment, if needed
-    INSTANTIATE_STRING="julia --project=$PROJECTENV -e 'using Pkg; Pkg.instantiate()'"
+    INSTANTIATE_STRING="julia --project -e 'using Pkg; Pkg.instantiate()'"
     echo $INSTANTIATE_STRING
     eval $INSTANTIATE_STRING
 
@@ -88,7 +84,7 @@ else
         METHOD_ORDER_INDEX=$(( SLURM_ARRAY_TASK_ID % NUM_ORDERS ))
         METHOD_ORDER=${METHOD_ORDERS[$METHOD_ORDER_INDEX]}
 
-        CMD_STRING="julia --project=$PROJECTENV --threads=4 ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX --gradient $GRADIENT --output_directory=$OUTPUTDIR"
+        CMD_STRING="julia --project=$PROJECTENV --threads=4 ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX --gradient $GRADIENT --output_directory=$OUTPUTDIR --levels_cavity $LEVELS_CAVITY"
         echo $CMD_STRING
         eval $CMD_STRING
     done
