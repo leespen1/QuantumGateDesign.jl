@@ -35,7 +35,15 @@ function parse_commandline()
         "--gradient"
             help = "Calculate gradient in addition to forward evolution."
             arg_type = Bool
-            default = false
+            default = true
+        "--levels_cavity", "-l"
+            help = "Number of energy levels to use for the cavity in the Hamiltonian model."
+            arg_type = Int64
+            default = 4
+        "--gate_duration", "-d"
+            help = "Duration of the gate, in nanoseconds."
+            arg_type = Float64
+            default = 550.0
         "order"
             help = "Method order to use"
             required = true
@@ -67,9 +75,18 @@ function main()
     output_directory = parsed_args["output_directory"]
     use_juqbox = parsed_args["use_juqbox"]
     compute_gradient = parsed_args["gradient"]
+    N_osc_levels = parsed_args["levels_cavity"]
+    Tmax = parsed_args["gate_duration"]
 
     nthreads = Threads.nthreads()
-    cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1)
+    cnot3ret = QuantumGateDesign.setup_cnot3(
+        seed=seed,
+        atol=atol,
+        rtol=rtol,
+        D1=D1,
+        N_osc_levels=N_osc_levels,
+        Tmax=Tmax
+    )
     controls = get_controls(degree, D1, cnot3ret.juqbox_params.Cfreq, cnot3ret.tf)
 
     N_coeff = QuantumGateDesign.get_number_of_control_parameters(controls)
@@ -78,7 +95,7 @@ function main()
     pcof = cnot3ret.amax * 2* (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
     mkpath(output_directory)
-    filename = output_directory * "/cnot3StepsizeTest_order=$(order)_degree=$(degree)_seed=$(seed)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)_usejuqbox=$(use_juqbox)_gradient=$(compute_gradient)"
+    filename = output_directory * "/cnot3StepsizeTest_order=$(order)_degree=$(degree)_seed=$(seed)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)_usejuqbox=$(use_juqbox)_gradient=$(compute_gradient)_gateDuration=$(Tmax)_nCavityLevels=$(N_osc_levels)"
 
     if use_juqbox
         @assert order == 2
