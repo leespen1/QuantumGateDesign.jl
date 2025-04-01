@@ -42,8 +42,8 @@ struct CNOT3Ret{ProbT}
 end
     
 
-function setup_cnot3(; seed::Integer=0, atol::Real=1e-10, rtol::Real=1e-12,
-        D1::Integer=15, N_osc_levels::Integer=4, Tmax::Real=550.0, print_output=true)
+function setup_cnot3(;N_osc_levels::Integer, seed::Integer=0, atol::Real=1e-10, rtol::Real=1e-12,
+        D1::Integer=15, Tmax::Real=550.0, print_output=true)
     #==============================================================================
     #
     # Juqbox Problem Setup
