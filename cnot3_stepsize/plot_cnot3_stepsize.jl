@@ -20,7 +20,7 @@ labeled_timestep_ticks = (2 .^ (5:5:20), [L"2^{%$i}" for i in 5:5:20])
 minor_timestep_ticks = 2 .^ (0:20)
 
 inch = 96 # Getting correct figure, font size: https://docs.makie.org/stable/how-to/match-figure-size-font-sizes-and-dpi
-fig = CairoMakie.Figure(size=(7inch, 5inch), fontsize=12, figure_padding=(0,0.075inch,0,0.05inch))
+fig = CairoMakie.Figure(size=(6.25inch, 4.5inch), fontsize=11, figure_padding=(0.015inch,0.15inch,0.0inch,0.075inch))
 
 nsteps_vs_error_grid = fig[1,1]
 nsteps_vs_time_grid = fig[2,1]
@@ -37,7 +37,8 @@ ax_nsteps_vs_error = CairoMakie.Axis(
     xminorticksvisible = true,
     xminorgridvisible = true,
     yticks=log10_ticks,
-    limits=((2^5, 2^19), (10.0^(-10.25), 10.0^0.25)),
+    #limits=((2^5, 2^20), (10.0^(-10.25), 10.0^0.25)),
+    limits=((2^5, 2^20), (1e-10, 1e0)),
 )
 
 ax_nsteps_vs_time = CairoMakie.Axis(
@@ -45,15 +46,15 @@ ax_nsteps_vs_time = CairoMakie.Axis(
     xscale=CairoMakie.log2,
     yscale=CairoMakie.log10,
     xlabel="Number of Timesteps",
-    ylabel="Mean Time To Compute Gradient (s)",
+    ylabel="Mean Time to Compute Gradient (s)",
     xticks=labeled_timestep_ticks,
     xminorticks = minor_timestep_ticks,
     xminorticksvisible = true,
     xminorgridvisible = true,
     #xticks=(my_xticks, my_xticklabels),
     yticks=log10_ticks,
-    limits=(nothing, (10.0^(-2.25), 10.0^3.25)),
-    #limits=((2^5, 2^19), (10.0^(-3.25), 10.0^3.25)),
+    #limits=((2^5, 2^20), (10.0^(-2.25), 10.0^3.25)),
+    limits=((2^5, 2^20), (1e-2, 1e3)),
     #title="Elapsed Time Plot",
 )
 
@@ -65,7 +66,7 @@ ax_error_vs_time = CairoMakie.Axis(
     xscale=CairoMakie.log10,
     yscale=CairoMakie.log10,
     xlabel="Mean Relative Error",
-    ylabel="Mean Time To Compute Gradient (s)",
+    ylabel="Mean Time to Compute Gradient (s)",
     #xminorticksvisible = true,
     #xminorgridvisible = true,
     xticks=log10_ticks,
@@ -74,13 +75,15 @@ ax_error_vs_time = CairoMakie.Axis(
     yminorticksvisible=true,
     yminorgridvisible=true,
     #title="Elapsed Time Plot",
-    limits=((10.0^(-10.25), 10.0^(-0.75)), (10.0^(-0.25),10.0^(5.25))),
+    #limits=((10.0^(-10.25), 10.0^(-0.75)), (10.0^(-0.25),10.0^(5.25))),
+    #limits=((1e-10, 1e-1), (10.0^(-0.25),10.0^(5.25))),
+    limits=((1e-10, 1e-1), (1e0,1e5)),
 )
 
 
 for (k, order) in enumerate(orders)
     if order == "2 (Stormer-Verlet)"
-        label = "Order 2 (Stormer-Verlet)"
+        label = "Order 2 (St\u00f6rmer-Verlet)"
         juqbox = true
         order = 2
     else
@@ -110,21 +113,21 @@ for (k, order) in enumerate(orders)
     ##### Make Plots
     ### Number of Timesteps vs Elapsed Time
     lines_obj = lines!(
-        ax_nsteps_vs_time, full_nsteps_vec[5:end], elapsedtime_meanvec[5:end];
+        ax_nsteps_vs_time, full_nsteps_vec, elapsedtime_meanvec;
         color=colors[k], label=label
     )
     CairoMakie.translate!(lines_obj, 0, 0, -k) # Put the lines in the right z-order
 
     ### Number of Timesteps vs Relative Error in Final State
     lines_obj = lines!(
-        ax_nsteps_vs_error, full_nsteps_vec[5:end], relerr_meanvec[5:end];
+        ax_nsteps_vs_error, full_nsteps_vec, relerr_meanvec;
         color=colors[k], label=label
     )
     CairoMakie.translate!(lines_obj, 0, 0, -k) # Put the lines in the right z-order
 
     ### Relative Error vs Elapsed Time
     scatter_obj = lines!(
-        ax_error_vs_time, relerr_meanvec[5:end], elapsedtime_meanvec[5:end];
+        ax_error_vs_time, relerr_meanvec, elapsedtime_meanvec;
         color=colors[k], label=label
     )
 end
@@ -140,8 +143,8 @@ lines!(
 # Add legend to very end
 Legend(fig[end+1,:], ax_error_vs_time, orientation = :horizontal, tellwidth = false, nbanks=2, framevisible=false)
 #rowsize!(fig.layout, 1, Relative(0.6))
-rowgap!(fig.layout, 1, 0.1inch) # Minimize space between legend and plot area.
-rowgap!(fig.layout, 2, 0inch) # Minimize space between legend and plot area.
-colgap!(fig.layout, 1, 0.1inch) # Minimize space between legend and plot area.
+rowgap!(fig.layout, 1, 0.125inch) # Minimize space between legend and plot area.
+rowgap!(fig.layout, 2, 0.05inch) # Minimize space between legend and plot area.
+colgap!(fig.layout, 1, 0.15inch) # Minimize space between legend and plot area.
 
 fig
