@@ -4,7 +4,7 @@
 #SBATCH --mail-user=leespen1@msu.edu # Where to send mail. 
 #SBATCH --nodes=1                    # Maximum number of nodes to be allocated
 #SBATCH --ntasks-per-node=1          # Maximum number of tasks on each node
-#SBATCH --cpus-per-task=4            # Number of processors for each task (want several because the BLAS is multithreaded, even though my Julia code is not)
+#SBATCH --cpus-per-task=1            # Number of processors for each task (want several because the BLAS is multithreaded, even though my Julia code is not)
 #SBATCH --mem=32G                    # Memory (i.e. RAM) per NODE
 #SBATCH --export=NONE                 # HPCC suggests setting to NONE for HPCC reasons, but I don't think it's necessary, and I want ALL so that I can load julia and have it transfer to all nodes
 #SBATCH --constraint=intel18         # Run on the
