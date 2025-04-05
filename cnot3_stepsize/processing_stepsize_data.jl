@@ -14,6 +14,8 @@ function get_data(target_labels, out_order::Integer; data_directory=missing,
     _nthreads=(\d+)
     (?:_usejuqbox=(true|false))? # Optionally match , doesn't appear in older files
     (?:_gradient=(true|false))? # Optionally match , doesn't appear in older files
+    (?:_gateDuration=(.*))? # Optionally match , doesn't appear in older files
+    (?:_nCavityLevels=(\d+))? # Optionally match , doesn't appear in older files
     \.csv
     """x # 'x' tag ignores whitespace and comments
 
@@ -143,6 +145,8 @@ function get_nsteps_errors_final_states(out_order; data_directory=missing, juqbo
     _nthreads=(\d+)
     (?:_usejuqbox=(true|false))? # Optionally match , doesn't appear in older files
     (?:_gradient=(true|false))? # Optionally match , doesn't appear in older files
+    (?:_gateDuration=(.*))? # Optionally match , doesn't appear in older files
+    (?:_nCavityLevels=(\d+))? # Optionally match , doesn't appear in older files
     _finalStates
     \.csv
     """x # 'x' tag ignores whitespace and comments
