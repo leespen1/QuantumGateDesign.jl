@@ -53,7 +53,7 @@ export lower_op, raise_op, number_op, identity_op, basis_state,
        promote_subsys_op, gate_initial_states, guard_projector_op
 
 include("state_indexing.jl")
-export index_to_state, state_to_index
+export index_to_basis_state, basis_state_to_index, basis_state_to_string
 
 # Controls
 include("Controls/Control.jl")
