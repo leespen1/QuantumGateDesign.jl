@@ -1,5 +1,5 @@
 using DelimitedFiles, CairoMakie, LaTeXStrings
-using Makie: wong_colors
+using Makie: wong_colors, automatic
 CairoMakie.set_theme!(CairoMakie.theme_latexfonts())
 
 function non_watchdog_iterations(log_filename::String)
@@ -23,10 +23,6 @@ function non_watchdog_iterations(log_filename::String)
 
     # A data row has the right number of entries, and the first entry is an integer
     N_columns = length(header_entries)
-    @show N_columns
-    @show log_filename
-    @show start_line
-    @show end_line
     data_regex = Regex(raw"^\s*\d+" * repeat(raw"\s+\S+", N_columns-1) * raw"\s*$")
 
     #for line in lines[start_line:end_line]
@@ -70,67 +66,81 @@ _gateDuration=(.+)
 _nCavityLevels=(\d+)
 .txt"""x # 'x' tag ignores whitespace and comments
 
-#'targetError=1e-1_cnot3OptimizationTest_order=10_degree=14_seed=3_nsteps=175_atol=1.0e-15_r
-#tol=1.0e-15_D1=15_time=12.0_maxiter=10000_nthreads=4.csv'
 
-#directory = "49349033"
 directory = "51458828"
-data = missing
-header = missing
-iter_vec = missing
-objective_vec = missing
-
 target_errors = ("1e-1", "1e-3", "1e-5", "1e-7")
 orders = (2,4,6,8,10,12)
-
-N_files_found = zeros(Int64, length(orders), length(target_errors))
-
-inch = 96
-#fig = CairoMakie.Figure(size=(12inch, 6inch), fontsize=12, figure_padding=5)
-fig = CairoMakie.Figure(size=(6.5inch, 3.25inch), fontsize=12, figure_padding=5)
-fig_axes = Axis[]
-for i in eachindex(target_errors)
-    if i == 1
-        push!(
-            fig_axes,
-            Axis(
-                fig[1,i], ylabel="Generalized Gate Infidelity", yscale=log10,
-                title="Target Error = $(target_errors[i])",
-                yticks=(10.0 .^ (-15:15), [L"10^{%$i}" for i in -15:15]),
-                yminorticks=IntervalsBetween(10), yminorticksvisible=true,
-                yminorgridvisible=false,
-            )
-        )
-    else
-        push!(
-            fig_axes,
-            Axis(
-                fig[1,i], yscale=log10,
-                title="Target Error = $(target_errors[i])",
-                #yticks=(10.0 .^ (-15:15), [L"10^{%$i}" for i in -15:15]), # Labels
-                yticks=(10.0 .^ (-15:15), ["" for i in -15:15]), # No labels
-                yminorticks=IntervalsBetween(10), yminorticksvisible=true,
-                yminorgridvisible=false,
-            )
-        )
-    end
-end
-Label(fig[2, :], "Number of IPOPT Iterations Completed", valign=:top)
-
+xaxis = "elapsed_time"
+objective_type = "generalized_infidelity"
 line_opacity = 0.9
 line_width = 1.0
+inch = 96
+fig = CairoMakie.Figure(size=(6.25inch, 3.25inch), fontsize=11, figure_padding=(0.015inch,0.05inch,0,0))
+
+if xaxis == "elapsed_time"
+    xlabel = "Hours Elapsed"
+    xticks = 0:6
+    xlims = (0,6)
+elseif xaxis == "iter_count"
+    xlabel = "Number of IPOPT Iterations Completed"
+    xticks = automatic
+    xlims = (0,nothing)
+else
+    xlabel = "Unknown"
+    xticks = automatic
+    xlims = nothing
+end
+
+ylims = (1e-7,1e0)
+xminorticks = IntervalsBetween(2)
+
+labeled_yticks =(10.0 .^ (-15:15), [L"10^{%$i}" for i in -15:15])
+unlabeled_yticks =(10.0 .^ (-15:15), ["" for i in -15:15])
+
+if objective_type == "generalized_infidelity"
+    ylabel = "Generalized Gate Infidelity"
+elseif objective_type == "infidelity"
+    ylabel = "Gate Infidelity"
+else 
+    ylabel = "Unknown"
+end
+
+
+fig_axes = Axis[]
+for i in eachindex(target_errors)
+    this_ylabel = (i == 1) ? ylabel : ""
+    this_yticks = (i == 1) ? labeled_yticks : unlabeled_yticks
+
+    push!(
+        fig_axes,
+        Axis(
+            fig[1,i], 
+            title="Target Error = $(target_errors[i])",
+            ylabel=this_ylabel, 
+            yscale=log10,
+            yticks=this_yticks,
+            yminorticks=IntervalsBetween(10),
+            yminorticksvisible=true,
+            yminorgridvisible=false,
+            xticks = xticks,
+            xminorticks = xminorticks,
+            xminorticksvisible=true,
+            limits = (xlims, ylims),
+        )
+    )
+end
+
 
 #linkyaxes!(fig_axes...)
 # Dummy loop which draw empty lines, just so the Legend can be drawn
-# This loop is just to make empty lines for each order, so I can draw the legend before I have hundreds of lines
 for (i, order) in enumerate(orders)
     lines!(fig_axes[1], [1], [1], color=(wong_colors()[i], line_opacity), label="Order $order")
 end
-Legend(fig[3,:], fig_axes[1], orientation=:horizontal, framevisible=false)
 
 
 
-iter_vecs = Vector{Int64}[]
+N_files_found = zeros(Int64, length(orders), length(target_errors))
+x_vecs = Vector{Float64}[]
 objective_vecs = Vector{Float64}[]
 i_target_vec = Int[]
 i_order_vec = Int[]
@@ -142,25 +152,25 @@ for file in readdir(directory)
         order = parse(Int, regex_match[2])
 
         csv_file = replace(file, ".txt" => ".csv")
-        global data, header = readdlm(directory * "/" * csv_file, ',', header=true)
-        #@show header
-        #@show file
+        data, header = readdlm(directory * "/" * csv_file, ',', header=true)
         
+        # Remove watchdog iterations
         non_wdog_iter = non_watchdog_iterations(directory * "/" * file)
         non_wdog_rows = non_wdog_iter .+ 1 # Ipopt iterations are 0-indexed
         non_wdog_data = data[non_wdog_rows,:]
 
         header_vec = reshape(header, :)
-        i_iter = findfirst(x -> x == "iter_count", header_vec)
-        objective_type = "infidelity"
+        i_x = findfirst(x -> x == xaxis, header_vec)
         i_objective = findfirst(x -> x == objective_type, header_vec) 
 
-        global iter_vec = non_wdog_data[:, i_iter]
+        x_vec = non_wdog_data[:, i_x]
+        objective_vec = non_wdog_data[:, i_objective]
+        if xaxis == "elapsed_time"
+            x_vec ./= 3600 # Convert seconds to hours
+        end
         if objective_type == "infidelity"
-            # Absolute value so log scale doesn't mess up
-            global objective_vec = abs.(non_wdog_data[:, i_objective])
-        else
-            global objective_vec = non_wdog_data[:, i_objective]
+            # Because the infidelity can go negative due to numerical error
+            objective_vec = abs.(objective_vec)
         end
 
         i_target = findfirst(x -> x == target_err, target_errors)
@@ -168,11 +178,10 @@ for file in readdir(directory)
 
         #lines!(fig_axes[i_target], iter_vec, objective_vec, color=(wong_colors()[i_order], line_opacity))
 
-        push!(iter_vecs, iter_vec)
+        push!(x_vecs, convert(Vector{Float64}, x_vec))
         push!(objective_vecs, objective_vec)
         push!(i_target_vec, i_target)
         push!(i_order_vec, i_order)
-
 
         N_files_found[i_order, i_target] += 1
     end
@@ -181,18 +190,27 @@ end
 
 
 # Draw the lowest order lines first, highest order lines last
-for desired_i_order in reverse(eachindex(orders))
-#for desired_i_order in eachindex(orders)
-    for (iter_vec, objective_vec, i_target, i_order) in zip(iter_vecs, objective_vecs, i_target_vec, i_order_vec)
+#for desired_i_order in reverse(eachindex(orders))
+for desired_i_order in eachindex(orders)
+    for (x_vec, objective_vec, i_target, i_order) in zip(x_vecs, objective_vecs, i_target_vec, i_order_vec)
         if i_order == desired_i_order
-            lines!(fig_axes[i_target], iter_vec, objective_vec, color=(wong_colors()[i_order], line_opacity), linewidth=line_width)
+            lines!(fig_axes[i_target], x_vec, objective_vec, color=(wong_colors()[i_order], line_opacity), linewidth=line_width)
         end
     end
 end
 
-for ax in fig_axes
-    #ylims!(ax, (1e-6,1e0))
-    ylims!(ax, (1e-7,1e0))
-end
+#for ax in fig_axes
+#    #ylims!(ax, (1e-6,1e0))
+#    ylims!(ax, (1e-7,1e0))
+#end
+
+Label(fig[2, :], xlabel, valign=:top)
+Legend(fig[3,:], fig_axes[1], orientation=:horizontal, framevisible=false, tellwidth=false)
+
+rowgap!(fig.layout, 1, 0.1inch)
+rowgap!(fig.layout, 2, 0.0inch)
+colgap!(fig.layout, 1, 0.1inch)
+colgap!(fig.layout, 2, 0.1inch)
+colgap!(fig.layout, 3, 0.1inch)
 
 fig
