@@ -6,6 +6,7 @@ include("processing_stepsize_data.jl")
     
 
 data_directory = "./DataMar28/"
+#data_directory = "./DataApr3/"
 orders = [2,4,6,8,10,12, "2 (Stormer-Verlet)"]
 #orders = [2,4,6,8,10,12]
 gradient = true
@@ -78,6 +79,7 @@ ax_error_vs_time = CairoMakie.Axis(
     #limits=((10.0^(-10.25), 10.0^(-0.75)), (10.0^(-0.25),10.0^(5.25))),
     #limits=((1e-10, 1e-1), (10.0^(-0.25),10.0^(5.25))),
     limits=((1e-10, 1e-1), (1e0,1e5)),
+    #limits=((1e-10, 1e0), (1e0,1e5)),
 )
 
 
@@ -133,8 +135,10 @@ for (k, order) in enumerate(orders)
 end
 
 # Add a hard-coded line to approximately extrapolate 2nd order Hemite and Stormer-Verlet
-dummy_relerr_mean = [10.0 ^(-i) for i in 4.25:11]
-dummy_elapsedtime_mean = 1.1 .* (dummy_relerr_mean .^ -0.47)
+#dummy_relerr_mean = [10.0 ^(-i) for i in 4.25:11]
+#dummy_elapsedtime_mean = 1.1 .* (dummy_relerr_mean .^ -0.47)
+dummy_relerr_mean = [10.0 ^(-i) for i in 3.75:11]
+dummy_elapsedtime_mean = 3.1 .* (dummy_relerr_mean .^ -0.47)
 lines!(
     ax_error_vs_time, dummy_relerr_mean, dummy_elapsedtime_mean;
     color=:black, linestyle=:dot, label="Order 2 (Approximate Extrapolation)"
