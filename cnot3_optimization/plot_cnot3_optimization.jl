@@ -69,16 +69,17 @@ _nCavityLevels=(\d+)
 
 directory = "51458828"
 target_errors = ("1e-1", "1e-3", "1e-5", "1e-7")
+target_errors_title = ("10^{-1}", "10^{-3}", "10^{-5}", "10^{-7}")
 orders = (2,4,6,8,10,12)
-xaxis = "elapsed_time"
+xaxis = "iter_count"
 objective_type = "generalized_infidelity"
 line_opacity = 0.9
 line_width = 1.0
 inch = 96
-fig = CairoMakie.Figure(size=(6.25inch, 3.25inch), fontsize=11, figure_padding=(0.015inch,0.05inch,0,0))
+fig = CairoMakie.Figure(size=(6.25inch, 3.25inch), fontsize=11, figure_padding=(0.015inch,0.05inch,0,0.025inch))
 
 if xaxis == "elapsed_time"
-    xlabel = "Hours Elapsed"
+    xlabel = "Wall Time Elapsed (Hours)"
     xticks = 0:6
     xlims = (0,6)
 elseif xaxis == "iter_count"
@@ -115,7 +116,7 @@ for i in eachindex(target_errors)
         fig_axes,
         Axis(
             fig[1,i], 
-            title="Target Error = $(target_errors[i])",
+            title=L"\textrm{Target Error} = %$(target_errors_title[i])",
             ylabel=this_ylabel, 
             yscale=log10,
             yticks=this_yticks,
