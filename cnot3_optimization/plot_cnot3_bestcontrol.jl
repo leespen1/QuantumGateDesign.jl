@@ -217,20 +217,26 @@ for (initial_cond, fig_loc) in enumerate(axis_fig_locations)
     sum_guard_pop2 = zeros(1+nsteps)
     sum_guard_pop3 = zeros(1+nsteps)
     sum_guard_pop4 = zeros(1+nsteps)
-    sum_guard_pop5 = zeros(1+nsteps)
+    sum_guard_pop_higher = zeros(1+nsteps)
+    sum_guard_pop_forbidden = zeros(1+nsteps) # Guard states at the 'edge' of our model
+    resonator_guard_cutoff = 4
     for level in 1:size(history,1)
         state_population_hist = population_history[level, :, initial_cond]
         nR, n1, n2 = index_to_basis_state(level, subsys_sizes)
-        if (nR in 1:4) && (n1 in 0:1) && (n2 in 0:1)
+        if (nR in 1:resonator_guard_cutoff) && (n1 in 0:1) && (n2 in 0:1)
             sum_guard_pop1 += state_population_hist
-        elseif (nR in 0:4) && (n1 in 0:1) && (n2 == 2)
+        elseif (nR in 0:resonator_guard_cutoff) && (n1 in 0:1) && (n2 == 2)
             sum_guard_pop2 += state_population_hist
-        elseif (nR in 0:4) && (n1 == 2) && (n2 in 0:1)
+        elseif (nR in 0:resonator_guard_cutoff) && (n1 == 2) && (n2 in 0:1)
             sum_guard_pop3 += state_population_hist
-        elseif (nR in 0:4) && (n1 == 2) && (n2 == 2)
+        elseif (nR in 0:resonator_guard_cutoff) && (n1 == 2) && (n2 == 2)
             sum_guard_pop4 += state_population_hist
         elseif !(level in essential_levels)
-            sum_guard_pop4 += state_population_hist
+            sum_guard_pop_higher += state_population_hist
+        end
+
+        if (n1 == 3) || (n2 == 3) || (nR == 9)
+            sum_guard_pop_forbidden += state_population_hist
         end
     end
     #set_theme!(color = :auto) # Reset color cycle
@@ -251,7 +257,8 @@ for (initial_cond, fig_loc) in enumerate(axis_fig_locations)
     lines!(ax, ts, sum_guard_pop2, color=Cycled(2), linestyle=:dash, label="|0-4,0-1,2⟩")
     lines!(ax, ts, sum_guard_pop3, color=Cycled(3), linestyle=:dash, label="|0-4,2,0-1⟩")
     lines!(ax, ts, sum_guard_pop4, color=Cycled(4), linestyle=:dash, label="|0-4,2,2⟩")
-    lines!(ax, ts, sum_guard_pop5, color=Cycled(5), linestyle=:dash, label="Higher Guard Levels")
+    lines!(ax, ts, sum_guard_pop_higher, color=Cycled(5), linestyle=:dash, label="Higher Guard Levels")
+    @show  norm(sum_guard_pop_forbidden, Inf)
 end
 
 # Plot the controls
@@ -262,7 +269,7 @@ control_ax = Axis(
     fig[end+1,:],
     title= "Control Pulses",
     xlabel = "Time (nanoseconds)",
-    ylabel = "Amplitude (USE CORRECT UNITS)",
+    ylabel = "Amplitude (MHz)",
     #yticks = 0:0.25:1,
     #yticklabelsvisible = yticklabelsvisible,
     #yminorticks = IntervalsBetween(2),
@@ -277,6 +284,9 @@ control_ax = Axis(
 for control_i in 1:length(controls)
     ps = real(control_history[control_i,:])
     qs = imag(control_history[control_i,:])
+    
+    ps .*= 1_000 # Convert from GHz to MHz
+    qs .*= 1_000
 
     control_label_subscript = control_i == 3 ? 'R' : control_i
 
@@ -284,13 +294,16 @@ for control_i in 1:length(controls)
     lines!(control_ax, ts, qs, label=L"\textrm{Im } c_%$(control_label_subscript)")
 end
 
+Label(fig[0, :], "Time Evolution of State Populations", halign = :center, font=:bold)
 Legend(fig[end+1,:], control_ax, orientation = :horizontal, tellwidth = false, nbanks=1, framevisible=false)
 
-rowgap!(fig.layout, 1, 0.1inch)
-rowgap!(fig.layout, 2, 0.0inch)
+rowgap!(fig.layout, 1, 0.0inch)
+
+rowgap!(fig.layout, 2, 0.1inch)
+rowgap!(fig.layout, 3, 0.0inch)
 colgap!(fig.layout, 1, 0.1inch)
 
-rowgap!(fig.layout, 3, 0.0inch)
 rowgap!(fig.layout, 4, 0.0inch)
+rowgap!(fig.layout, 5, 0.0inch)
 
 fig
