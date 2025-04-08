@@ -1,7 +1,6 @@
-LinearAlgebra.ldiv!(P::AbstractQGDPreconditioner, x) = ldiv!(P.P, x)
-LinearAlgebra.ldiv!(y, P::AbstractQGDPreconditioner, x) = ldiv!(y, P.P, x)
-Base.:\(P::AbstractQGDPreconditioner, b) = Base.:\(P.P, b)
-
+IterativeSolvers.ldiv!(P::AbstractQGDPreconditioner, x) = IterativeSolvers.ldiv!(P.P, x)
+IterativeSolvers.ldiv!(y, P::AbstractQGDPreconditioner, x) = IterativeSolvers.ldiv!(y, P.P, x)
+IterativeSolvers.:\(P::AbstractQGDPreconditioner, b) = IterativeSolvers.:\(P.P, b)
 
 
 """
@@ -12,7 +11,9 @@ struct IdentityPreconditioner <: AbstractQGDPreconditioner
     IdentityPreconditioner() = new(IterativeSolvers.Identity())
 end
 
-IdentityPreconditioner(prob, order, adjoint=false) = IdentityPreconditioner()
+function IdentityPreconditioner(prob, order, adjoint=false)
+    return IdentityPreconditioner()
+end
 
 
 
@@ -110,3 +111,5 @@ function lu_preconditioner(prob, order, adjoint=false)
     preconditioner = lu(LHS)
     return preconditioner
 end
+
+
