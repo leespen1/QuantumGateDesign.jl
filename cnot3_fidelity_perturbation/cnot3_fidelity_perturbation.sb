@@ -1,0 +1,89 @@
+#!/bin/bash --login
+#SBATCH --job-name=cnot3_fidelity_perturbation  # Job name
+#SBATCH --mail-type=NONE             # Mail events (NONE, BEGIN, END, FAIL, ALL)
+#SBATCH --mail-user=leespen1@msu.edu # Where to send mail. 
+#SBATCH --nodes=2                    # Maximum number of nodes to be allocated
+#SBATCH --ntasks-per-node=10         # Maximum number of tasks on each node
+#SBATCH --cpus-per-task=4            # Number of processors for each task (want several because the BLAS is multithreaded, even though my Julia code is not)
+#SBATCH --mem=80G                    # Memory (i.e. RAM) per NODE
+#SBATCH --export=NONE                # HPCC suggests setting to NONE for HPCC reasons, but I don't think it's necessary, and I want ALL so that I can load julia and have it transfer to all nodes
+#SBATCH --constraint=intel18         # Run on the
+#SBATCH --time=3:30:00               # Wall time limit (days-hrs:min:sec)
+#SBATCH --output=%A/cnot3_fidelity_perturbation_%A_%a.log     # Path to the standard output and error files relative to the working directory
+#SBATCH --array=1-10 # Should be divisible by number of entries in nsteps matrix
+
+# We get about 56 GB of RAM on the dev nodes. But also, I think it is better to
+# keep things to one test per node so I don't have competition for memory (e.g.
+# if one order uses up memory faster than the other)
+
+# Create directory where we will store the logs (and the data)
+mkdir -p $SLURM_ARRAY_JOB_ID
+
+echo "Date              = $(date)"
+echo "Hostname          = $(hostname -s)"
+echo "Working Directory = $(pwd)"
+echo ""
+echo "Number of Nodes Allocated      = $SLURM_JOB_NUM_NODES"
+echo "Number of Tasks Per Node       = $SLURM_NTASKS_PER_NODE"
+echo "Number of CPUs Per Task        = $SLURM_CPUS_PER_TASK"
+echo "Memory per node                = $SLURM_MEM_PER_NODE"
+echo ""
+
+ORDER=2
+NPERT=10
+
+FILE_ID="fidelityPerturbation"
+TARGET_ERRORS=("1e-1" "1e-2" "1e-3" "1e-4" "1e-5")
+FINE_TARGET_ERROR="1e-7"
+N_TARGET_ERRORS=${#TARGET_ERRORS[@]}
+
+RTOL=1e-15
+ATOL=1e-15
+COST_TYPE=GeneralizedInfidelity
+LEVELS_CAVITY=10
+
+# To avoid Pkg errors
+unset LD_LIBRARY_PATH
+
+
+if [[ -n "$SLURM_JOB_ID" ]]; then
+    echo "You are in a SLURM environment. Using job array id to run script."
+    echo "SLURM Job ID: $SLURM_JOB_ID"
+    export JULIA_NUM_THREADS=$SLURM_CPUS_PER_TASK
+    OUTPUT_DIR=$SLURM_ARRAY_JOB_ID
+
+    module purge
+
+    # Set up project environment, if needed
+    INSTANTIATE_STRING="julia --project -e 'using Pkg; Pkg.instantiate()'"
+    echo $INSTANTIATE_STRING
+    eval $INSTANTIATE_STRING
+
+    SEED=$(( SLURM_ARRAY_TASK_ID / N_TARGET_ERRORS ))
+    TARGET_ERROR_INDEX=$(( SLURM_ARRAY_TASK_ID % N_TARGET_ERRORS ))
+
+    COARSE_TARGET_ERROR=${TARGET_ERRORS[$TARGET_ERROR_INDEX]}
+
+    CMD_STRING="julia --project ./cnot3_fidelity_perturbation.jl $ORDER $SEED $FINE_TARGET_ERROR $COARSE_TARGET_ERROR $NPERT --rtol $RTOL --atol $ATOL --output_directory=$OUTPUT_DIR --file_identifier=$FILE_ID --cost_type $COST_TYPE --levels_cavity $LEVELS_CAVITY" 
+    echo $CMD_STRING
+    eval $CMD_STRING
+else
+    for SLURM_ARRAY_TASK_ID in {0..1} # Replace SLURM_ARRAY_TASK_ID with my own loop
+    do
+        echo "You are not in a SLURM environment. Running script over a loop."
+
+        # Set up project environment, if needed
+        INSTANTIATE_STRING="julia --project -e 'using Pkg; Pkg.instantiate()'"
+        echo $INSTANTIATE_STRING
+        eval $INSTANTIATE_STRING
+
+        SEED=$(( SLURM_ARRAY_TASK_ID / N_TARGET_ERRORS ))
+        TARGET_ERROR_INDEX=$(( SLURM_ARRAY_TASK_ID % N_TARGET_ERRORS ))
+
+        COARSE_TARGET_ERROR=${TARGET_ERRORS[$TARGET_ERROR_INDEX]}
+
+        CMD_STRING="julia --project ./cnot3_fidelity_perturbation.jl $ORDER $SEED $FINE_TARGET_ERROR $COARSE_TARGET_ERROR $NPERT --rtol $RTOL --atol $ATOL --file_identifier=$FILE_ID --cost_type $COST_TYPE --levels_cavity $LEVELS_CAVITY" 
+        echo $CMD_STRING
+        eval $CMD_STRING
+    done
+fi

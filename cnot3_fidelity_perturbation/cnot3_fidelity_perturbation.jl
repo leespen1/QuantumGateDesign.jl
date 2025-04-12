@@ -1,4 +1,5 @@
-using QuantumGateDesign, ArgParse, Random, DelimitedFiles, Distributed, Dates
+using QuantumGateDesign, ArgParse, Random, DelimitedFiles, Distributed, Dates,
+      LinearAlgebra, SlurmClusterManager
 using QuantumGateDesign: setup_cnot3, get_D1, get_controls
 
 @everywhere using QuantumGateDesign, Random, Dates
@@ -19,10 +20,6 @@ function parse_commandline()
             help = "Relative tolerance to use in the linear solves."
             arg_type = Float64
             default = 1e-12
-        "--D1"
-            help = "D1, control number of control parameters."
-            arg_type = Int64
-            default = 15
         "--output_directory", "-o"
             help = "Directory to store data."
             arg_type = String
@@ -42,10 +39,6 @@ function parse_commandline()
         "order"
             help = "Method order to use"
             required = true
-            arg_type = Int64
-        "degree"
-            help = "Degree of B-spline to use"
-            required= true
             arg_type = Int64
         "seed"
             help = "Seed to use when generating control vector."
@@ -71,11 +64,11 @@ end
 function main()
     parsed_args = parse_commandline()
     order = parsed_args["order"]
-    degree = parsed_args["degree"]
+    degree = 14
     seed = parsed_args["seed"]
     atol = parsed_args["atol"]
     rtol = parsed_args["rtol"]
-    D1 = parsed_args["D1"]
+    D1 = 16
     npert = parsed_args["npert"]
     output_directory = parsed_args["output_directory"]
     file_identifier = parsed_args["file_identifier"]
@@ -115,6 +108,7 @@ function main()
 
     cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1, N_osc_levels=N_osc_levels, Tmax=Tmax)
 
+
     println("Schrodinger Problem:")
     display(cnot3ret.qgd_prob)
 
@@ -122,7 +116,12 @@ function main()
     N_coeff = QuantumGateDesign.get_number_of_control_parameters(controls)
 
     # Coefficients uniformly distributed between amax and -amax
-    pcof0 = 2 * cnot3ret.amax * (0.5 .- rand(MersenneTwister(seed), N_coeff))
+    #pcof0 = 2 * cnot3ret.amax * (0.5 .- rand(MersenneTwister(seed), N_coeff))
+    input_pcof_str = "targetError=1e-7_cnot3OptimizationTest_order=6_degree=14_seed=0_nsteps=5414_atol=1.0e-15_rtol=1.0e-15_D1=16_time=6.0_maxiter=10000_nthreads=4_costType=Infidelity_gateDuration=550.0_nCavityLevels=10_pcof.csv"
+    pcofs, header = readdlm(input_pcof_str, ',', Float64, header=true)
+    pcof0 = pcofs[rand(50:end),:] # Use a random control vector that is a little bit in the middle of the optimization
+    pcof0_avg = norm(pcof0, 1) / length(pcof0)
+
 
     println("[ ", now(), " | worker ", myid(), " ] ", "Getting fine solution")
     cnot3ret.qgd_prob.nsteps = nsteps_fine
@@ -135,15 +134,22 @@ function main()
     UT_coarse = history_coarse[:,end,:]
     real_objective = QuantumGateDesign.cost_function(UT_coarse, target, cnot3ret.qgd_prob.N_ess_levels, cost_type=cost_type)
 
-    
     pert_orders = (1e-1, 1e-2, 1e-3)
     println("[ ", now(), " | worker ", myid(), " ] ", "Getting remaining coarse solutions")
+
+    if haskey(ENV, "SLURM_JOB_ID") # Set up remote processes if in SLURM
+        addprocs(SlurmManager())
+    else 
+        addprocs(Sys.CPU_THREADS-1)
+    end
+    @everywhere println("hello from $(myid()):$(gethostname())")
+
     #data = mapreduce(vcat, 1:npert, pert_orders) do pert_i, pert_order
     data = @distributed (vcat) for (pert_i, pert_order) in collect(Iterators.product(1:npert, pert_orders))
 
         # Perturbation coefficients uniformly distributed between 0.1amax and -0.1amax
         #pcof_pert = 0.2 * cnot3ret.amax * (0.5 .- rand(MersenneTwister(i), N_coeff))
-        pcof_pert_dir = 2 * cnot3ret.amax * (0.5 .- rand(MersenneTwister(pert_i), N_coeff))
+        pcof_pert_dir = 2 * pcof0_avg * (0.5 .- rand(MersenneTwister(pert_i), N_coeff))
         pcof_coarse = pcof0 + pert_order * pcof_pert_dir
         println("[ ", now(), " | worker ", myid(), " ] ", "Getting coarse solution ", pert_i, ", with pert_order ", pert_order)
         history_coarse = eval_forward(cnot3ret.qgd_prob, controls, pcof_coarse, order=order)
