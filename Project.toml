@@ -24,6 +24,7 @@ Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SlurmClusterManager = "c82cd089-7bf7-41d7-976b-6b5d413cbe0a"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [weakdeps]
@@ -47,6 +48,7 @@ InteractiveUtils = "1.11.0"
 Juqbox = "0.2.7"
 LoopVectorization = "0.12.171"
 Pkg = "1.11.0"
+SlurmClusterManager = "1.1.0"
 SparseArrays = "1.11.0"
 
 [extras]
