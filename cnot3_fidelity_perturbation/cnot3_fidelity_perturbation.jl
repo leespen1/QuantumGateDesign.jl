@@ -138,7 +138,7 @@ function main()
     # Coefficients uniformly distributed between amax and -amax
     #pcof0 = 2 * cnot3ret.amax * (0.5 .- rand(MersenneTwister(seed), N_coeff))
     input_pcof_str = "targetError=1e-7_cnot3OptimizationTest_order=6_degree=14_seed=0_nsteps=5414_atol=1.0e-15_rtol=1.0e-15_D1=16_time=6.0_maxiter=10000_nthreads=4_costType=Infidelity_gateDuration=550.0_nCavityLevels=10_pcof.csv"
-    pcofs, header = readdlm(input_pcof_str, ',', Float64, header=true)
+    pcofs = readdlm(input_pcof_str, ',', Float64, header=false)
     pcof0 = pcofs[rand(50:end),:] # Use a random control vector that is a little bit in the middle of the optimization
     #pcof0_avg = norm(pcof0, 1) / length(pcof0)
 
@@ -182,7 +182,7 @@ function main()
         # Perturbation coefficients uniformly distributed between 0.1amax and -0.1amax
         #pcof_pert = 0.2 * cnot3ret.amax * (0.5 .- rand(MersenneTwister(i), N_coeff))
         pcof_pert_dir = 2 * (0.5 .- rand(MersenneTwister(pert_i), N_coeff))
-        pcof_coarse = pcof0 + pert_order * pcof_pert_dir
+        pcof_pert = pcof0 + pert_order * pcof_pert_dir
 
         # TODO add gradient norm, final state, comparison 
         pert_history = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_coarse, prob.N_initial_conditions)
@@ -196,15 +196,15 @@ function main()
 
         discrete_adjoint!(
             pert_grad, pert_history, pert_lambda_history, pert_adjoint_forcing,
-            prob, controls, pcof, target, order=order, timer=pert_timer,
+            prob, controls, pcof_pert, target, order=order, timer=pert_timer,
             forward_gmres_tracker=pert_forward_gmres_tracker,
             adjoint_gmres_tracker=pert_adjoint_gmres_tracker,
         )
 
-        pert_UT = real_to_complex(pert_history[:,1,end,:])
+        UT_pert = real_to_complex(pert_history[:,1,end,:])
 
         pert_objective = cost_function(
-            pert_UT, target, prob.N_ess_levels,
+            UT_pert, target, prob.N_ess_levels,
             cost_type=cost_type
         )
         obj_err = abs(real_objective-pert_objective)
@@ -215,20 +215,23 @@ function main()
         grad_err = norm(pert_grad - real_grad)
         grad_err_inf = norm(pert_grad - real_grad, Inf)
 
-        UT_coarse_err = norm(pert_UT - UT_coarse)
-        UT_fine_err = norm(pert_UT - UT_fine)
+        UT_coarse_err = norm(UT_pert - UT_coarse0)
+        UT_fine_err = norm(UT_pert - target)
 
-        avg_gmres_iter = avg_N_iterations(gmres_tracker)
+        avg_gmres_iter_fwd = avg_N_iterations(pert_forward_gmres_tracker)
+        avg_gmres_iter_adj = avg_N_iterations(pert_adjoint_gmres_tracker)
 
-        println("[ ", now(), " | worker ", myid(), " ] ", "Got coarse solution ", pert_i, ", with pert_order ", pert_order, ", rel_err = ", rel_err)
+        println("[ $(now()) | worker $(myid()) ] Got coarse solution $pert_i\
+                with pert_order $pert_order; err = $(UT_coarse_err)")
         
         data_row = hcat(
             order, pert_i, pert_order, real_objective, pert_objective, obj_err,
             real_grad_norm, pert_grad_norm, grad_err, 
             real_grad_norm_inf, pert_grad_norm_inf, grad_err_inf, 
-            UT_coarse_err, UT_fine_err, avg_gmres_iter
+            UT_coarse_err, UT_fine_err, avg_gmres_iter_fwd, avg_gmres_iter_adj
         )
     end
+    println("ENDING AT TIME $(now())")
 
     mkpath(output_directory)
     filename = "cnot3PerturbationTest_order=$(order)_degree=$(degree)_seed=$(seed)_targetErrorFine=$(fine_target_error)_targetErrorCoarse=$(coarse_target_error)_nstepsFine=$(nsteps_fine)_nstepsCoarse=$(nsteps_coarse)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_costType=$(cost_type)_gateDuration=$(Tmax)_nCavityLevels=$(N_osc_levels)"
@@ -240,9 +243,9 @@ function main()
 
     header = hcat(
         "method_order", "pert_i", "pert_order", "real_objective", 
-        "pert_objective", "real_grad_norm", "pert_grad_norm", "grad_err_norm",
+        "pert_objective", "objective_err", "real_grad_norm", "pert_grad_norm", "grad_err_norm",
         "real_grad_norm_inf", "pert_grad_norm_inf", "grad_err_norm_inf",
-        "UT_coarse_err", "UT_fine_err", "avg_N_gmres_iter"
+        "UT_coarse_err", "UT_fine_err", "avg_N_gmres_iter_fwd", "avg_N_gmres_iter_adj"
     )
     open(filename * ".csv", "w") do io
         DelimitedFiles.writedlm(io, rpad.(header, 24), ',')
@@ -251,7 +254,6 @@ function main()
         DelimitedFiles.writedlm(io, rpad.(data, 24), ',')
     end
 
-    println("ENDING AT TIME $(now())")
     return nothing
 end
 
