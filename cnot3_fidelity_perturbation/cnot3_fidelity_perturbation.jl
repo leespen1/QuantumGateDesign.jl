@@ -1,8 +1,21 @@
-using QuantumGateDesign, ArgParse, Random, DelimitedFiles, Distributed, Dates,
-      LinearAlgebra, SlurmClusterManager
+using Distributed, SlurmClusterManager
+using QuantumGateDesign, ArgParse, Random, DelimitedFiles, Dates, LinearAlgebra
 using QuantumGateDesign: setup_cnot3, get_D1, get_controls
 
-@everywhere using QuantumGateDesign, Random, Dates
+if haskey(ENV, "SLURM_JOB_ID") # Set up remote processes if in SLURM
+    println("In SLURM environment, using SlurmClusterManager")
+    addprocs(SlurmManager(), exeflags="--project")
+else 
+    println("Running locally")
+    addprocs(Sys.CPU_THREADS-1)
+end
+
+@everywhere begin
+    println("[After addprocs] Hello from $(myid()):$(gethostname())\nCurrent project environemtn $(Base.active_project())\nCurrent Directory: $(pwd())")
+    using QuantumGateDesign, Random, Dates
+end
+
+
 
 function parse_commandline()
     s = ArgParseSettings()
@@ -62,6 +75,7 @@ function parse_commandline()
 end
 
 function main()
+    println("STARTING AT TIME $(now())")
     parsed_args = parse_commandline()
     order = parsed_args["order"]
     degree = 14
@@ -134,15 +148,9 @@ function main()
     UT_coarse = history_coarse[:,end,:]
     real_objective = QuantumGateDesign.cost_function(UT_coarse, target, cnot3ret.qgd_prob.N_ess_levels, cost_type=cost_type)
 
-    pert_orders = (1e-1, 1e-2, 1e-3)
+    pert_orders = (1e-1, 1e-2, 1e-3, 1e-4, 1e-5)
     println("[ ", now(), " | worker ", myid(), " ] ", "Getting remaining coarse solutions")
 
-    if haskey(ENV, "SLURM_JOB_ID") # Set up remote processes if in SLURM
-        addprocs(SlurmManager())
-    else 
-        addprocs(Sys.CPU_THREADS-1)
-    end
-    @everywhere println("hello from $(myid()):$(gethostname())")
 
     #data = mapreduce(vcat, 1:npert, pert_orders) do pert_i, pert_order
     data = @distributed (vcat) for (pert_i, pert_order) in collect(Iterators.product(1:npert, pert_orders))
@@ -182,6 +190,7 @@ function main()
         DelimitedFiles.writedlm(io, rpad.(data, 24), ',')
     end
 
+    println("ENDING AT TIME $(now())")
     return nothing
 end
 
