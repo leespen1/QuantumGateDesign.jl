@@ -2,19 +2,16 @@
 #SBATCH --job-name=cnot3_fidelity_perturbation  # Job name
 #SBATCH --mail-type=NONE             # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=leespen1@msu.edu # Where to send mail. 
-#SBATCH --nodes=2                    # Maximum number of nodes to be allocated
+#SBATCH --nodes=3                    # Maximum number of nodes to be allocated
 #SBATCH --ntasks-per-node=10         # Maximum number of tasks on each node
 #SBATCH --cpus-per-task=4            # Number of processors for each task (want several because the BLAS is multithreaded, even though my Julia code is not)
-#SBATCH --mem=80G                    # Memory (i.e. RAM) per NODE
+#SBATCH --mem-per-cpu=2G             # Memory (i.e. RAM) per NODE
 #SBATCH --export=NONE                # HPCC suggests setting to NONE for HPCC reasons, but I don't think it's necessary, and I want ALL so that I can load julia and have it transfer to all nodes
 #SBATCH --constraint=intel18         # Run on the
 #SBATCH --time=3:30:00               # Wall time limit (days-hrs:min:sec)
 #SBATCH --output=%A/cnot3_fidelity_perturbation_%A_%a.log     # Path to the standard output and error files relative to the working directory
-#SBATCH --array=1-10 # Should be divisible by number of entries in nsteps matrix
+#SBATCH --array=51-75 # Should be divisible by number of entries in nsteps matrix
 
-# We get about 56 GB of RAM on the dev nodes. But also, I think it is better to
-# keep things to one test per node so I don't have competition for memory (e.g.
-# if one order uses up memory faster than the other)
 
 # Create directory where we will store the logs (and the data)
 mkdir -p $SLURM_ARRAY_JOB_ID
@@ -29,8 +26,8 @@ echo "Number of CPUs Per Task        = $SLURM_CPUS_PER_TASK"
 echo "Memory per node                = $SLURM_MEM_PER_NODE"
 echo ""
 
-ORDER=2
-NPERT=10
+ORDER=8
+NPERT=25
 
 FILE_ID="fidelityPerturbation"
 TARGET_ERRORS=("1e-1" "1e-2" "1e-3" "1e-4" "1e-5")
@@ -55,7 +52,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
     module purge
 
     # Set up project environment, if needed
-    INSTANTIATE_STRING="julia --project -e 'using Pkg; Pkg.instantiate()'"
+    INSTANTIATE_STRING="julia --project -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'"
     echo $INSTANTIATE_STRING
     eval $INSTANTIATE_STRING
 
