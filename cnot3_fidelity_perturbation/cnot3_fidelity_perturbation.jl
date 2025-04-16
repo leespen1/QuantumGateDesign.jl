@@ -7,12 +7,19 @@ if haskey(ENV, "SLURM_JOB_ID") # Set up remote processes if in SLURM
     addprocs(SlurmManager(), exeflags="--project")
 else 
     println("Running locally")
-    addprocs(Sys.CPU_THREADS-1)
+    println("Total memory is: ", Sys.total_memory())
+    #addprocs(Sys.CPU_THREADS-1)
 end
+
+println("Workers:", workers())
 
 @everywhere begin
     println("[After addprocs] Hello from $(myid()):$(gethostname())\nCurrent project environemtn $(Base.active_project())\nCurrent Directory: $(pwd())")
     using QuantumGateDesign, Random, Dates
+    using QuantumGateDesign: real_to_complex, get_number_of_control_parameters,
+                             DiscreteAdjointTimes, discrete_adjoint!, total_time,
+                             cost_function
+    using LinearAlgebra: norm
 end
 
 
@@ -120,57 +127,107 @@ function main()
     nsteps_fine = nsteps_matrix[fine_target_error_i, order6_i]
     nsteps_coarse = nsteps_matrix[coarse_target_error_i, order_i]
 
-    cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1, N_osc_levels=N_osc_levels, Tmax=Tmax)
+    cnot3ret = setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1, N_osc_levels=N_osc_levels, Tmax=Tmax)
+    
+    prob = cnot3ret.qgd_prob
 
-
-    println("Schrodinger Problem:")
-    display(cnot3ret.qgd_prob)
 
     controls = get_controls(degree, D1, cnot3ret.juqbox_params.Cfreq, cnot3ret.tf)
-    N_coeff = QuantumGateDesign.get_number_of_control_parameters(controls)
+    N_coeff = get_number_of_control_parameters(controls)
 
     # Coefficients uniformly distributed between amax and -amax
     #pcof0 = 2 * cnot3ret.amax * (0.5 .- rand(MersenneTwister(seed), N_coeff))
     input_pcof_str = "targetError=1e-7_cnot3OptimizationTest_order=6_degree=14_seed=0_nsteps=5414_atol=1.0e-15_rtol=1.0e-15_D1=16_time=6.0_maxiter=10000_nthreads=4_costType=Infidelity_gateDuration=550.0_nCavityLevels=10_pcof.csv"
     pcofs, header = readdlm(input_pcof_str, ',', Float64, header=true)
     pcof0 = pcofs[rand(50:end),:] # Use a random control vector that is a little bit in the middle of the optimization
-    pcof0_avg = norm(pcof0, 1) / length(pcof0)
+    #pcof0_avg = norm(pcof0, 1) / length(pcof0)
 
 
-    println("[ ", now(), " | worker ", myid(), " ] ", "Getting fine solution")
-    cnot3ret.qgd_prob.nsteps = nsteps_fine
-    history_fine = eval_forward(cnot3ret.qgd_prob, controls, pcof0, order=6)
+    println("[ ", now(), " | worker ", myid(), " ] ", "Getting fine solution\n")
+    prob.nsteps = nsteps_fine
+    history_fine = eval_forward(prob, controls, pcof0, order=6)
     target = history_fine[:,end,:]
 
-    println("[ ", now(), " | worker ", myid(), " ] ", "Getting first coarse solution")
-    cnot3ret.qgd_prob.nsteps = nsteps_coarse
-    history_coarse = eval_forward(cnot3ret.qgd_prob, controls, pcof0, order=order)
-    UT_coarse = history_coarse[:,end,:]
-    real_objective = QuantumGateDesign.cost_function(UT_coarse, target, cnot3ret.qgd_prob.N_ess_levels, cost_type=cost_type)
+    println("[ ", now(), " | worker ", myid(), " ] ", "Getting first coarse solution\n")
+
+    prob.nsteps = nsteps_coarse
+    N_derivatives = div(order, 2) 
+    real_grad = zeros(get_number_of_control_parameters(controls))
+    history_coarse0 = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_coarse, prob.N_initial_conditions)
+    lambda_history_coarse0 = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_coarse, prob.N_initial_conditions)
+    adjoint_forcing_coarse0 = zeros(prob.real_system_size, 1+nsteps_coarse, prob.N_initial_conditions)
+    
+    timer = DiscreteAdjointTimes()
+    forward_gmres_tracker = GMRESTracker()
+    adjoint_gmres_tracker = GMRESTracker()
+
+    discrete_adjoint!(
+        real_grad, history_coarse0, lambda_history_coarse0, adjoint_forcing_coarse0, prob,
+        controls, pcof0, target, order=order, timer=timer,
+        forward_gmres_tracker=forward_gmres_tracker,
+        adjoint_gmres_tracker=adjoint_gmres_tracker,
+    )
+    UT_coarse0 = real_to_complex(history_coarse0[:,1,end,:])
+
+    real_objective = cost_function(UT_coarse0, target, prob.N_ess_levels, cost_type=cost_type)
+    real_grad_norm = norm(real_grad)
+    real_grad_norm_inf = norm(real_grad, Inf)
+
 
     pert_orders = (1e-1, 1e-2, 1e-3, 1e-4, 1e-5)
-    println("[ ", now(), " | worker ", myid(), " ] ", "Getting remaining coarse solutions")
-
-
     #data = mapreduce(vcat, 1:npert, pert_orders) do pert_i, pert_order
     data = @distributed (vcat) for (pert_i, pert_order) in collect(Iterators.product(1:npert, pert_orders))
+        println("[ $(now()) | worker  $(myid()) ] Getting coarse solution $pert_i with pert_order $pert_order")
 
         # Perturbation coefficients uniformly distributed between 0.1amax and -0.1amax
         #pcof_pert = 0.2 * cnot3ret.amax * (0.5 .- rand(MersenneTwister(i), N_coeff))
-        pcof_pert_dir = 2 * pcof0_avg * (0.5 .- rand(MersenneTwister(pert_i), N_coeff))
+        pcof_pert_dir = 2 * (0.5 .- rand(MersenneTwister(pert_i), N_coeff))
         pcof_coarse = pcof0 + pert_order * pcof_pert_dir
-        println("[ ", now(), " | worker ", myid(), " ] ", "Getting coarse solution ", pert_i, ", with pert_order ", pert_order)
-        history_coarse = eval_forward(cnot3ret.qgd_prob, controls, pcof_coarse, order=order)
-        UT_coarse = history_coarse[:,end,:]
-        approx_objective = QuantumGateDesign.cost_function(UT_coarse, target, cnot3ret.qgd_prob.N_ess_levels, cost_type=cost_type)
 
-        abs_err = abs(real_objective-approx_objective)
-        rel_err = abs((real_objective-approx_objective)/real_objective)
+        # TODO add gradient norm, final state, comparison 
+        pert_history = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_coarse, prob.N_initial_conditions)
+        pert_lambda_history = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_coarse, prob.N_initial_conditions)
+        pert_adjoint_forcing = zeros(prob.real_system_size, 1+nsteps_coarse, prob.N_initial_conditions)
+        pert_grad = zeros(get_number_of_control_parameters(controls))
+
+        pert_timer = DiscreteAdjointTimes()
+        pert_forward_gmres_tracker = GMRESTracker()
+        pert_adjoint_gmres_tracker = GMRESTracker()
+
+        discrete_adjoint!(
+            pert_grad, pert_history, pert_lambda_history, pert_adjoint_forcing,
+            prob, controls, pcof, target, order=order, timer=pert_timer,
+            forward_gmres_tracker=pert_forward_gmres_tracker,
+            adjoint_gmres_tracker=pert_adjoint_gmres_tracker,
+        )
+
+        pert_UT = real_to_complex(pert_history[:,1,end,:])
+
+        pert_objective = cost_function(
+            pert_UT, target, prob.N_ess_levels,
+            cost_type=cost_type
+        )
+        obj_err = abs(real_objective-pert_objective)
+
+        pert_grad_norm = norm(pert_grad)
+        pert_grad_norm_inf = norm(pert_grad, Inf)
+
+        grad_err = norm(pert_grad - real_grad)
+        grad_err_inf = norm(pert_grad - real_grad, Inf)
+
+        UT_coarse_err = norm(pert_UT - UT_coarse)
+        UT_fine_err = norm(pert_UT - UT_fine)
+
+        avg_gmres_iter = avg_N_iterations(gmres_tracker)
 
         println("[ ", now(), " | worker ", myid(), " ] ", "Got coarse solution ", pert_i, ", with pert_order ", pert_order, ", rel_err = ", rel_err)
         
-        data_row = hcat(order, pert_order, real_objective, approx_objective,
-                        abs_err, rel_err)
+        data_row = hcat(
+            order, pert_i, pert_order, real_objective, pert_objective, obj_err,
+            real_grad_norm, pert_grad_norm, grad_err, 
+            real_grad_norm_inf, pert_grad_norm_inf, grad_err_inf, 
+            UT_coarse_err, UT_fine_err, avg_gmres_iter
+        )
     end
 
     mkpath(output_directory)
@@ -181,8 +238,12 @@ function main()
         filename = output_directory * "/" * filename
     end
 
-    header = hcat("method_order", "pert_order", "true_objective", 
-                  "approx_objective", "error", "relative_error")
+    header = hcat(
+        "method_order", "pert_i", "pert_order", "real_objective", 
+        "pert_objective", "real_grad_norm", "pert_grad_norm", "grad_err_norm",
+        "real_grad_norm_inf", "pert_grad_norm_inf", "grad_err_norm_inf",
+        "UT_coarse_err", "UT_fine_err", "avg_N_gmres_iter"
+    )
     open(filename * ".csv", "w") do io
         DelimitedFiles.writedlm(io, rpad.(header, 24), ',')
     end
