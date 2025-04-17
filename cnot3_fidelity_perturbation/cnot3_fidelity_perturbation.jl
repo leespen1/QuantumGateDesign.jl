@@ -225,7 +225,7 @@ function main()
                 with pert_order $pert_order; err = $(UT_coarse_err)")
         
         data_row = hcat(
-            order, pert_i, pert_order, real_objective, pert_objective, obj_err,
+            pert_i, pert_order, real_objective, pert_objective, obj_err,
             real_grad_norm, pert_grad_norm, grad_err, 
             real_grad_norm_inf, pert_grad_norm_inf, grad_err_inf, 
             UT_coarse_err, UT_fine_err, avg_gmres_iter_fwd, avg_gmres_iter_adj
@@ -242,10 +242,11 @@ function main()
     end
 
     header = hcat(
-        "method_order", "pert_i", "pert_order", "real_objective", 
-        "pert_objective", "objective_err", "real_grad_norm", "pert_grad_norm", "grad_err_norm",
+        "pert_i", "pert_order", "real_objective", "pert_objective",
+        "objective_err", "real_grad_norm", "pert_grad_norm", "grad_err_norm",
         "real_grad_norm_inf", "pert_grad_norm_inf", "grad_err_norm_inf",
-        "UT_coarse_err", "UT_fine_err", "avg_N_gmres_iter_fwd", "avg_N_gmres_iter_adj"
+        "UT_coarse_err", "UT_fine_err", "avg_N_gmres_iter_fwd",
+        "avg_N_gmres_iter_adj"
     )
     open(filename * ".csv", "w") do io
         DelimitedFiles.writedlm(io, rpad.(header, 24), ',')
