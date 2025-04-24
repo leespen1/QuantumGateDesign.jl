@@ -215,8 +215,9 @@ function main()
         grad_err = norm(pert_grad - real_grad)
         grad_err_inf = norm(pert_grad - real_grad, Inf)
 
-        UT_coarse_err = norm(UT_pert - UT_coarse0)
-        UT_fine_err = norm(UT_pert - target)
+        UT_numerical_err = norm(UT_pert - UT_coarse0) # Distrance from perturebed numerical approx to unperturbed numerical approx
+        UT_pcof_err = norm(UT_coarse0 - target) # Distance from unperturbed numerical approx to target state
+        UT_total_err = norm(UT_pert - target) # Distance from perturbed numerical approx to target state
 
         avg_gmres_iter_fwd = avg_N_iterations(pert_forward_gmres_tracker)
         avg_gmres_iter_adj = avg_N_iterations(pert_adjoint_gmres_tracker)
@@ -228,7 +229,7 @@ function main()
             pert_i, pert_order, real_objective, pert_objective, obj_err,
             real_grad_norm, pert_grad_norm, grad_err, 
             real_grad_norm_inf, pert_grad_norm_inf, grad_err_inf, 
-            UT_coarse_err, UT_fine_err, avg_gmres_iter_fwd, avg_gmres_iter_adj
+            UT_numerical_err, UT_pcof_err, UT_total_err, avg_gmres_iter_fwd, avg_gmres_iter_adj
         )
     end
     println("ENDING AT TIME $(now())")
@@ -245,7 +246,7 @@ function main()
         "pert_i", "pert_order", "real_objective", "pert_objective",
         "objective_err", "real_grad_norm", "pert_grad_norm", "grad_err_norm",
         "real_grad_norm_inf", "pert_grad_norm_inf", "grad_err_norm_inf",
-        "UT_coarse_err", "UT_fine_err", "avg_N_gmres_iter_fwd",
+        "UT_numerical_error", "UT_pcof_error", "UT_total_error", "avg_N_gmres_iter_fwd",
         "avg_N_gmres_iter_adj"
     )
     open(filename * ".csv", "w") do io
