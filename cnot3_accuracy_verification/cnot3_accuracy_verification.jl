@@ -12,7 +12,7 @@ else
 end
 
 @everywhere begin
-    println("[After addprocs] Hello from $(myid()):$(gethostname())\nCurrent project environemtn $(Base.active_project())\nCurrent Directory: $(pwd())")
+    #println("[After addprocs] Hello from $(myid()):$(gethostname())\nCurrent project environemtn $(Base.active_project())\nCurrent Directory: $(pwd())")
     using QuantumGateDesign, Dates
     using QuantumGateDesign: real_to_complex, get_number_of_control_parameters,
                              DiscreteAdjointTimes, discrete_adjoint!, total_time,
@@ -36,10 +36,15 @@ function parse_filename_params(filename)
 end
 
 function main()
+    println("Starting Main")
     dir = "/mnt/home/leespen1/Research/QuantumGateDesign.jl/cnot3_optimization/53220812"
     for filename in readdir(dir, join=true)
+        println("Doing file $filename")
         #filename = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_optimization/51458831/targetError=1e-1_cnot3OptimizationTest_order=2_degree=14_seed=0_nsteps=7433_atol=1.0e-15_rtol=1.0e-15_D1=16_time=6.0_maxiter=10000_nthreads=4_costType=Infidelity_gateDuration=550.0_nCavityLevels=10_pcof.csv"
         #filename = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_optimization/51458831/targetError=1e-3_cnot3OptimizationTest_order=4_degree=14_seed=0_nsteps=3535_atol=1.0e-15_rtol=1.0e-15_D1=16_time=6.0_maxiter=10000_nthreads=4_costType=Infidelity_gateDuration=550.0_nCavityLevels=10_pcof.csv"
+        if !contains(filename, "_pcof.csv")
+            continue 
+        end
 
         parsed_args = parse_filename_params(filename) 
         coarse_order = parsed_args["order"]
@@ -53,7 +58,8 @@ function main()
         target_error = parsed_args["targetError"]
 
         # Only process low-accuracy files
-        if !(target_error == 1e-1 || target_error == 1e-3 || coarse_order != 4)
+        if (target_error != 1e-1 && target_error != 1e-3 ) || (coarse_order != 4)
+            println("Skipping file $filename")
             continue
         end
 
@@ -174,3 +180,5 @@ function main()
 
     return data
 end
+
+main()
