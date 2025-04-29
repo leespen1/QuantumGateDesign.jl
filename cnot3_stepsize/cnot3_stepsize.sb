@@ -37,8 +37,8 @@ TIME=3.75
 
 DEGREE=14
 D1=15
-RTOL=1e-10
-ATOL=1e-10
+RTOL=1e-15
+ATOL=1e-15
 USE_JUQBOX=false
 GRADIENT=true
 LEVELS_CAVITY=10
@@ -68,7 +68,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
     OUTPUTDIR="$SLURM_ARRAY_JOB_ID"
     NTHREADS=$SLURM_CPUS_PER_TASK
 
-
+    CMD_STRING="julia --project --threads=$NTHREADS ./cnot3_stepsize.jl $METHOD_ORDER $DEGREE $SEED --time $TIME --D1 $D1 --rtol $RTOL --atol $ATOL --use_juqbox $USE_JUQBOX --gradient $GRADIENT --output_directory=$OUTPUTDIR --levels_cavity $LEVELS_CAVITY --start_in_highest_state $START_IN_HIGHEST_STATE"
     echo $CMD_STRING
     eval $CMD_STRING
 else
