@@ -14,7 +14,7 @@ function get_data(target_labels, out_order::Integer; data_directory=missing,
     _nthreads=(\d+)
     (?:_usejuqbox=(true|false))? # Optionally match , doesn't appear in older files
     (?:_gradient=(true|false))? # Optionally match , doesn't appear in older files
-    (?:_gateDuration=(.*))? # Optionally match , doesn't appear in older files
+    (?:_gateDuration=(\d+\.\d+))? # Optionally match , doesn't appear in older files
     (?:_nCavityLevels=(\d+))? # Optionally match , doesn't appear in older files
     \.csv
     """x # 'x' tag ignores whitespace and comments
@@ -38,7 +38,10 @@ function get_data(target_labels, out_order::Integer; data_directory=missing,
                 files_found += 1
                 filepath = data_directory * "/" * file
 
-                dlm_data, dlm_header = readdlm(filepath, ',', Float64, header=true)
+                dlm_data, dlm_header = readdlm(filepath, ',', String, header=true)
+                println(filepath)
+                dlm_data = map(strip, dlm_data)
+                dlm_data = parse.(Float64, dlm_data)
                 dlm_header = strip.(vec(dlm_header)) # Remove whitespace, convert to vector
 
                 for (data_entries, label) in zip(data_entries_collection, target_labels)
@@ -175,7 +178,7 @@ function get_nsteps_errors_final_states(out_order; data_directory=missing, juqbo
                 # Read as String first, then convert. Otherwise NaN+NaN*im
                 # won't be interpreted correctly
                 final_states = readdlm(filepath, ',', String)
-                final_states = map(x -> strip(x) == "NaN + NaN*im" ? NaN + NaN*im : parse(ComplexF64, x),
+                final_states = map(x -> strip(x) == "NaN + NaN*im" ? NaN + NaN*im : parse(ComplexF64, strip(x)),
                                    final_states) 
 
                 true_final_state = final_states[end,:]

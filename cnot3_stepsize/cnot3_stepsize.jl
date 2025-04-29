@@ -44,6 +44,10 @@ function parse_commandline()
             help = "Duration of the gate, in nanoseconds."
             arg_type = Float64
             default = 550.0
+        "--start_in_highest_state"
+            help = "Instead of doing the typical gate design problem, start in the most excited state, which should have the fastest dynamics."
+            arg_type = Bool
+            default = false
         "order"
             help = "Method order to use"
             required = true
@@ -77,8 +81,9 @@ function main()
     compute_gradient = parsed_args["gradient"]
     N_osc_levels = parsed_args["levels_cavity"]
     Tmax = parsed_args["gate_duration"]
-
+    start_in_highest_state = parsed_args["start_in_highest_state"]
     nthreads = Threads.nthreads()
+
     cnot3ret = QuantumGateDesign.setup_cnot3(
         seed=seed,
         atol=atol,
@@ -87,6 +92,22 @@ function main()
         N_osc_levels=N_osc_levels,
         Tmax=Tmax
     )
+
+
+    if start_in_highest_state # Change initial conditions to start in highest state
+        cnot3ret.qgd_prob.u0 = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
+        cnot3ret.qgd_prob.v0 = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
+        cnot3ret.qgd_prob.u0[end,1] = 1
+        cnot3ret.qgd_prob.N_ess_levels = 1
+        cnot3ret.qgd_prob.N_initial_conditions = 1
+
+        cnot3ret.target = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
+        cnot3ret.target[end,1] = 1
+    end
+
+    display(cnot3ret.qgd_prob)
+
+
     controls = get_controls(degree, D1, cnot3ret.juqbox_params.Cfreq, cnot3ret.tf)
 
     N_coeff = QuantumGateDesign.get_number_of_control_parameters(controls)
@@ -95,7 +116,7 @@ function main()
     pcof = cnot3ret.amax * 2* (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
     mkpath(output_directory)
-    filename = output_directory * "/cnot3StepsizeTest_order=$(order)_degree=$(degree)_seed=$(seed)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)_usejuqbox=$(use_juqbox)_gradient=$(compute_gradient)_gateDuration=$(Tmax)_nCavityLevels=$(N_osc_levels)"
+    filename = output_directory * "/cnot3StepsizeTest_order=$(order)_degree=$(degree)_seed=$(seed)_atol=$(atol)_rtol=$(rtol)_D1=$(D1)_time=$(time)_nthreads=$(nthreads)_usejuqbox=$(use_juqbox)_gradient=$(compute_gradient)_gateDuration=$(Tmax)_nCavityLevels=$(N_osc_levels)_excited=$(start_in_highest_state)"
 
     if use_juqbox
         @assert order == 2
