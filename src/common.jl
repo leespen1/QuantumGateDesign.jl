@@ -49,5 +49,5 @@ abstract type AbstractQGDPreconditioner end
 
 multiples_type(a_type) = Union{a_type, Tuple{Vararg{<: a_type}}, Vector{<: a_type}}
 const IntegersType = multiples_type(Integer)
-const RealsType = multiples_type(Integer)
+const RealsType = multiples_type(Real)
 const ControlsType = multiples_type(AbstractControl)
