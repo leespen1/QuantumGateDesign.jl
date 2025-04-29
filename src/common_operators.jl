@@ -101,7 +101,7 @@ function compsys_rot_frame_op(frequencies::RealsType,
     end
 
     # 
-    subsys_rotating_frame_ops = [rotating_frame_op(w, N, t) 
+    subsys_rotating_frame_ops = [rot_frame_op(w, N, t)
                                  for (w, N) in zip(frequencies, subsystem_sizes)]
     # (A ⊗ I)*(I ⊗ B) = (A ⊗ B)
     return reduce(kron, subsys_rotating_frame_ops)
