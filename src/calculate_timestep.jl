@@ -14,7 +14,7 @@ solution.
 - `max_amplitudes::Vector{<: Real}`: Maximum amplitude for each control function.
 - `timesteps_per_period::Integer`: Number of time steps per shortest period (assuming a slowly varying Hamiltonian).
 """
-function get_shortest_period(prob::SchrodingerProb, max_amplitudes::Vector{<: Real})
+function get_shortest_period(prob::SchrodingerProb, max_amplitudes::RealsType)
 
     full_hamiltonian = prob.system_sym + 1im*prob.system_asym
     for i in 1:prob.N_operators
