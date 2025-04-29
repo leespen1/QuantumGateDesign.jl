@@ -55,6 +55,7 @@ For a composite system, return the computational basis (non-entangled) state
 where the `i`-th subsystem is in the `levels[i]`-th basis state, and the size of
 that subsystem is `subsystem_sizes[i]`.
 
+|n₃n₂n₁⟩ = |n₃⟩⊗|n₂⟩⊗|n₁⟩
 
 E.g. `compsys_basis_state((1,0), (2,2))` constructs the state |10⟩ for a system
 of 2 qubits. The vector representation is (0,0,1,0)^T. The state |10⟩ for a system
@@ -64,7 +65,7 @@ In contrast to the column-major ordering of arrays in Julia, for this function
 the last subsystem (i.e. the last bit in the bitstring) changes the most rapidly.
 That way the ordering of the states is |00⟩, |01⟩, |10⟩, |11⟩.
 """
-function compsys_basis_state(levels::IntegersType, subsystem_sizes::IntegersType)
+function compsys_basis_state(subsystem_sizes::IntegersType, levels::IntegersType)
     individual_states = [basis_state(i, N) for (i, N) in zip(levels, subsystem_sizes)]
     return reduce(kron, individual_states)
 end
@@ -136,7 +137,7 @@ function promote_subsys_op(op::AbstractMatrix,
             kronecker_prod_vec[i] = op
         else
             n = subsystem_sizes[i]
-            kronecker_prod_vec[i] = identity(n)
+            kronecker_prod_vec[i] = identity_op(n)
         end
     end
        
