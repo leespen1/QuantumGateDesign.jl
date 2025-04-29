@@ -30,7 +30,7 @@ function get_D1(pcof_length::Integer, N_freq::Integer, N_controls::Integer)
     return D1
 end
 
-struct CNOT3Ret{ProbT}
+mutable struct CNOT3Ret{ProbT}
     juqbox_params::Juqbox.objparams
     juqbox_wa::Juqbox.Working_Arrays
     qgd_prob::ProbT
@@ -39,6 +39,9 @@ struct CNOT3Ret{ProbT}
     D1::Int
     amax::Float64
     tf::Float64
+    rot1::Diagonal{ComplexF64, Vector{ComplexF64}}
+    rot2::Diagonal{ComplexF64, Vector{ComplexF64}}
+    rot3::Diagonal{ComplexF64, Vector{ComplexF64}}
 end
     
 
@@ -253,6 +256,7 @@ function setup_cnot3(;N_osc_levels::Integer, seed::Integer=0, atol::Real=1e-10, 
 
     target = juqbox_params.Utarget_r + im*juqbox_params.Utarget_i
 
-    return CNOT3Ret(juqbox_params, juqbox_wa, qgd_prob, target, pcof0, D1, amax, Tmax)
+    return CNOT3Ret(juqbox_params, juqbox_wa, qgd_prob, target, pcof0, D1, amax, Tmax,
+                   rot1, rot2, rot3)
 end
 
