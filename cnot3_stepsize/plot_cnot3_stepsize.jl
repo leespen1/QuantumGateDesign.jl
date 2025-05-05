@@ -113,8 +113,8 @@ function make_plot(processed_df::DataFrame)
         xminorgridvisible = true,
         yticks=log10_ticks,
         #limits=((2^5, 2^20), (10.0^(-10.25), 10.0^0.25)),
-        #limits=((2^5, 2^20), (1e-10, 1e0)),
-        limits=((2^5, 2^20), (1e-10, 1e1)),
+        limits=((2^5, 2^20), (1e-10, 1e0)),
+        #limits=((2^5, 2^20), (1e-10, 1e1)),
     )
 
     ax_nsteps_vs_time = CairoMakie.Axis(
@@ -153,8 +153,8 @@ function make_plot(processed_df::DataFrame)
         #title="Elapsed Time Plot",
         #limits=((10.0^(-10.25), 10.0^(-0.75)), (10.0^(-0.25),10.0^(5.25))),
         #limits=((1e-10, 1e-1), (10.0^(-0.25),10.0^(5.25))),
-        #limits=((1e-10, 1e-1), (1e0,1e5)),
-        limits=((1e-10, 1e0), (1e0,1e5)),
+        limits=((1e-10, 1e-1), (1e0,1e5)),
+        #limits=((1e-10, 1e0), (1e0,1e5)),
     )
 
     grouped_df = @groupby(processed_df, :usejuqbox, :order)
@@ -209,10 +209,10 @@ function make_plot(processed_df::DataFrame)
     # Add a hard-coded line to approximately extrapolate 2nd order Hemite and Stormer-Verlet
     #dummy_relerr_mean = [10.0 ^(-i) for i in 4.25:11]
     #dummy_elapsedtime_mean = 1.1 .* (dummy_relerr_mean .^ -0.47)
-    #dummy_relerr_mean = [10.0 ^(-i) for i in 3.75:11]
-    #dummy_elapsedtime_mean = 3.1 .* (dummy_relerr_mean .^ -0.47)
-    dummy_relerr_mean = [10.0 ^(-i) for i in 1.25:11]
-    dummy_elapsedtime_mean = 35 .* (dummy_relerr_mean .^ -0.47)
+    dummy_relerr_mean = [10.0 ^(-i) for i in 3.5:11]
+    dummy_elapsedtime_mean = 3.0 .* (dummy_relerr_mean .^ -0.47)
+    #dummy_relerr_mean = [10.0 ^(-i) for i in 1.25:11]
+    #dummy_elapsedtime_mean = 35 .* (dummy_relerr_mean .^ -0.47)
     lines!(
         ax_error_vs_time, dummy_relerr_mean, dummy_elapsedtime_mean;
         color=:black, linestyle=:dot, label="Order 2 (Approximate Extrapolation)"
@@ -373,8 +373,10 @@ _finalStates
 
     
 
-data_directory = "./DataMar28/"
+#data_directory = "./DataMar28/"
 #data_directory = "./StepsizeTol1e-12/"
+#data_directory = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_stepsize/DataMay4/UnexcitedData"
+data_directory = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_stepsize/DataMay4/ExcitedData"
 
 # Grab data from directory, combine into one data frame
 results_files = filter(x -> occursin(results_regex, x),

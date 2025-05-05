@@ -103,6 +103,12 @@ function main()
 
         cnot3ret.target = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
         cnot3ret.target[end,1] = 1
+
+        cnot3ret.juqbox_params.Uinit = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
+        cnot3ret.juqbox_params.Utarget_r = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
+        cnot3ret.juqbox_params.Utarget_i = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
+        cnot3ret.juqbox_params.N = 1
+        cnot3ret.juqbox_wa = Working_Arrays(cnot3ret.juqbox_params, length(cnot3ret.pcof0))
     end
 
     display(cnot3ret.qgd_prob)
