@@ -20,26 +20,29 @@ end
     using LinearAlgebra: norm
 end
 
-function parse_filename_params(filename)
-    param_value_pairs = Dict{String, Union{Int, Float64, String}}()
-    for pair in split(filename, "_")
-        if occursin("=", pair)
-            param, value = split(pair, "=")
-            pparam = string(param) # Have to convert from substring
-            pvalue = tryparse(Int, value) # parsed value
-            pvalue = isnothing(pvalue) ? tryparse(Float64, value) : pvalue
-            pvalue = isnothing(pvalue) ? string(value) : pvalue # Default back to original string
-            param_value_pairs[pparam] = pvalue
-        end
-    end
-    return param_value_pairs
+function val_parse(value::AbstractString)
+    pvalue = tryparse(Int, value) # parsed value
+    pvalue = isnothing(pvalue) ? tryparse(Float64, value) : pvalue
+    pvalue = isnothing(pvalue) ? tryparse(Bool, value) : pvalue
+    pvalue = isnothing(pvalue) ? string(value) : pvalue
+    return pvalue
 end
+
+function parse_filename_params(filename::String)
+    # Extract key=value pairs
+    reduced_filename = first(splitext(basename(filename))) # Remove directory and extension
+    key_val_regex = r"([a-zA-Z0-9]+)=([^\_]+)"
+    #key_val_regex = r"(\w+)=([^\._]+)" # \w+ also include underscores, hence why I don't use
+    matches = eachmatch(key_val_regex, reduced_filename)
+    return Dict(m.captures[1] => val_parse(m.captures[2]) for m in matches)
+end
+
 
 function main()
     println("Starting Main")
     filepath = ENV["CNOT3FILEPATH"]
-    #filepath = "/mnt/ffs24/home/leespen1/Research/QuantumGateDesign.jl/cnot3_optimization/53220812/targetError=1e-1_cnot3OptimizationTest_order=4_degree=14_seed=0_nsteps=825_atol=1.0e-10_rtol=1.0e-10_D1=16_time=6.0_maxiter=10000_nthreads=4_costType=GeneralizedInfidelity_gateDuration=550.0_nCavityLevels=10.csv"
-    #filepath = "/mnt/ffs24/home/leespen1/Research/QuantumGateDesign.jl/cnot3_optimization/53220812/targetError=1e-3_cnot3OptimizationTest_order=4_degree=14_seed=0_nsteps=3535_atol=1.0e-10_rtol=1.0e-10_D1=16_time=6.0_maxiter=10000_nthreads=4_costType=GeneralizedInfidelity_gateDuration=550.0_nCavityLevels=10.csv"
+    #filepath = "/mnt/ffs24/home/leespen1/Research/QuantumGateDesign.jl/cnot3_optimization/53220812/targetError=1e-1_cnot3OptimizationTest_order=4_degree=14_seed=0_nsteps=825_atol=1.0e-10_rtol=1.0e-10_D1=16_time=6.0_maxiter=10000_nthreads=4_costType=GeneralizedInfidelity_gateDuration=550.0_nCavityLevels=10_pcof.csv"
+    #filepath = "/mnt/ffs24/home/leespen1/Research/QuantumGateDesign.jl/cnot3_optimization/53220812/targetError=1e-3_cnot3OptimizationTest_order=4_degree=14_seed=0_nsteps=3535_atol=1.0e-10_rtol=1.0e-10_D1=16_time=6.0_maxiter=10000_nthreads=4_costType=GeneralizedInfidelity_gateDuration=550.0_nCavityLevels=10_pcof.csv"
     filename = basename(filepath)
 
     parsed_args = parse_filename_params(filename) 
