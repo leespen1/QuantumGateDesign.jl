@@ -101,19 +101,18 @@ function main()
         cnot3ret.qgd_prob.N_ess_levels = 1
         cnot3ret.qgd_prob.N_initial_conditions = 1
 
-        cnot3ret.target = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
+        cnot3ret.target = cnot3ret.qgd_prob.u0 + im .* cnot3ret.qgd_prob.v0 # Use initial state as final state
         cnot3ret.target[end,1] = 1
 
         cnot3ret.juqbox_params.Uinit = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
-        cnot3ret.juqbox_params.Utarget_r = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
-        cnot3ret.juqbox_params.Utarget_i = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
+        cnot3ret.juqbox_params.Uinit[end,1] = 1
+        cnot3ret.juqbox_params.Utarget_r .= real(cnot3ret.target)
+        cnot3ret.juqbox_params.Utarget_i .= imag(cnot3ret.target)
 
         # Hack to make working arrays allocation work for a single state, since they couple the number of initial conditions and the number of essential states.
-        nguard_save = cnot3ret.juqbox_params.Nguard
         cnot3ret.juqbox_params.Nguard = cnot3ret.qgd_prob.N_tot_levels - 1
         cnot3ret.juqbox_params.N = 1
         cnot3ret.juqbox_wa = Working_Arrays(cnot3ret.juqbox_params, length(cnot3ret.pcof0))
-        cnot3ret.juqbox_params.Nguard = nguard_save
     end
 
     display(cnot3ret.qgd_prob)
