@@ -15,7 +15,7 @@ function parse_commandline()
         "--D1"
             help = "D1, control number of control parameters."
             arg_type = Int64
-            default = 15
+            default = 16
         "--time", "-t"
             help = "Amount of wall time (in hours) to spend on test."
             arg_type = Float64
@@ -107,8 +107,13 @@ function main()
         cnot3ret.juqbox_params.Uinit = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
         cnot3ret.juqbox_params.Utarget_r = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
         cnot3ret.juqbox_params.Utarget_i = zeros(cnot3ret.qgd_prob.N_tot_levels, 1)
+
+        # Hack to make working arrays allocation work for a single state, since they couple the number of initial conditions and the number of essential states.
+        nguard_save = cnot3ret.juqbox_params.Nguard
+        cnot3ret.juqbox_params.Nguard = cnot3ret.qgd_prob.N_tot_levels - 1
         cnot3ret.juqbox_params.N = 1
         cnot3ret.juqbox_wa = Working_Arrays(cnot3ret.juqbox_params, length(cnot3ret.pcof0))
+        cnot3ret.juqbox_params.Nguard = nguard_save
     end
 
     display(cnot3ret.qgd_prob)
