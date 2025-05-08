@@ -3,7 +3,7 @@ module QuantumGateDesign
 import LinearMaps, IterativeSolvers, Plots, Ipopt, LinearAlgebra,
        BenchmarkTools, SparseArrays, Dates, OrderedCollections, JLD2, Random,
        DelimitedFiles, Juqbox
-using Juqbox: Working_Arrays
+using Juqbox: Working_Arrays, lsolver_object
 
 using Printf: @printf, @sprintf
 using LinearAlgebra: mul!, axpy!, dot, tr, norm, issymmetric, Diagonal,
@@ -132,5 +132,6 @@ export get_histories
 export FortranBSplineControl
 
 export Working_Arrays # Reexport from Juqbox
+export lsolver_object # Reexport from Juqbox
 
 end # module QuantumGateDesign

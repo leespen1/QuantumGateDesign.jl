@@ -203,9 +203,14 @@ function setup_cnot3(;N_osc_levels::Integer, seed::Integer=0, atol::Real=1e-10, 
     # target in the rotating frame
     vtarget = rot1*rot2*rot3*utarget
 
+    linear_solver = lsolver_object(nrhs=prod(Ne), tol=atol)
+
     # NOTE: maxpar is now a vector with 3 elements: amax, bmax, cmax
-    juqbox_params = Juqbox.objparams(Ne, Ng, Tmax, nsteps, Uinit=U0, Utarget=vtarget, Cfreq=om, Rfreq=rot_freq,
-                              Hconst=H0, Hsym_ops=Hsym_ops, Hanti_ops=Hanti_ops, use_sparse=use_sparse)
+    juqbox_params = Juqbox.objparams(
+        Ne, Ng, Tmax, nsteps, Uinit=U0, Utarget=vtarget, Cfreq=om, Rfreq=rot_freq,
+        Hconst=H0, Hsym_ops=Hsym_ops, Hanti_ops=Hanti_ops, use_sparse=use_sparse,
+        linear_solver=linear_solver
+    )
 
     # setup the initial parameter vector, randomized
     nCoeff = 2*Nctrl*Nfreq*D1 # Total number of parameters.
