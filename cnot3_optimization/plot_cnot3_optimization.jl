@@ -67,9 +67,11 @@ _nCavityLevels=(\d+)
 .txt"""x # 'x' tag ignores whitespace and comments
 
 
-directory = "51458828"
-target_errors = ("1e-1", "1e-3", "1e-5", "1e-7")
-target_errors_title = ("10^{-1}", "10^{-3}", "10^{-5}", "10^{-7}")
+#directory = "OldData/51458828"
+directory = "54682210"
+#target_errors = ("1e-1", "1e-3", "1e-5", "1e-7")
+target_errors = ("1e-1", "1e-2", "1e-3", "1e-4")
+target_errors_title = ("10^{-1}", "10^{-2}", "10^{-3}", "10^{-4}")
 orders = (2,4,6,8,10,12)
 xaxis = "iter_count"
 objective_type = "generalized_infidelity"
