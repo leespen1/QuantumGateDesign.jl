@@ -191,10 +191,14 @@ function make_plot(processed_df::DataFrame)
 
         
         cutoff_limit = 1e0
+        cutoff_iter = 1
         cutoff_index = findlast(x -> x > cutoff_limit, subdf[:,:relerr_mean]) 
-        while isnothing(cutoff_index)
+        #while isnothing(cutoff_index) && cutoff_iter < 10
+        while isnothing(cutoff_index) 
             cutoff_limit /= 10
+            cutoff_iter += 1
             cutoff_index = findlast(x -> x > cutoff_limit, subdf[:,:relerr_mean]) 
+            println(subdf[:,:relerr_mean])
         end
 
         lines!(
@@ -372,11 +376,8 @@ _finalStates
 """x # 'x' tag ignores whitespace and comments
 
     
-
-#data_directory = "./DataMar28/"
-#data_directory = "./StepsizeTol1e-12/"
-#data_directory = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_stepsize/DataMay4/UnexcitedData"
-data_directory = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_stepsize/DataMay4/ExcitedData"
+#data_directory = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_stepsize/DataMay8/Unexcited"
+data_directory = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_stepsize/DataMay8/Excited"
 
 # Grab data from directory, combine into one data frame
 results_files = filter(x -> occursin(results_regex, x),
