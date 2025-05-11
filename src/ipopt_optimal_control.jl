@@ -170,8 +170,8 @@ function optimize_gate(
         schro_prob::SchrodingerProb{M, VM}, controls,
         pcof_init::AbstractVector{Float64}, target_complex::AbstractMatrix{<: Number};
         order::Integer=4,
-        pcof_lbound::Real=-Inf,
-        pcof_ubound::Real=Inf,
+        pcof_lbound::Union{Real, AbstractVector{<: Real}}=-Inf,
+        pcof_ubound::Union{Real, AbstractVector{<: Real}}=Inf,
         ridge_penalty_strength::Real=1e-2,
         savename::Union{Missing, String}=missing,
         ipopt_options=missing,
@@ -185,9 +185,18 @@ function optimize_gate(
         throw(ArgumentError("Length $(length(pcof_init)) of initial control vector does not match expected length based on the control functions ($N_coeff"))
     end
 
-    # Set up variables neede to construct ipopt problem
-    pcof_lbound_array = ones(N_coeff)*pcof_lbound
-    pcof_ubound_array = ones(N_coeff)*pcof_ubound
+    if isa(pcof_lbound, Real)
+        pcof_lbound_array = ones(N_coeff)*pcof_lbound
+    else
+        pcof_lbound_array = pcof_lbound
+    end
+
+    if isa(pcof_ubound, Real)
+        pcof_ubound_array = ones(N_coeff)*pcof_ubound
+    else
+        pcof_ubound_array = pcof_ubound
+    end
+
 
     N_constraints = 0
     g_L = Float64[]
