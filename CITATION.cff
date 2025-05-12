@@ -1,12 +1,19 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
-authors:
-  - family-names: Lee, Appelo
-    given-names: Spencer, Daniel
-#    orcid: https://orcid.org/1234-5678-9101-1121
+message: "If you use this software, please cite it using the metadata below."
 title: "QuantumGateDesign.jl"
-version: 0.0.0
-#identifiers:
-#  - type: doi
-#    value: 10.5281/zenodo.1234
-date-released: 2025-04-06
+version: "0.2.0"
+authors:
+  - family-names: Lee
+    given-names: Spencer
+  - family-names: Appelo
+    given-names: Daniel
+date-released: 2025-05-11
+license: MIT
+repository-code: "https://github.com/leespen1/QuantumGateDesign.jl"
+keywords:
+  - quantum computing
+  - optimal control
+  - quantum optimal control
+  - Julia
+orcid: "https://orcid.org/0000-0002-9262-4763"
+
