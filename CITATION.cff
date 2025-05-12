@@ -7,6 +7,8 @@ authors:
     given-names: Spencer
   - family-names: Appelo
     given-names: Daniel
+  - family-names: Garcia
+    given-names: Fortino
 date-released: 2025-05-11
 license: MIT
 repository-code: "https://github.com/leespen1/QuantumGateDesign.jl"
@@ -16,4 +18,3 @@ keywords:
   - quantum optimal control
   - Julia
 orcid: "https://orcid.org/0000-0002-9262-4763"
-
