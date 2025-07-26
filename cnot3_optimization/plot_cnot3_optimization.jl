@@ -65,13 +65,17 @@ _costType=(.+)
 _gateDuration=(.+)
 _nCavityLevels=(\d+)
 .txt"""x # 'x' tag ignores whitespace and comments
+#targetError=1e-7_cnot3OptimizationTest_order=8_degree=14_seed=19_nsteps=1974
+#_atol=1.0e-15_rtol=1.0e-15_D1=16_time=6.0_maxiter=10000_nthreads=4_
+#costType=GeneralizedInfidelity_gateDuration=550.0_nCavityLevels=10.txt
 
 
-#directory = "OldData/51458828"
-directory = "54682210"
-#target_errors = ("1e-1", "1e-3", "1e-5", "1e-7")
-target_errors = ("1e-1", "1e-2", "1e-3", "1e-4")
-target_errors_title = ("10^{-1}", "10^{-2}", "10^{-3}", "10^{-4}")
+directory = "OldData/51458828"
+#directory = "54682210"
+target_errors = ("1e-1", "1e-3", "1e-5", "1e-7")
+target_errors_title = ("10^{-1}", "10^{-3}", "10^{-5}", "10^{-7}")
+#target_errors = ("1e-1", "1e-2", "1e-3", "1e-4")
+#target_errors_title = ("10^{-1}", "10^{-2}", "10^{-3}", "10^{-4}")
 orders = (2,4,6,8,10,12)
 xaxis = "iter_count"
 objective_type = "generalized_infidelity"
@@ -96,6 +100,7 @@ end
 
 ylims = (1e-7,1e0)
 xminorticks = IntervalsBetween(2)
+#xminorticks = 0:100:10_000
 
 labeled_yticks =(10.0 .^ (-15:15), [L"10^{%$i}" for i in -15:15])
 unlabeled_yticks =(10.0 .^ (-15:15), ["" for i in -15:15])
@@ -118,7 +123,7 @@ for i in eachindex(target_errors)
         fig_axes,
         Axis(
             fig[1,i], 
-            title=L"\textrm{Target Error} = %$(target_errors_title[i])",
+            title=L"\textrm{Target State Error} = %$(target_errors_title[i])",
             ylabel=this_ylabel, 
             yscale=log10,
             yticks=this_yticks,
@@ -152,6 +157,11 @@ for file in readdir(directory)
     if occursin(txt_file_pattern, file)
         regex_match = match(txt_file_pattern, file)
         target_err = regex_match[1]
+
+        if !(target_err in target_errors)
+            continue
+        end
+
         order = parse(Int, regex_match[2])
 
         csv_file = replace(file, ".txt" => ".csv")
@@ -175,7 +185,6 @@ for file in readdir(directory)
             # Because the infidelity can go negative due to numerical error
             objective_vec = abs.(objective_vec)
         end
-
         i_target = findfirst(x -> x == target_err, target_errors)
         i_order = findfirst(x -> x == order, orders)
 

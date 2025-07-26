@@ -21,11 +21,11 @@ _nCavityLevels=(\d+)
 .csv"""x # 'x' tag ignores whitespace and comments
 
 
-directory = "51458828"
+directory = "OldData/51458828"
+#directory = "54682210"
 target_err = "1e-7"
 orders = (2,4,6,8,10,12)
 objective_type = "generalized_infidelity"
-recollect = false
 
 x_vecs = Vector{Float64}[]
 objective_vecs = Vector{Float64}[]
@@ -33,6 +33,7 @@ i_target_vec = Int[]
 i_order_vec = Int[]
 
 
+recollect = true
 if recollect
     min_objective = Inf
     min_obj_pcof = missing

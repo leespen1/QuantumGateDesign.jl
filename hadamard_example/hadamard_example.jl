@@ -7,7 +7,7 @@ using QuantumGateDesign, Random, CairoMakie, LaTeXStrings
 using Makie: wong_colors
 CairoMakie.set_theme!(CairoMakie.theme_latexfonts())
 
-recollect = false
+recollect = true
 if recollect
     println("Recollecting")
     σx = [0.0 1;1 0]
