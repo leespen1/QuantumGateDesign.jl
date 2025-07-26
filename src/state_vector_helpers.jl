@@ -51,6 +51,9 @@ function get_populations(history::AbstractArray{Float64, 3})
     return populations
 end
 
+function get_populations(history::AbstractArray{ComplexF64, 3})
+    return abs.(history) .^ 2
+end
 
 
 """

@@ -33,7 +33,7 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
     t_range_control = LinRange(0, tf, n_points)
 
     # Set up Makie figure and axis for plotting the control
-    fig = Figure(;)
+    fig = Figure(; fontsize=24)
     ax = Axis(fig[1,1], xlabel="Time (ns)", ylabel="Control Amplitude")
     xlims!(ax, -(1/16)*tf, tf*(1+(1/16))) # Put a little bit of padding outside the control range
 
@@ -115,19 +115,13 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
 
     # Handle history, final state
     if !ismissing(prob)
-        history_obsv = Observable{Array{Float64, 4}}(eval_forward(prob, controls, to_value.(pcof_obsv), order=4))
+        history_obsv = Observable{Array{ComplexF64, 3}}(eval_forward(prob, controls, to_value.(pcof_obsv), order=4))
         final_state_obsv = lift(x -> x[:,1,end,:]', history_obsv)
         #on(final_state_obsv) do final_state
         #    display(final_state)
         #end
         #final_state_obsv[] = history_obsv[:,1,end,:]' # Initialize
 
-        final_state_fig = fig[3, 2]
-        final_state_ax, final_state_hm = heatmap(
-            final_state_fig, final_state_obsv, colorrange=(-1,1)
-        )
-        final_state_ax.title = "Final State" # For some reason if I set title= in heatmap the result is very slow
-        Colorbar(fig[3, 3], final_state_hm, label="Value")
         #final_state_ax = Axis(final_state_fig)
         #heatmap!(final_state_ax, final_state_obsv)
 
@@ -235,6 +229,7 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
         text!(population_axes[1], infidelity_str_obsv, position=(0.0, 0.0), color=:red, font="Arial", fontsize=20)
     end
 
+    #=
     if !ismissing(target)
         target_fig = fig[1,2]
         target_ax, target_hm = heatmap(
@@ -246,6 +241,7 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
         #target_ax = Axis(target_fig)
         #heatmap!(target_ax, target, title="Target Matrix")
     end
+    =#
 
     final_state_fig = fig[1,2]
     

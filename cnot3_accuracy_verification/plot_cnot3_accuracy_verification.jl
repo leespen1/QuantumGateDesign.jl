@@ -101,22 +101,24 @@ ax = CairoMakie.Axis(
     fig[1,1],
     yscale=CairoMakie.log10,
     #xlabel="Number of Timesteps",
-    xlabel="Ipopt Iteration #",
+    xticks=0:100:1000,
+    xlabel="Optimization Iteration #",
     xminorticksvisible = true,
     xminorgridvisible = true,
     yticks=log10_ticks,
     yminorticks=IntervalsBetween(10),
     yminorticksvisible=true,
     yminorgridvisible=true,
-    limits=((0,nothing), (1e-6, 1e0)),
+    limits=((0,500), (1e-5, 1e0)),
 )
 
 iter = 1 .+ non_watchdog_iterations(replace(filepath, "_pcof.csv" => ".txt", "comparison_" => ""))
 df = df[iter,:]
+df = df[1:500,:] # Don't use the whole optimization history.
 
 lines!(ax, df[:,:ipopt_iter], df[:,:coarse_gen_infidelity], label="Generalized Infidelity: Low-Accuracy Numerical Solution")
 lines!(ax, df[:,:ipopt_iter], df[:,:fine_gen_infidelity], label="Generalized Infidelity: High-Accuracy Numerical Solution")
-lines!(ax, df[:,:ipopt_iter], df[:,:UT_err] ./ df[:,:fine_norm_UT], label="Final State Relative Error")
+lines!(ax, df[:,:ipopt_iter], df[:,:UT_err] ./ df[:,:fine_norm_UT], label="Relative Final State Error")
 #lines!(ax, df[:,:ipopt_iter], df[:,:gen_infidelity_err], label="Generalized Infidelity Error")
 
 Legend(

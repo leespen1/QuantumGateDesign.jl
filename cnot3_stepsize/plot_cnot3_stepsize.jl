@@ -153,7 +153,7 @@ function make_plot(processed_df::DataFrame)
         #title="Elapsed Time Plot",
         #limits=((10.0^(-10.25), 10.0^(-0.75)), (10.0^(-0.25),10.0^(5.25))),
         #limits=((1e-10, 1e-1), (10.0^(-0.25),10.0^(5.25))),
-        limits=((1e-10, 1e-1), (1e0,1e5)),
+        limits=((1e-10, 1e-1), (1e0,1e6)),
         #limits=((1e-10, 1e0), (1e0,1e5)),
     )
 
@@ -213,10 +213,12 @@ function make_plot(processed_df::DataFrame)
     # Add a hard-coded line to approximately extrapolate 2nd order Hemite and Stormer-Verlet
     #dummy_relerr_mean = [10.0 ^(-i) for i in 4.25:11]
     #dummy_elapsedtime_mean = 1.1 .* (dummy_relerr_mean .^ -0.47)
-    dummy_relerr_mean = [10.0 ^(-i) for i in 3.5:11]
-    dummy_elapsedtime_mean = 3.0 .* (dummy_relerr_mean .^ -0.47)
-    #dummy_relerr_mean = [10.0 ^(-i) for i in 1.25:11]
-    #dummy_elapsedtime_mean = 35 .* (dummy_relerr_mean .^ -0.47)
+    
+    #dummy_relerr_mean = [10.0 ^(-i) for i in 3.5:11]
+    #dummy_elapsedtime_mean = 3.0 .* (dummy_relerr_mean .^ -0.47)
+
+    dummy_relerr_mean = [10.0 ^(-i) for i in 1.25:11]
+    dummy_elapsedtime_mean = 35 .* (dummy_relerr_mean .^ -0.47)
     lines!(
         ax_error_vs_time, dummy_relerr_mean, dummy_elapsedtime_mean;
         color=:black, linestyle=:dot, label="Order 2 (Approximate Extrapolation)"
@@ -232,10 +234,14 @@ function make_plot(processed_df::DataFrame)
     return fig
 end
 
-function make_speedup_table(processed_df::DataFrame)
+function make_speedup_table(processed_df::DataFrame, round_values=false)
     target_errors = collect(-1:-1:-7)
 
-    grouped_df = @groupby(processed_df, :usejuqbox, :order)
+    processed_df = copy(processed_df) # So we don't touch the original
+    processed_df.rowid = 1:nrow(processed_df) # So we don't mess up order
+    sorted = sort(processed_df, [:order, order(:usejuqbox, rev=true), :rowid])
+    grouped_df = DataFrames.groupby(sorted, [:order, :usejuqbox], sort=false)
+    display(grouped_df)
     n_groups = length(grouped_df)
     target_log2nsteps_mat = fill(NaN, length(target_errors), n_groups)
     target_log10time_mat = fill(NaN, length(target_errors), n_groups)
@@ -327,13 +333,18 @@ function make_speedup_table(processed_df::DataFrame)
     target_nsteps_str_mat = vcat(header, target_nsteps_str_mat)
     target_time_str_mat = hcat(first_col, floatscitex_format.(target_time_mat))
     target_time_str_mat = vcat(header, target_time_str_mat)
-    target_speedup_str_mat = hcat(first_col, float_format.(target_speedup_mat))
+    if round_values
+        target_speedup_str_mat = hcat(first_col, integer_format.(round.(Int, target_speedup_mat)))
+    else
+        target_speedup_str_mat = hcat(first_col, float_format.(target_speedup_mat))
+    end
+
     target_speedup_str_mat = vcat(header, target_speedup_str_mat)
 
     println("Nsteps Mat")
     table(target_nsteps_str_mat)
-    println("\nTime Mat")
-    table(target_time_str_mat)
+    #println("\nTime Mat")
+    #table(target_time_str_mat)
     println("\nSpeedup Mat")
     table(target_speedup_str_mat)
 
@@ -376,8 +387,9 @@ _finalStates
 """x # 'x' tag ignores whitespace and comments
 
     
-#data_directory = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_stepsize/DataMay8/Unexcited"
-data_directory = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_stepsize/DataMay8/Excited"
+data_directory = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_stepsize/DataMay9/Excited"
+#data_directory = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_stepsize/DataMay9/Unexcited"
+#data_directory = "/home/spencer/Research/QuantumGateDesign.jl/cnot3_stepsize/DataMay11_Tol1e-10/Unexcited"
 
 # Grab data from directory, combine into one data frame
 results_files = filter(x -> occursin(results_regex, x),

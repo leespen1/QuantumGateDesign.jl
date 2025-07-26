@@ -240,13 +240,13 @@ single control on its portion of the control_vector
 function eval_p_single(controls, t, pcof, control_index)
     local_control = controls[control_index]
     local_pcof = get_control_vector_slice(pcof, controls, control_index)
-    return eval_p(local_control, t, local_pcof)
+    return eval_p_derivative(local_control, t, local_pcof, 0)
 end
 
 function eval_q_single(controls, t, pcof, control_index)
     local_control = controls[control_index]
     local_pcof = get_control_vector_slice(pcof, controls, control_index)
-    return eval_q(local_control, t, local_pcof)
+    return eval_q_derivative(local_control, t, local_pcof, 0)
 end
 
 function eval_grad_p_derivative_fin_diff(control::AbstractControl, t::Real,
