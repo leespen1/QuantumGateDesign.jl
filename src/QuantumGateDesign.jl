@@ -80,9 +80,6 @@ export get_populations, target_helper, plot_populations, real_to_complex,
 include("richardson_extrapolation.jl")
 export RichardsonExtrapolation
 
-include("cnot3_setup.jl")
-export get_controls, get_D1, setup_cnot3
-
 include("plotting.jl")
 export plot_control
 
