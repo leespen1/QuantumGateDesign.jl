@@ -1,5 +1,4 @@
-const fortrain_lib_str = Base.Filesystem.dirname(pathof(@__MODULE__)) * "/Controls/bspline_lib.so"
-
+using BSplines_jll
 """
 Considering adding a "current_t", which would check if the t is the current t before
 evaluating. Because the fortran subroutines involve only the basis functions, the
@@ -304,7 +303,7 @@ calculates value and deriv.s of all b-splines which do not vanish at x
     # jsplvd should be passed in as a reference, since I want it to be changed
     # by the program ()
     ccall(
-        (:bsplvd_, fortrain_lib_str),
+        (:bsplvd_, libbsplines),
         Cvoid, # Return
 
         (Ref{Float64}, Ref{Int64}, Ref{Float64}, Ref{Int64},
