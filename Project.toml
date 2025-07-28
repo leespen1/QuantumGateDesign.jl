@@ -27,7 +27,7 @@ OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
 [sources]
-BSplines_jll = {url = "https://github.com/leespen1/BSplines_jll.jl"}
+BSplines_jll = {rev = "main", url = "https://github.com/leespen1/BSplines_jll.jl"}
 
 [extensions]
 ControlVisualizer = "GLMakie"
