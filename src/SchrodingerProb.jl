@@ -172,7 +172,6 @@ function SchrodingerProb(
         U0::AbstractVecOrMat{<: Number},
         tf::Real,
         nsteps::Integer,
-        N_ess_levels::Integer,
         guard_subspace_projector::Union{AbstractMatrix{<: Number}, Missing}=missing;
         gmres_abstol::Real=1e-10,
         gmres_reltol::Real=1e-10,
@@ -216,7 +215,7 @@ function SchrodingerProb(
 
     # Convert other arguments to the correct type for storage in SchrodingerProb
     nsteps = convert(Int64, nsteps)
-    N_ess_levels = convert(Int64, N_ess_levels)
+    N_ess_levels = size(U0, 2)
     tf = convert(Float64, tf)
     gmres_abstol = convert(Float64, gmres_abstol)
     gmres_reltol = convert(Float64, gmres_reltol)
