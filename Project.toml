@@ -32,7 +32,7 @@ OrdinaryDiffEqInterface = "OrdinaryDiffEq"
 QuTipIntegration = ["PythonCall", "CondaPkg"]
 
 [compat]
-BSplines_jll = "0.1.10"
+BSplines_jll = "0.1.12"
 BenchmarkTools = "1.6.0"
 DelimitedFiles = "1.9.1"
 LoopVectorization = "0.12.171"
