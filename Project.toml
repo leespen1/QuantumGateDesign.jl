@@ -26,13 +26,16 @@ GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
+[sources]
+BSplines_jll = {url = "https://github.com/leespen1/BSplines_jll.jl"}
+
 [extensions]
 ControlVisualizer = "GLMakie"
 OrdinaryDiffEqInterface = "OrdinaryDiffEq"
 QuTipIntegration = ["PythonCall", "CondaPkg"]
 
 [compat]
-BSplines_jll = "0.1.12"
+#BSplines_jll = "0.1.12"
 BenchmarkTools = "1.6.0"
 DelimitedFiles = "1.9.1"
 LoopVectorization = "0.12.171"
