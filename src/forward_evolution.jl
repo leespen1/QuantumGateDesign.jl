@@ -81,22 +81,62 @@ vector for each initial condition as a 4D array.
 - `forcing::Union{AbstractArray{Float64}, Missing}`: Optional forcing array, ordered in same format as the returned history.
 """
 function eval_forward(
-        prob::SchrodingerProb{M1, M2, P}, controls::ControlsType, pcof::AbstractVector{<: Real};
-        order::Int=2, saveEveryNsteps::Int=1,
-        forcing::Union{AbstractArray{Float64, 4}, Missing}=missing, verbose::Bool=false,
-        gmres_tracker::Union{GMRESTracker, Missing}=missing,
-    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
+        prob::SchrodingerProb, controls::ControlsType, pcof::AbstractVector{<: Real};
+        order::Int=2, saveEveryNsteps::Int=1, forcing::Union{AbstractArray{Float64, 4}, Missing}=missing,
+        verbose::Bool=false, gmres_tracker::Union{GMRESTracker, Missing}=missing)
 
-    N_derivatives = div(order, 2)
     nsteps_save = div(prob.nsteps, saveEveryNsteps)
-    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+nsteps_save, prob.N_initial_conditions)
+    uv_history = allocate_history(prob, order, nsteps_save)
 
+    # TODO: find better solution for gmres_tracker
     eval_forward!(uv_history, prob, controls, pcof, order=order,
                   saveEveryNsteps=saveEveryNsteps; forcing=forcing,
                   verbose=verbose, gmres_tracker=gmres_tracker)
 
-    return real_to_complex(uv_history[:,1,:,:])
+    return selectdim(uv_history, 2, 1) |> real_to_complex
 end
+
+"""
+Allocate 3D array to store state vector history.
+Indices access: state index, derivative order, timestep.
+
+TODO: Can I merge this with the matrix/4D version and still have it be type-stable?
+"""
+function allocate_history(prob::SchrodingerProb{OpType, StateType, P},
+        method_order::Integer, nsteps::Integer) where
+        {OpType, StateType <: AbstractVector, P}
+
+    @assert iseven(method_order)
+    N_derivatives = div(method_order, 2)
+    history_alloc = zeros(
+        eltype(StateType),
+        prob.real_system_size,
+        1+N_derivatives,
+        1+nsteps,
+    )
+    return history_alloc
+end
+
+"""
+Allocate 4D array to store state matrix history.
+Indices access: stateindex, derivative order, timestep, initial condition index.
+"""
+function allocate_history(prob::SchrodingerProb{OpType, StateType, P},
+        method_order::Integer, nsteps::Integer) where
+        {OpType, StateType <: AbstractMatrix, P}
+    println("Hello world")   
+    @assert iseven(method_order)
+    N_derivatives = div(method_order, 2)
+    history_alloc = zeros(
+        eltype(StateType),
+        prob.real_system_size,
+        1+N_derivatives,
+        1+nsteps,
+        prob.N_initial_conditions,
+    )
+    return history_alloc
+end
+
 
 
 
@@ -167,7 +207,8 @@ function eval_forward!(uv_history::AbstractArray{Float64, 3},
         prob::SchrodingerProb{M, V, P}, controls::ControlsType,
         pcof::AbstractVector{<: Real}; order::Int=2, saveEveryNsteps::Int=1,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
-        use_taylor_guess=true,
+        use_taylor_guess=true, verbose::Bool=false, 
+        gmres_tracker::Union{GMRESTracker, Missing}=missing # TODO: verbose and gmres_tracker currently do nothing
     ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, P}
 
 
