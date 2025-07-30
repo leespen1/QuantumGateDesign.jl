@@ -46,6 +46,37 @@ function plot_controls(controls::ControlsType, pcof::AbstractVector{<: Real};
     return Plots.plot!(pl_vec...)
 end
 
+function plot_populations(history::AbstractArray{<: Complex}, tf::Real; labels=missing)
+    tgrid = LinRange(0, tf, size(history, 2))
+    xlabel = "Time (ns)"
+    ylabel = "Population"
+    populations = abs2.(history)
+    if ismissing(labels)
+        labels = ["Level $i" for i in 1:size(history, 1)]
+    end
+    labels = reshape(labels, 1, :) # Labels must be a row matrix
+    level_indices = 1:size(history, 1)
+
+    ret = []
+    # Iterate over initial conditions
+    for initial_condition in 1:size(populations, 3)
+        title = "Initial Condition $initial_condition"
+        pl = Plots.plot(xlabel=xlabel, ylabel="Population", 
+                        title=title, legend=:outerright)
+        # Iterate over essential states
+        for (i, level_index) in enumerate(level_indices)
+            Plots.plot!(pl, tgrid, populations[level_index, :, initial_condition],
+                  label=labels[i], lw=2)
+        end
+        push!(ret, pl)
+    end
+    if length(ret) == 1
+        return first(ret)
+    end
+    return ret
+end
+
+
 """
     plot_populations(history; [ts=missing, level_indices=missing, labels=missing])
 
