@@ -13,16 +13,16 @@ Visualize a Control Using Makie
 This is really old. From back when I was using functions as parameters for the
 object instead of methods for the type. Needs to be updated to work.
 """
-function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missing, 
+function QuantumGateDesign.visualize_control(controls, prob=missing; n_points=101, 
         pcof_init=missing, use_tboxes=true, target=missing, single_slidergrid_length=4, scaling_factor=1)
 
     if !ismissing(prob)
-        if prob.N_initial_conditions == 2
+        if prob.N_tot_levels == 2
             labels=["|0⟩", "|1⟩"]
-        elseif prob.N_initial_conditions == 4
+        elseif prob.N_tot_levels == 4
             labels=["|00⟩", "|01⟩", "|10⟩", "|11⟩"]
         else
-            labels = []
+            labels = ["Level $i" for i in 1:prob.N_tot_levels]
         end
         axes_positions = [(1,1), (1,2), (2,1), (2,2)]
     end
@@ -115,7 +115,8 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
 
     # Handle history, final state
     if !ismissing(prob)
-        history_obsv = Observable{Array{ComplexF64, 3}}(eval_forward(prob, controls, to_value.(pcof_obsv), order=4))
+        initial_history = eval_forward(prob, controls, to_value.(pcof_obsv), order=4)
+        history_obsv = Observable{typeof(initial_history)}(initial_history)
         final_state_obsv = lift(x -> x[:,1,end,:]', history_obsv)
         #on(final_state_obsv) do final_state
         #    display(final_state)
@@ -178,9 +179,10 @@ function QuantumGateDesign.visualize_control(controls; n_points=101, prob=missin
                 populations_obsv_list[i][] = populations[:,:,i]
             end
 
-            infidelity_obsv[] = infidelity(prob, controls, pcof, target, order=4)
-            #infidelity_str_obsv[] = "InFidelity: $(infidelity_obsv[])"
-            infidelity_str_obsv[] = Printf.@sprintf("Fidelity: %.2f %%", 100*(1-infidelity_obsv[]))
+            if !ismissing(target)
+                infidelity_obsv[] = infidelity(prob, controls, pcof, target, order=4)
+                infidelity_str_obsv[] = Printf.@sprintf("Fidelity: %.2f %%", 100*(1-infidelity_obsv[]))
+            end
 
         end
     end
