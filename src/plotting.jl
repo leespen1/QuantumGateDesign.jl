@@ -17,8 +17,8 @@ function plot_controls(controls::ControlsType, pcof::AbstractVector{<: Real};
     colors = [Plots.palette(:auto)[k] for k in control_indices]
     colors_mat = reshape(colors, 1, :) # Plots expects a row matrix
 
-    labels = ["Control $k" for k in control_indices]
-    labels_mat = reshape(labels, 1, :)
+    labels_real = reshape(["Control $k (Real)" for k in control_indices], 1, :)
+    labels_imag = reshape(["Control $k (Imag)" for k in control_indices], 1, :)
 
     pl_vec = []
 
@@ -37,9 +37,9 @@ function plot_controls(controls::ControlsType, pcof::AbstractVector{<: Real};
             p_control_vals .*= 1e3/(2pi)
             q_control_vals .*= 1e3/(2pi)
         end
-        pl = Plots.plot(t_grid, p_control_vals, linecolor=colors_mat, label=labels_mat, lw=linewidth, linestyle=:solid)
-        Plots.plot!(t_grid, q_control_vals, linecolor=colors_mat, lw=linewidth, label="", linestyle=:dot)
-        Plots.plot!(xlabel="Time (ns)", title="Controls: Derivative $derivative_order")
+        pl = Plots.plot(t_grid, p_control_vals, linecolor=colors_mat, label=labels_real, lw=linewidth, linestyle=:solid)
+        Plots.plot!(t_grid, q_control_vals, linecolor=colors_mat, lw=linewidth, label=labels_imag, linestyle=:dash)
+        Plots.plot!(xlabel="Time (ns)", title="Controls (Derivative $derivative_order)")
         push!(pl_vec, pl)
     end
 
