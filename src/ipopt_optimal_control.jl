@@ -167,7 +167,7 @@ the IPOPT API.
 - `ridge_penalty_strength`: Strength of the ridge/Tikhonov regularization term in the objective function.
 """
 function optimize_prob(
-        schro_prob::SchrodingerProb, controls,
+        schro_prob::SchrodingerProb, controls::ControlsType,
         pcof_init::AbstractVector{Float64}, target_complex::AbstractVecOrMat{<: Number};
         order::Integer=4,
         pcof_lbound::Union{Real, AbstractVector{<: Real}}=-Inf,

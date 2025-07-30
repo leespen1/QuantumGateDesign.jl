@@ -254,6 +254,7 @@ function plot_control_basis_functions(control::AbstractControl)
         end
     end
 
-    pl = Plots.plot(t_range, control_vals, label="")
+    pl = Plots.plot(t_range, control_vals, label="", lw=2,
+                    xlabel = "Time (ns)", ylabel="Amplitude")
     return pl
 end
