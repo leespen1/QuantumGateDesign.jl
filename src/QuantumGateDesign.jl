@@ -83,7 +83,7 @@ include("richardson_extrapolation.jl")
 export RichardsonExtrapolation
 
 include("plotting.jl")
-export plot_control
+export plot_controls
 
 include("calculate_timestep.jl")
 

@@ -6,8 +6,7 @@ Return the plot.
 
 The derivatives can also be plotted by supplying an integer or vector of integers as the arguemnt for `derivative_orders`.
 """
-function plot_controls(controls::Union{AbstractControl, Vector{<: AbstractControl}},
-        pcof::AbstractVector{<: Real};
+function plot_controls(controls::ControlsType, pcof::AbstractVector{<: Real};
         npoints=201, derivative_orders=0, convert_units=false, linewidth=2,
         control_indices=1:length(controls))
 
