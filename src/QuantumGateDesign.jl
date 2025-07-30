@@ -44,7 +44,7 @@ export eval_grad_forced
 
 # IPOPT interface
 include("ipopt_optimal_control.jl")
-export optimize_gate
+export optimize_prob
 
 # Common Operators
 include("common_operators.jl")
@@ -76,6 +76,8 @@ include("gradient_descent.jl")
 include("state_vector_helpers.jl")
 export get_populations, target_helper, plot_populations, real_to_complex,
        complex_to_real
+
+include("allocation_helpers.jl")
 
 include("richardson_extrapolation.jl")
 export RichardsonExtrapolation

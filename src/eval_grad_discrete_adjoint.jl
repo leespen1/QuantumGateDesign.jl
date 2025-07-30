@@ -115,20 +115,18 @@ Compute the gradient using the discrete adjoint method. Return the gradient.
 - `return_lambda_history=false`: Whether to return the history of the adjoint variable lambda.
 """
 function discrete_adjoint(
-        prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}, P},
+        prob::SchrodingerProb,
         controls,
         pcof::AbstractVector{<: Real},
         target::AbstractMatrix{<: Number}; 
         order=2, cost_type=:Infidelity,
         timer::Union{Missing, DiscreteAdjointTimes}=missing
-    ) where P
-    N_derivatives = div(order, 2)
+    )
 
     grad = zeros(length(pcof))
-
-    history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
-    lambda_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
-    adjoint_forcing = zeros(prob.real_system_size, 1+prob.nsteps, prob.N_initial_conditions)
+    history = allocate_history(prob, order)
+    lambda_history = allocate_history(prob, order)
+    adjoint_forcing = allocate_forcing(prob, order)
 
     discrete_adjoint!(
         grad, history, lambda_history, adjoint_forcing, prob, controls, pcof,
@@ -140,17 +138,26 @@ end
 Mutating version, arrays pre-allocated
 """
 function discrete_adjoint!(
-        grad::AbstractVector{Float64}, history::AbstractArray{Float64, 4},
-        lambda_history::AbstractArray{Float64, 4}, adjoint_forcing::AbstractArray{Float64, 3},
-        prob::SchrodingerProb{<: AbstractMatrix{Float64}, <: AbstractMatrix{Float64}, P},
-        controls,
+        grad::AbstractVector{<: Real},
+        history::AbstractArray{Float64},
+        lambda_history::AbstractArray{Float64}, 
+        adjoint_forcing::AbstractArray{Float64},
+        prob::SchrodingerProb,
+        controls::ControlsType,
         pcof::AbstractVector{<: Real},
-        target::AbstractMatrix{<: Number}; 
-        order=2, cost_type=:Infidelity, history_precomputed=false,
+        target::AbstractVecOrMat{<: Number}; 
+        order::Integer=2, cost_type=:Infidelity, history_precomputed=false,
         timer::Union{Missing, DiscreteAdjointTimes}=missing,
         forward_gmres_tracker::Union{GMRESTracker, Missing}=missing,
         adjoint_gmres_tracker::Union{GMRESTracker, Missing}=missing,
-    ) where P
+    ) 
+    N_derivatives = div(order, 2)
+    # Check sizes of pre-allocated arrays
+    @assert size(history) == size(lambda_history)
+    @assert size(history, 1) == size(adjoint_forcing, 1) == prob.real_system_size
+    @assert size(history, 2) ==  1 + N_derivatives
+    @assert size(history, 3) == size(adjoint_forcing, 2) == 1+prob.nsteps
+    @assert size(history, 4) == size(adjoint_forcing, 3) == prob.N_initial_conditions
 
     # Set pre-allocated arrays equal to zero (may not be necessary, but being safe)
     if !history_precomputed
@@ -192,8 +199,8 @@ function discrete_adjoint!(
     # GRADIENT ACCUMULATION (Could be multithreaded)
     grad .= 0
     for initial_condition_index = 1:size(prob.u0,2)
-        this_history = view(history, :, :, :, initial_condition_index)
-        this_lambda_history = view(lambda_history, :, :, :, initial_condition_index)
+        this_history = selectdim(history, 4, initial_condition_index)
+        this_lambda_history = selectdim(lambda_history, 4, initial_condition_index)
 
         accumulate_gradient!(
             grad, prob, controls, pcof, this_history, this_lambda_history, order=order
@@ -758,9 +765,10 @@ end
 """
 Should make 3-dim array version for VectorSchrodingerProb case
 """
-function compute_guard_forcing!(forcing_out::AbstractArray{Float64, 3}, 
-        prob, history::AbstractArray{Float64, 4}
+function compute_guard_forcing!(forcing_out::AbstractArray{<: Real}, 
+        prob::SchrodingerProb, history::AbstractArray{<: Real}
     )
+    @assert (ndims(forcing_out) == 3 && ndims(history) == 4) || (ndims(forcing_out) == 2 && ndims(history) == 3) 
     forcing_out .= 0 # Maybe unnecessary, since each mul! overwrites
     dt = prob.tf / prob.nsteps
 
@@ -780,8 +788,10 @@ function compute_guard_forcing!(forcing_out::AbstractArray{Float64, 3},
     return forcing_out
 end
 
-function compute_guard_forcing(prob, history::AbstractArray{Float64, 4})
-    forcing = zeros(prob.real_system_size, 1+prob.nsteps, prob.N_initial_conditions)
+function compute_guard_forcing(prob::SchrodingerProb, history::AbstractArray{<: Real})
+    N_derivatives = size(history, 2) - 1
+    method_order = 2*N_derivatives
+    forcing = allocate_forcing(prob, method_order)
     compute_guard_forcing!(forcing, prob, history)
     return forcing
 end

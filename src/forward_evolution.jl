@@ -96,49 +96,6 @@ function eval_forward(
     return selectdim(uv_history, 2, 1) |> real_to_complex
 end
 
-"""
-Allocate 3D array to store state vector history.
-Indices access: state index, derivative order, timestep.
-
-TODO: Can I merge this with the matrix/4D version and still have it be type-stable?
-"""
-function allocate_history(prob::SchrodingerProb{OpType, StateType, P},
-        method_order::Integer, nsteps::Integer) where
-        {OpType, StateType <: AbstractVector, P}
-
-    @assert iseven(method_order)
-    N_derivatives = div(method_order, 2)
-    history_alloc = zeros(
-        eltype(StateType),
-        prob.real_system_size,
-        1+N_derivatives,
-        1+nsteps,
-    )
-    return history_alloc
-end
-
-"""
-Allocate 4D array to store state matrix history.
-Indices access: stateindex, derivative order, timestep, initial condition index.
-"""
-function allocate_history(prob::SchrodingerProb{OpType, StateType, P},
-        method_order::Integer, nsteps::Integer) where
-        {OpType, StateType <: AbstractMatrix, P}
-    println("Hello world")   
-    @assert iseven(method_order)
-    N_derivatives = div(method_order, 2)
-    history_alloc = zeros(
-        eltype(StateType),
-        prob.real_system_size,
-        1+N_derivatives,
-        1+nsteps,
-        prob.N_initial_conditions,
-    )
-    return history_alloc
-end
-
-
-
 
 function eval_forward!(uv_history::AbstractArray{Float64, 4},
         prob::SchrodingerProb{M1, M2, P}, controls::ControlsType,
@@ -352,14 +309,13 @@ end
 
 
 function eval_adjoint(
-        prob::SchrodingerProb{M1, M2, P}, controls::ControlsType,
+        prob::SchrodingerProb, controls::ControlsType,
         pcof::AbstractVector{<: Real}, terminal_condition::AbstractMatrix{Float64};
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
         order::Int=2, verbose::Bool=false
-    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}, P}
+    ) 
 
-    N_derivatives = div(order, 2)
-    uv_history = zeros(prob.real_system_size, 1+N_derivatives, 1+prob.nsteps, prob.N_initial_conditions)
+    uv_history = allocate_history(prob, order)
 
     eval_adjoint!(uv_history, prob, controls, pcof, terminal_condition;
         order=order, forcing=forcing, verbose=verbose
@@ -369,12 +325,12 @@ function eval_adjoint(
 end
 
 function eval_adjoint!(uv_history::AbstractArray{Float64, 4},
-        prob::SchrodingerProb{M1, M2}, controls::ControlsType,
+        prob::SchrodingerProb{OpType, StateType, P}, controls::ControlsType,
         pcof::AbstractVector{<: Real},
         terminal_condition::AbstractMatrix{Float64} ; order::Int=2,
         forcing::Union{AbstractArray{Float64, 3}, Missing}=missing,
         verbose::Bool=false, gmres_tracker::Union{Missing, GMRESTracker}=missing
-    ) where {M1<:AbstractMatrix{Float64}, M2<:AbstractMatrix{Float64}}
+    ) where {OpType, StateType <: AbstractMatrix, P}
 
     N_derivatives = div(order, 2)
 
@@ -419,12 +375,13 @@ end
 
 
 function eval_adjoint!(uv_history::AbstractArray{Float64, 3},
-        prob::SchrodingerProb{M, V, P}, controls::ControlsType,
+        prob::SchrodingerProb{OpType, StateType, P}, controls::ControlsType,
         pcof::AbstractVector{<: Real},
-        terminal_condition::AbstractVector{Float64};
-        forcing::Union{AbstractArray{Float64, 2}, Missing}=missing,
+        terminal_condition::AbstractVector{<: Real};
+        forcing::Union{AbstractMatrix{Float64}, Missing}=missing,
         order::Int=2, use_taylor_guess=true, verbose::Bool=false,
-    ) where {M<:AbstractMatrix{Float64}, V<:AbstractVector{Float64}, P}
+        gmres_tracker::Union{Missing, GMRESTracker}=missing # TODO: remove this
+    ) where {OpType, StateType <: AbstractVector, P}
 
     gmres_tracker = GMRESTracker()
     

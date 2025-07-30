@@ -144,7 +144,7 @@ end
 
 
 """
-    optimize_gate(schro_prob, controls, pcof_init, target, [order=4, pcof_L=missing, pcof_U=missing, maxIter=50, print_level=5, ridge_penalty_strength=1e-2, max_cpu_time = 300.0])
+    optimize_prob(schro_prob, controls, pcof_init, target, [order=4, pcof_L=missing, pcof_U=missing, maxIter=50, print_level=5, ridge_penalty_strength=1e-2, max_cpu_time = 300.0])
 
 Perform gradient-based search (L-BFGS) to find value of the control vector `pcof`
 which minimizes the objective function for the given problem and target.
@@ -166,9 +166,9 @@ the IPOPT API.
 - `pcof_U=missing`: Upper bounds of the control parameters.
 - `ridge_penalty_strength`: Strength of the ridge/Tikhonov regularization term in the objective function.
 """
-function optimize_gate(
-        schro_prob::SchrodingerProb{M, VM}, controls,
-        pcof_init::AbstractVector{Float64}, target_complex::AbstractMatrix{<: Number};
+function optimize_prob(
+        schro_prob::SchrodingerProb, controls,
+        pcof_init::AbstractVector{Float64}, target_complex::AbstractVecOrMat{<: Number};
         order::Integer=4,
         pcof_lbound::Union{Real, AbstractVector{<: Real}}=-Inf,
         pcof_ubound::Union{Real, AbstractVector{<: Real}}=Inf,
@@ -176,7 +176,7 @@ function optimize_gate(
         savename::Union{Missing, String}=missing,
         ipopt_options=missing,
         cost_type=:Infidelity,
-    ) where {VM<:AbstractVecOrMat{Float64}, M<:AbstractMatrix{Float64}}
+    )
 
 
     # Check correct control vector length
@@ -213,14 +213,9 @@ function optimize_gate(
 
     
     # Pre-allocate arrays 
-    state_history =  zeros(
-        schro_prob.real_system_size,
-        1+N_derivatives,
-        1+schro_prob.nsteps,
-        schro_prob.N_initial_conditions
-    )
-    lambda_history = similar(state_history)
-    adjoint_forcing = zeros(schro_prob.real_system_size, 1+schro_prob.nsteps, schro_prob.N_initial_conditions)
+    state_history = allocate_history(schro_prob, order)
+    lambda_history = allocate_history(schro_prob, order)
+    adjoint_forcing = allocate_forcing(schro_prob, order)
 
     header = ["objective" "main_objective" "grad_norm" "infidelity" "generalized_infidelity" "tracking_objective" "norm_objective" "guard_penalty" "ridge_penalty" "avg_state_length" "elapsed_time" "alg_mod" "iter_count" "obj_value" "inf_pr" "inf_du" "mu" "d_norm" "regularization_size" "alpha_du" "alpha_pr" "ls_trials"]
     if !ismissing(savename)
@@ -307,7 +302,30 @@ function optimize_gate(
     )
         elapsed_time = time() - initial_time
         grad_norm = norm(optimization_tracker.last_grad_pcof)
-        data_row = [optimization_tracker.last_objective optimization_tracker.last_main_objective grad_norm optimization_tracker.last_infidelity optimization_tracker.last_generalized_infidelity optimization_tracker.last_tracking_obj optimization_tracker.last_norm_obj optimization_tracker.last_guard_penalty optimization_tracker.last_ridge_penalty optimization_tracker.last_avg_state_length elapsed_time alg_mod iter_count obj_value inf_pr inf_du mu d_norm regularization_size alpha_du alpha_pr ls_trials]
+        data_row = hcat(
+            optimization_tracker.last_objective,
+            optimization_tracker.last_main_objective,
+            grad_norm,
+            optimization_tracker.last_infidelity,
+            optimization_tracker.last_generalized_infidelity,
+            optimization_tracker.last_tracking_obj,
+            optimization_tracker.last_norm_obj,
+            optimization_tracker.last_guard_penalty,
+            optimization_tracker.last_ridge_penalty,
+            optimization_tracker.last_avg_state_length,
+            elapsed_time,
+            alg_mod,
+            iter_count,
+            obj_value,
+            inf_pr,
+            inf_du,
+            mu,
+            d_norm,
+            regularization_size,
+            alpha_du,
+            alpha_pr,
+            ls_trials
+        )
         if !ismissing(savename)
             open(savename * ".csv", "a+") do io
                 DelimitedFiles.writedlm(io, data_row, ',')

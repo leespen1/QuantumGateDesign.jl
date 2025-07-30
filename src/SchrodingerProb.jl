@@ -22,14 +22,14 @@ of the problem (the Hamiltonians, initial conditions, number of timesteps, etc).
 
 where `M <: AbstractMatrix{Float64}`
 """
-mutable struct SchrodingerProb{M, VM, P} 
-    system_sym::M
-    system_asym::M
-    sym_operators::Vector{M} # a + a^†
-    asym_operators::Vector{M} # a - a^†
-    u0::VM
-    v0::VM
-    guard_subspace_projector::M
+mutable struct SchrodingerProb{OpType, StateType, P} 
+    system_sym::OpType
+    system_asym::OpType
+    sym_operators::Vector{OpType} # a + a^†
+    asym_operators::Vector{OpType} # a - a^†
+    u0::StateType
+    v0::StateType
+    guard_subspace_projector::OpType
     tf::Float64
     nsteps::Int64
     N_initial_conditions::Int64
@@ -48,20 +48,20 @@ mutable struct SchrodingerProb{M, VM, P}
     initial conditions, etc.) based on the arguments.
     """
     function SchrodingerProb(
-        system_sym::M,
-        system_asym::M,
-        sym_operators::Vector{M}, # a + a^†
-        asym_operators::Vector{M}, # a - a^†
-        u0::VM,
-        v0::VM,
-        guard_subspace_projector::M,
+        system_sym::OpType,
+        system_asym::OpType,
+        sym_operators::Vector{OpType}, # a + a^†
+        asym_operators::Vector{OpType}, # a - a^†
+        u0::StateType,
+        v0::StateType,
+        guard_subspace_projector::OpType,
         tf::Float64,
         nsteps::Int64,
         N_ess_levels::Int64,
         gmres_abstol::Float64,
         gmres_reltol::Float64,
         preconditioner_type::Type = IdentityPreconditioner
-    ) where {M <: AbstractMatrix{Float64}, VM <: AbstractVecOrMat{Float64}}
+    ) where {OpType <: AbstractMatrix{<: Real}, StateType <: AbstractVecOrMat{<: Real}}
 
         complex_system_size = size(system_sym)
         N_tot_levels = size(system_sym, 1)
@@ -153,7 +153,7 @@ mutable struct SchrodingerProb{M, VM, P}
             throw(ArgumentError("preconditioner_type is not an AbstractQGDPreconditioner."))
         end
         
-        new{M, VM, preconditioner_type}(
+        new{OpType, StateType, preconditioner_type}(
             system_sym, system_asym, sym_operators, asym_operators,
             u0, v0,
             guard_subspace_projector,
