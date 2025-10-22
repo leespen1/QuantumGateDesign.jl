@@ -80,6 +80,9 @@ function collect_data(iter_range, orders)
     nsteps_vec = fill(NaN, length(iter_range))
     data_err = fill(NaN, length(iter_range), length(orders))
     data_cvg = fill(NaN, length(iter_range), length(orders))
+    data_unitary_dev = fill(NaN, length(iter_range), length(orders))
+
+    I_2x2 = [1 0;0 1]
 
     for (i,nsteps_exp) in enumerate(iter_range)
         prob.nsteps = 2^nsteps_exp
@@ -96,9 +99,19 @@ function collect_data(iter_range, orders)
             if i > 1
                 data_cvg[i, k] = abs(log10(data_err[i,k]/data_err[i-1,k])/log10(nsteps_vec[i]/nsteps_vec[i-1]))
             end
+
+            unitary_deviations = mapslices(U -> norm(U'*U - I_2x2), history_numerical, dims=(1,3))
+            if prob.nsteps <= 16
+                println("Unitary deviations")
+                display(unitary_deviations)
+                println("History")
+                display(history_numerical)
+                println("\n\n")
+            end
+            data_unitary_dev[i, k] = maximum(unitary_deviations)
         end
     end
-    return nsteps_vec, data_err, data_cvg
+    return nsteps_vec, data_err, data_cvg, data_unitary_dev
 end
 
 function collect_data2(iter_range, orders)
@@ -203,8 +216,9 @@ header = vcat("# Steps", ["Order $order" for order in orders])
 
 
 
+# Make the table showing error and convergence of numerical method
 println("Numerical Solution Accuracy")
-nsteps_vec, data_err, data_cvg = collect_data(iter_range, orders)
+nsteps_vec, data_err, data_cvg, data_unitary_dev = collect_data(iter_range, orders)
 
 nsteps_strs = int_str.(nsteps_vec)
 data_err_strs = sci_str.(data_err)
@@ -214,12 +228,20 @@ table_err_strs = hcat(nsteps_strs, data_err_strs)
 table_cvg_strs = hcat(nsteps_strs, data_cvg_strs)
 table_comb_strs = hcat(nsteps_strs, interleave_columns(data_err_strs, data_cvg_strs))
 
-pretty_table(table_err_strs, header=header)
-pretty_table(table_cvg_strs, header=header)
+
+pretty_table(table_err_strs, column_labels=header, title="Numerical Method Error")
+pretty_table(table_cvg_strs, column_labels=header, title="Numerical Method Convergence")
 #pretty_table(table_comb_strs)
 print_latex_table(table_comb_strs)
 
+# Make the table showing the maximum deviation of the state matrix from unitary
+# (||U†U - I₂×₂||_F)
+println("Numerical Solution Deviation from Unitary")
+data_unitary_dev_strs = sci_str.(data_unitary_dev)
+table_unitary_dev_strs = hcat(nsteps_strs, data_unitary_dev_strs)
+pretty_table(table_unitary_dev_strs, column_labels=header, title="Deviation From Unitary ||U†U - I||_F")
 
+# Make the table showing the error and convergence of the gradient calculation
 println("Gradient Accuracy")
 nsteps_vec, data_err, data_cvg = collect_data2(iter_range, orders)
 
@@ -231,8 +253,8 @@ table_err_strs = hcat(nsteps_strs, data_err_strs)
 table_cvg_strs = hcat(nsteps_strs, data_cvg_strs)
 table_comb_strs = hcat(nsteps_strs, interleave_columns(data_err_strs, data_cvg_strs))
 
-pretty_table(table_err_strs, header=header)
-pretty_table(table_cvg_strs, header=header)
+pretty_table(table_err_strs, column_labels=header, title="Gradient Calculation Error")
+pretty_table(table_cvg_strs, column_labels=header, title="Gradient Calculation Convergence")
 #pretty_table(table_comb_strs)
 print_latex_table(table_comb_strs)
 
