@@ -91,12 +91,14 @@ function main()
     for (arg,val) in parsed_args
         println(rpad(arg, 20), " => ", val)
     end
+    flush(stdout)
 
     nthreads = Threads.nthreads()
     cnot3ret = QuantumGateDesign.setup_cnot3(seed=seed, atol=atol, rtol=rtol, D1=D1, N_osc_levels=N_osc_levels, Tmax=Tmax)
 
     println("Schrodinger Problem:")
     display(cnot3ret.qgd_prob)
+    flush(stdout)
 
 
     cnot3ret.qgd_prob.nsteps = nsteps
@@ -130,6 +132,7 @@ function main()
         ipopt_options = ipopt_options,
         cost_type = cost_type
     )
+    flush(stdout)
 
     return optimization_history
 end

@@ -41,8 +41,8 @@ function main()
     pcof = cnot3ret.amax * 2 * (0.5 .- rand(MersenneTwister(seed), N_coeff))
 
 
-    orders_vec = [2, 4]
-    #nsteps_vec = 2 .^ 5:15
+    orders_vec = [2, 4, 6, 8, 10, 12]
+    #orders_vec = [2]
     nsteps_vec = 2 .^ (5:15)
     unitary_deviations_mat = Matrix{Float64}(undef, length(nsteps_vec), length(orders_vec))
 
@@ -56,7 +56,7 @@ function main()
             t_grid = LinRange(0, prob.tf, 1+nsteps)
             history = eval_forward(prob, controls, pcof, order=order)
             unitary_deviations_vec = mapslices(U -> norm(U'*U - LinearAlgebra.I), history, dims=(1,3)) |> vec
-            unitary_deviation = sum(x -> x^2, unitary_deviations_vec) |> sqrt
+            unitary_deviation = sqrt(sum(x -> x^2, unitary_deviations_vec) / length(unitary_deviations_vec))
             unitary_deviations_mat[i,j] = unitary_deviation
         end
         # Write matrix to dlm
