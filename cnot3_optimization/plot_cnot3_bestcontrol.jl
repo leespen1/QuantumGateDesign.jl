@@ -1,5 +1,5 @@
 using DelimitedFiles, CairoMakie, LaTeXStrings, QuantumGateDesign, LinearAlgebra
-using Makie: wong_colors, automatic
+using CairoMakie.Makie: wong_colors, automatic
 CairoMakie.set_theme!(CairoMakie.theme_latexfonts())
 
 csv_file_pattern = r"""
@@ -21,7 +21,8 @@ _nCavityLevels=(\d+)
 .csv"""x # 'x' tag ignores whitespace and comments
 
 
-directory = "OldData/51458828"
+directory = "63268094"
+#directory = "OldData/51458828"
 #directory = "54682210"
 target_err = "1e-7"
 orders = (2,4,6,8,10,12)
@@ -33,7 +34,7 @@ i_target_vec = Int[]
 i_order_vec = Int[]
 
 
-recollect = true
+recollect = false
 if recollect
     min_objective = Inf
     min_obj_pcof = missing
@@ -100,7 +101,7 @@ if recollect
     guard_weights = diag(cnot3ret.juqbox_params.wmat)
 
     history = eval_forward(prob, controls, min_obj_pcof, order=order)
-    population_history = abs.(history) .^ 2
+    population_history = abs2.(history)
 
     ts = LinRange(0, gateDuration, 1+nsteps)
     control_history = fill(NaN+NaN*im, length(controls), 1+nsteps)
@@ -308,3 +309,69 @@ rowgap!(fig.layout, 4, 0.0inch)
 rowgap!(fig.layout, 5, 0.0inch)
 
 fig
+
+
+
+## Now handle the real and imaginary part plotting for one iniitial condition
+# Essential states (real and imaginary part)
+fig_realimag = CairoMakie.Figure(size=(5.25inch, 4.5inch), fontsize=11, figure_padding=(0.015inch,0.15inch,0.0inch,0.075inch))
+ax_real = Axis(
+    fig_realimag[1,1],
+    title=L"\textbf{Time Evolution of Probability Amplitudes, } |\psi_0\rangle = |011\rangle",
+    #xlabel = xlabel,
+    ylabel = "Real Part",
+    yticks = -1:0.5:1,
+    yticklabelsvisible = true,
+    yminorticks = IntervalsBetween(2),
+    yminorticksvisible = true,
+    xticks = 0:100:600,
+    xticklabelsvisible = false,
+    xminorticks = IntervalsBetween(2),
+    xminorticksvisible = true,
+    limits = (xlims, (-1, 1))
+)
+ax_imag = Axis(
+    fig_realimag[2,1],
+    #title="Imaginary Part",
+    xlabel = "Time (nanoseconds)",
+    ylabel = "Imaginary Part",
+    yticks = -1:0.5:1,
+    yticklabelsvisible = true,
+    yminorticks = IntervalsBetween(2),
+    yminorticksvisible = true,
+    xticks = 0:100:600,
+    xticklabelsvisible = true,
+    xminorticks = IntervalsBetween(2),
+    xminorticksvisible = true,
+    limits = (xlims, (-1, 1))
+)
+
+# Use the highest-energy initial condition.
+real_imag_init_cond = 4
+
+# Get the 10 levels with the highest population
+total_populations = sum(population_history[:,:,real_imag_init_cond], dims=2) |> vec
+num_top_levels = 6
+top_pop_levels = sortperm(total_populations, rev=true)[1:num_top_levels]
+
+#for level in essential_levels
+#for level in 1:size(history, 1)
+    #nR, n1, n2 = index_to_basis_state(level, subsys_sizes)
+    #if (n1 == 3) || (n2 == 3) || (nR == 9)
+    #    continue # Skip "Forbidden" states
+    #end
+for level in top_pop_levels
+
+    state_hist = history[level, :, real_imag_init_cond]
+    #lines!(ax, ts, state_population_hist, label=labels[n])
+    lines!(ax_real, ts, real(state_hist), linewidth=1,
+           label=basis_state_to_string(index_to_basis_state(level, subsys_sizes))
+    )
+    lines!(ax_imag, ts, imag(state_hist), linewidth=1,
+           label=basis_state_to_string(index_to_basis_state(level, subsys_sizes))
+    )
+end
+Legend(fig_realimag[end+1,:], ax_real, orientation = :horizontal, tellwidth = false, nbanks=2, framevisible=false)
+
+fig_realimag
+
