@@ -1,5 +1,5 @@
 using DelimitedFiles, CairoMakie, LaTeXStrings
-using Makie: wong_colors, automatic
+using CairoMakie.Makie: wong_colors, automatic
 CairoMakie.set_theme!(CairoMakie.theme_latexfonts())
 
 function non_watchdog_iterations(log_filename::String)
@@ -70,8 +70,7 @@ _nCavityLevels=(\d+)
 #costType=GeneralizedInfidelity_gateDuration=550.0_nCavityLevels=10.txt
 
 
-directory = "OldData/51458828"
-#directory = "54682210"
+directory = "63397133"
 target_errors = ("1e-1", "1e-3", "1e-5", "1e-7")
 target_errors_title = ("10^{-1}", "10^{-3}", "10^{-5}", "10^{-7}")
 #target_errors = ("1e-1", "1e-2", "1e-3", "1e-4")

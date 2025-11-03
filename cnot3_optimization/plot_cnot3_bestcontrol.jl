@@ -21,9 +21,7 @@ _nCavityLevels=(\d+)
 .csv"""x # 'x' tag ignores whitespace and comments
 
 
-directory = "63268094"
-#directory = "OldData/51458828"
-#directory = "54682210"
+directory = "63397133"
 target_err = "1e-7"
 orders = (2,4,6,8,10,12)
 objective_type = "generalized_infidelity"
@@ -34,7 +32,7 @@ i_target_vec = Int[]
 i_order_vec = Int[]
 
 
-recollect = false
+recollect = true
 if recollect
     min_objective = Inf
     min_obj_pcof = missing
@@ -74,6 +72,8 @@ if recollect
             end
         end
     end
+
+    println("Best optimization result: ", min_obj_file)
 
     min_obj_rgx = match(csv_file_pattern, min_obj_file)
 
@@ -371,7 +371,7 @@ for level in top_pop_levels
            label=basis_state_to_string(index_to_basis_state(level, subsys_sizes))
     )
 end
-Legend(fig_realimag[end+1,:], ax_real, orientation = :horizontal, tellwidth = false, nbanks=2, framevisible=false)
+Legend(fig_realimag[end+1,:], ax_real, orientation = :horizontal, tellwidth = false, nbanks=1, framevisible=false)
 
 fig_realimag
 
