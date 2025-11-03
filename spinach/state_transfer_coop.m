@@ -61,7 +61,8 @@ control.pwr_levels=2*pi*50e3;       % Pulse power
 control.pulse_dt=10e-8*ones(1,100); % Slice durations
 control.method='lbfgs';             % Optimisation method
 control.amplitudes=ones(1,100);     % Amplitude profile
-control.max_iter=100;               % Termination condition
+%control.max_iter=100;               % Termination condition
+control.max_iter=3;               % Termination condition
 
 % Plotting options
 control.plotting={'coherence_order','phi_controls'};

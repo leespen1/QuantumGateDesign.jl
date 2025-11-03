@@ -1,7 +1,8 @@
 % Gets the hamiltonians for a quadrupolar 14N spin at a fixed orientation
 % and power level as done in `state_transfer_coop.m`, but here we do not 
 % do any optimal control, we only construct the Hamiltonians.
-function [H, Lx, Ly] = state_transfer_coop_hamiltonians()
+% Write the results to files.
+function [H, Lx, Ly, rho_init, rho_targ] = state_transfer_coop_hamiltonians()
 
 % Magnet field
 sys.magnet=14.1; 
@@ -44,4 +45,5 @@ H=rotframe(spin_system,C,H,'14N',2);
 % Get the control operators
 Lx=operator(spin_system,'Lx','14N');
 Ly=operator(spin_system,'Ly','14N');
+
 end
