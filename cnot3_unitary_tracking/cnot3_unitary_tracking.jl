@@ -38,7 +38,9 @@ function main()
     N_coeff = QuantumGateDesign.get_number_of_control_parameters(controls)
 
     # Coefficients uniformly distributed between amax and -amax
-    pcof = cnot3ret.amax * 2 * (0.5 .- rand(MersenneTwister(seed), N_coeff))
+    #pcof = cnot3ret.amax * 2 * (0.5 .- rand(MersenneTwister(seed), N_coeff))
+    pcof_history = readdlm("targetError=1e-7_cnot3OptimizationTest_order=6_degree=14_seed=5_nsteps=5409_atol=1.0e-15_rtol=1.0e-15_D1=16_time=6.0_maxiter=10000_nthreads=4_costType=GeneralizedInfidelity_gateDuration=550.0_nCavityLevels=10_pcof.csv", ',')
+    pcof = pcof_history[end,:]
 
 
     orders_vec = [2, 4, 6, 8, 10, 12]
