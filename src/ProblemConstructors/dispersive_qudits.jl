@@ -36,6 +36,7 @@ function dispersive_qudits_problem(
         gmres_abstol::Real=1e-10,
         gmres_reltol::Real=1e-10,
         preconditioner_type::Type=DiagonalHamiltonianPreconditioner,
+        rot_frame::Bool = true,
     )
 
     @assert length(transition_freqs) == size(kerr_coeffs, 1) == size(kerr_coeffs, 2)
@@ -51,7 +52,13 @@ function dispersive_qudits_problem(
     Hsys = zeros(ComplexF64, full_system_size, full_system_size)
     for q in 1:Q
         a_q = lowering_ops[q]
-        Hsys .+= (transition_freqs[q] - rotation_freqs[q]) .* (a_q' * a_q)
+
+        if rot_frame
+            Hsys .+= (transition_freqs[q] - rotation_freqs[q]) .* (a_q' * a_q)
+        else # lab frame
+            Hsys .+= (transition_freqs[q]) .* (a_q' * a_q)
+        end
+
         Hsys .-= 0.5*kerr_coeffs[q,q] .* (a_q' * a_q' * a_q * a_q)
         for p in (q+1):Q
             a_p = lowering_ops[p]
@@ -61,8 +68,13 @@ function dispersive_qudits_problem(
     Hsys .*= 2pi # Assume frequencies are given in units of GHz/2pi
 
     # Construct Control Hamiltonians
-    sym_ops = [a + a' for a in lowering_ops]
-    asym_ops = [a - a' for a in lowering_ops]
+    if rot_frame
+        sym_ops = [a + a' for a in lowering_ops]
+        asym_ops = [a - a' for a in lowering_ops]
+    else # lab frame
+        sym_ops = [a + a' for a in lowering_ops]
+        asym_ops = [zeros(full_system_size, full_system_size) for a in lowering_ops]
+    end
 
     if sparse_rep
         Hsys = sparse(Hsys)
