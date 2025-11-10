@@ -66,7 +66,7 @@ function eval_grad_q_derivative!(grad::AbstractVector{<: Real},
 end
 
 function fill_grad_p_mat!(
-        grad_mat::AbstractMatrix{Float64}, control::CarrierControl, t::Real,
+        grad_mat::AbstractMatrix{Float64}, control::DoubleRealPartControl, t::Real,
         pcof::AbstractVector{<: Real}
     )
     fill_grad_p_mat!(grad_mat, control.base_control, t, pcof)
@@ -74,7 +74,7 @@ function fill_grad_p_mat!(
 end
 
 function fill_grad_q_mat!(
-        grad_mat::AbstractMatrix{Float64}, control::CarrierControl, t::Real,
+        grad_mat::AbstractMatrix{Float64}, control::DoubleRealPartControl, t::Real,
         pcof::AbstractVector{<: Real}
     )
     grad_mat .= 0

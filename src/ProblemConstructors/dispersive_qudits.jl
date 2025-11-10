@@ -36,7 +36,7 @@ function dispersive_qudits_problem(
         gmres_abstol::Real=1e-10,
         gmres_reltol::Real=1e-10,
         preconditioner_type::Type=DiagonalHamiltonianPreconditioner,
-        rot_frame::Bool = true,
+        rot_frame::Bool=true,
     )
 
     @assert length(transition_freqs) == size(kerr_coeffs, 1) == size(kerr_coeffs, 2)

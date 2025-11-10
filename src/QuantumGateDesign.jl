@@ -64,8 +64,9 @@ include("Controls/zero_control.jl")
 include("Controls/FortranBSpline.jl")
 include("Controls/CarrierControl.jl")
 include("Controls/LabFrameControl.jl")
+include("Controls/DoubleRealPartControl.jl")
 export AbstractControl, CarrierControl, FortranBSplineControl,
-       FortranBSplineControl2, GRAPEControl, ZeroControl, LabFrameControl
+       FortranBSplineControl2, GRAPEControl, ZeroControl, LabFrameControl, DoubleRealPartControl
 export eval_p, eval_q, eval_p_derivative, eval_q_derivative,
        eval_grad_p_derivative, eval_grad_q_derivative, eval_grad_p_derivative!,
        eval_grad_q_derivative!, get_number_of_control_parameters
