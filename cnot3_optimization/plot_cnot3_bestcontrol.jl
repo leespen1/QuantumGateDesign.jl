@@ -32,7 +32,7 @@ i_target_vec = Int[]
 i_order_vec = Int[]
 
 
-recollect = true
+recollect = false
 if recollect
     min_objective = Inf
     min_obj_pcof = missing
@@ -150,34 +150,12 @@ titles = [L"|000\rangle \rightarrow |000\rangle",
           L"|011\rangle \rightarrow |010\rangle",
          ]
 
-for (initial_cond, fig_loc) in enumerate(axis_fig_locations)
-
-    xlabel = fig_loc[1] == maximum(first, axis_fig_locations) ? "Time (nanoseconds)" : ""
-    ylabel = fig_loc[2] == minimum(last, axis_fig_locations) ? "Population" : ""
-    xticklabelsvisible = fig_loc[1] == maximum(first, axis_fig_locations) 
-    yticklabelsvisible = fig_loc[2] == minimum(first, axis_fig_locations) 
-    #ylabel = fig_loc[1] minimum(last, axis_fig_locations) ? "Population" : ""
-    #xticklabelsvisible = fig_loc[1] == 2 ? true : false
-    #yticklabelsvisible = fig_loc[2] == 1 ? true : false
-    
-    ax = Axis(
-        fig[fig_loc...],
-        title=titles[initial_cond],
-        xlabel = xlabel,
-        ylabel = ylabel,
-        yticks = 0:0.25:1,
-        yticklabelsvisible = yticklabelsvisible,
-        yminorticks = IntervalsBetween(2),
-        yminorticksvisible = true,
-        xticks = 0:100:600,
-        xticklabelsvisible = xticklabelsvisible,
-        xminorticks = IntervalsBetween(2),
-        xminorticksvisible = true,
-        limits = (xlims, ylims)
-    )
-    push!(fig_axes, ax)
-
-
+"""
+Subroutine for plotting populations. This can get pretty complicated, since 
+we need to make labels, and add multiple populations in various subgroups in
+order to reduce the number of lines. So I made a subroutine.
+"""
+function pop_plot_subroutine!(ax, initial_cond)
     # Essential states
     for level in essential_levels
         state_population_hist = population_history[level, :, initial_cond]
@@ -185,6 +163,7 @@ for (initial_cond, fig_loc) in enumerate(axis_fig_locations)
         lines!(ax, ts, state_population_hist,
                label=basis_state_to_string(index_to_basis_state(level, subsys_sizes))
         )
+
     end
 
 
@@ -263,9 +242,63 @@ for (initial_cond, fig_loc) in enumerate(axis_fig_locations)
     @show  norm(sum_guard_pop_forbidden, Inf)
 end
 
+
+for (initial_cond, fig_loc) in enumerate(axis_fig_locations)
+
+    xlabel = fig_loc[1] == maximum(first, axis_fig_locations) ? "Time (nanoseconds)" : ""
+    ylabel = fig_loc[2] == minimum(last, axis_fig_locations) ? "Population" : ""
+    xticklabelsvisible = fig_loc[1] == maximum(first, axis_fig_locations) 
+    yticklabelsvisible = fig_loc[2] == minimum(first, axis_fig_locations) 
+    #ylabel = fig_loc[1] minimum(last, axis_fig_locations) ? "Population" : ""
+    #xticklabelsvisible = fig_loc[1] == 2 ? true : false
+    #yticklabelsvisible = fig_loc[2] == 1 ? true : false
+    
+    ax = Axis(
+        fig[fig_loc...],
+        title=titles[initial_cond],
+        xlabel = xlabel,
+        ylabel = ylabel,
+        yticks = 0:0.25:1,
+        yticklabelsvisible = yticklabelsvisible,
+        yminorticks = IntervalsBetween(2),
+        yminorticksvisible = true,
+        xticks = 0:100:600,
+        xticklabelsvisible = xticklabelsvisible,
+        xminorticks = IntervalsBetween(2),
+        xminorticksvisible = true,
+        limits = (xlims, ylims)
+    )
+    push!(fig_axes, ax)
+
+    pop_plot_subroutine!(ax, initial_cond)
+
+    #=
+    if (initial_cond == 4)
+        ax_zoom = Axis(
+            fig[end+1,:],
+            title=L"|001\rangle \rightarrow |001\rangle, 0 \leq t \leq 50",
+            xlabel = "Time (nanoseconds)",
+            ylabel = "Population",
+            yticks = 0:0.25:1,
+            yticklabelsvisible = yticklabelsvisible,
+            yminorticks = IntervalsBetween(2),
+            yminorticksvisible = true,
+            xticks = 0:10:50,
+            xticklabelsvisible = xticklabelsvisible,
+            xminorticks = IntervalsBetween(2),
+            xminorticksvisible = true,
+            limits = ((0,50), ylims)
+        )
+        pop_plot_subroutine!(ax_zoom, initial_cond)
+    end
+    =#
+end
+
 # Plot the controls
 
 Legend(fig[end+1,:], fig_axes[1], orientation = :horizontal, tellwidth = false, nbanks=2, framevisible=false)
+
+
 
 control_ax = Axis(
     fig[end+1,:],
@@ -314,7 +347,7 @@ fig
 
 ## Now handle the real and imaginary part plotting for one iniitial condition
 # Essential states (real and imaginary part)
-fig_realimag = CairoMakie.Figure(size=(5.25inch, 4.5inch), fontsize=11, figure_padding=(0.015inch,0.15inch,0.0inch,0.075inch))
+fig_realimag = CairoMakie.Figure(size=(6.25inch, 4.5inch), fontsize=11, figure_padding=(0.015inch,0.15inch,0.0inch,0.075inch))
 ax_real = Axis(
     fig_realimag[1,1],
     title=L"\textbf{Time Evolution of Probability Amplitudes, } |\psi_0\rangle = |011\rangle",
@@ -328,7 +361,7 @@ ax_real = Axis(
     xticklabelsvisible = false,
     xminorticks = IntervalsBetween(2),
     xminorticksvisible = true,
-    limits = (xlims, (-1, 1))
+    limits = ((0,550), (-1, 1))
 )
 ax_imag = Axis(
     fig_realimag[2,1],
@@ -345,6 +378,23 @@ ax_imag = Axis(
     xminorticksvisible = true,
     limits = (xlims, (-1, 1))
 )
+ax_imag_zoom = Axis(
+    fig_realimag[3,1],
+    xlabel = "Time (nanoseconds)",
+    title=L"\textbf{Magnified View of Time Evolution, }50 \leq t \leq 100",
+    ylabel = "Imaginary Part",
+    yticks = -1:0.5:1,
+    yticklabelsvisible = true,
+    yminorticks = IntervalsBetween(2),
+    yminorticksvisible = true,
+    xticks = 0:10:600,
+    xticklabelsvisible = true,
+    #xminorticks = IntervalsBetween(5),
+    xminorticksvisible = true,
+    limits = ((50,100), (-0.5, 0.5))
+)
+
+
 
 # Use the highest-energy initial condition.
 real_imag_init_cond = 4
@@ -360,18 +410,36 @@ top_pop_levels = sortperm(total_populations, rev=true)[1:num_top_levels]
     #if (n1 == 3) || (n2 == 3) || (nR == 9)
     #    continue # Skip "Forbidden" states
     #end
-for level in top_pop_levels
 
+plot_order = [3,4,6,5,1,2] # Custom order lines for best visibility
+for i in plot_order
+    color = wong_colors()[i]
+    level = top_pop_levels[i]
     state_hist = history[level, :, real_imag_init_cond]
     #lines!(ax, ts, state_population_hist, label=labels[n])
     lines!(ax_real, ts, real(state_hist), linewidth=1,
-           label=basis_state_to_string(index_to_basis_state(level, subsys_sizes))
+           label=basis_state_to_string(index_to_basis_state(level, subsys_sizes)),
+           color=color,
     )
     lines!(ax_imag, ts, imag(state_hist), linewidth=1,
-           label=basis_state_to_string(index_to_basis_state(level, subsys_sizes))
+           label=basis_state_to_string(index_to_basis_state(level, subsys_sizes)),
+           color=color,
+    )
+    lines!(ax_imag_zoom, ts, imag(state_hist), linewidth=1,
+           label=basis_state_to_string(index_to_basis_state(level, subsys_sizes)),
+           color=color,
     )
 end
+rect = Rect(50, -0.5, 50, 1)
+poly!(ax_imag, rect, color=:transparent, strokecolor=:black, strokewidth=1)
 Legend(fig_realimag[end+1,:], ax_real, orientation = :horizontal, tellwidth = false, nbanks=1, framevisible=false)
+
+rowgap!(fig_realimag.layout, 1, 0.15inch)
+
+rowgap!(fig_realimag.layout, 2, 0.1inch)
+rowgap!(fig_realimag.layout, 3, 0.0inch)
+
+
 
 fig_realimag
 
