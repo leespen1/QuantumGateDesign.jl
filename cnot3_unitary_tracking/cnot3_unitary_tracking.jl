@@ -46,12 +46,15 @@ function main()
     orders_vec = [2, 4, 6, 8, 10, 12]
     #orders_vec = [2]
     nsteps_vec = 2 .^ (5:15)
-    unitary_deviations_mat = Matrix{Float64}(undef, length(nsteps_vec), length(orders_vec))
+    unitary_deviations_mat = Matrix{Float64}(undef, 1+length(nsteps_vec), 1+length(orders_vec))
+    unitary_deviations_mat[1,:] .= (NaN, orders_vec...) # Header line, use NaN for "blank" entry
 
 
     prob = cnot3ret.qgd_prob
     filename = "unitarydeviation_vs_order_nsteps.dlm"
     for (i, nsteps) in enumerate(nsteps_vec)
+
+        unitary_deviations_mat[1+i,1+j] = nsteps
         for (j, order) in enumerate(orders_vec)
             println("order=$order, nsteps=2^$(log2(nsteps))")
             prob.nsteps = nsteps
@@ -59,11 +62,11 @@ function main()
             history = eval_forward(prob, controls, pcof, order=order)
             unitary_deviations_vec = mapslices(U -> norm(U'*U - LinearAlgebra.I), history, dims=(1,3)) |> vec
             unitary_deviation = sqrt(sum(x -> x^2, unitary_deviations_vec) / length(unitary_deviations_vec))
-            unitary_deviations_mat[i,j] = unitary_deviation
+            unitary_deviations_mat[1+i,1+j] = unitary_deviation
         end
         # Write matrix to dlm
         open(filename, "w") do io
-            writedlm(io, unitary_deviations_mat[1:i, :])
+            writedlm(io, unitary_deviations_mat[1:1+i, :])
         end
     end
 
