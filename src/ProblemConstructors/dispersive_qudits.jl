@@ -85,7 +85,6 @@ function dispersive_qudits_problem(
         U0,
         tf,
         nsteps,
-        N_ess_levels,
         guard_subspace_projector,
         gmres_abstol=gmres_abstol,
         gmres_reltol=gmres_reltol,
