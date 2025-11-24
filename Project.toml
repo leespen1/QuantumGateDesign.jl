@@ -1,7 +1,7 @@
 name = "QuantumGateDesign"
 uuid = "f716b271-9d99-4329-8adc-fa1e42d5b881"
 authors = ["Spencer Lee <leespen1@msu.edu>"]
-version = "0.1.0"
+version = "0.2.1"
 
 [deps]
 BSplines_jll = "427de28a-da7d-5a9c-8143-81fd0f5bba72"
@@ -21,18 +21,13 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [weakdeps]
-CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
-OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
-PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
 [sources]
 BSplines_jll = {rev = "main", url = "https://github.com/leespen1/BSplines_jll.jl.git"}
 
 [extensions]
 ControlVisualizer = "GLMakie"
-OrdinaryDiffEqInterface = "OrdinaryDiffEq"
-QuTipIntegration = ["PythonCall", "CondaPkg"]
 
 [compat]
 #BSplines_jll = "0.1.12"
