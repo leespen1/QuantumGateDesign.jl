@@ -52,8 +52,8 @@ function jaynes_cummings_plus_kerr_qudits_problem(
 
 
     # Construct Control Hamiltonians
-    sym_ops = [a + a' for a in lower_ops] 
-    asym_ops = [a - a' for a in lower_ops] 
+    sym_ops = [a + a' for a in lowering_ops] 
+    asym_ops = [a - a' for a in lowering_ops] 
 
     if sparse_rep
         Hsys = sparse(Hsys)
@@ -71,14 +71,12 @@ function jaynes_cummings_plus_kerr_qudits_problem(
     guard_subspace_projector = guard_projector_op(subsystem_sizes, essential_subsystem_sizes)
 
     return SchrodingerProb(
-        system_hamiltonian,
+        Hsys,
         sym_ops,
         asym_ops,
-        u0,
-        v0,
+        U0,
         tf,
         nsteps,
-        N_ess_levels,
         guard_subspace_projector,
         gmres_abstol=gmres_abstol,
         gmres_reltol=gmres_reltol,
