@@ -62,8 +62,9 @@ include("Controls/sincos_control.jl")
 include("Controls/zero_control.jl")
 include("Controls/FortranBSpline.jl")
 include("Controls/CarrierControl.jl")
+include("Controls/Degree2BSplineControl.jl")
 export AbstractControl, CarrierControl, FortranBSplineControl,
-       FortranBSplineControl2, GRAPEControl, ZeroControl
+       FortranBSplineControl2, GRAPEControl, ZeroControl, Degree2BSplineControl
 export eval_p, eval_q, eval_p_derivative, eval_q_derivative,
        eval_grad_p_derivative, eval_grad_q_derivative, eval_grad_p_derivative!,
        eval_grad_q_derivative!, get_number_of_control_parameters
@@ -108,6 +109,7 @@ export random_problem
 include("common_gates.jl")
 export PauliX_gate, PauliY_gate, PauliZ_gate, Hadamard_gate, Phase_gate,
        T_gate, CNOT_gate, SWAP_gate, ControlledZ_gate, QFT_gate, Toffoli_gate
+
 
 
 # Testing Functions (not for CI, but for personal use)
