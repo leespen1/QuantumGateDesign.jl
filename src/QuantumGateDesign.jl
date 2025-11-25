@@ -6,7 +6,7 @@ import LinearMaps, IterativeSolvers, Plots, Ipopt, LinearAlgebra,
 
 using Printf: @printf, @sprintf
 using LinearAlgebra: mul!, axpy!, dot, tr, norm, issymmetric, Diagonal,
-      Bidiagonal, diagm
+      Bidiagonal, diagm, diag
 using Random: rand, MersenneTwister
 using Base.Iterators: product
 using LoopVectorization: @turbo
