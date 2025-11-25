@@ -1,6 +1,11 @@
 using QuantumGateDesign
 using Test: @testset, @test
 
+@testset "Control Function Derivatives Agree with Finite Difference Approximation" begin
+    include("./test_control_function_derivatives_correctness_using_finite_differences.jl")
+end
+
+
 @testset "All Tests" begin
 #include("./hardcoded_derivatives.jl")
 # Test that Control Function derivatives and gradients are working properly
