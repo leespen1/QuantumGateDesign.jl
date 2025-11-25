@@ -9,11 +9,68 @@ import QuantumGateDesign as QGD
 using Test: @test, @testset
 using Random: rand, MersenneTwister
 using Printf: @printf
+using Statistics
 #using PrettyTables
 
-function mean(collection)
-    return sum(collection) / length(collection)
+
+function scaled_relative_error(x, y; atol=1e-12, rtol=1e-7)
+    denom = atol + rtol * max(abs(x), abs(y))
+    return denom == 0 ? 0.0 : abs(x - y) / denom
 end
+
+
+"""
+    pretty_nt(nt; digits=3)
+
+Return a NamedTuple where each value of `nt` is converted to a pretty
+string. Nested NamedTuples are processed recursively.
+"""
+function pretty_nt(nt::NamedTuple; digits=3)
+    pairs = map(pairs(nt)) do (k, v)
+        k => pretty_value(nt, digits=digits)
+    end
+    return NamedTuple(pairs)
+end
+
+# Helper for pretty-printing individual values
+function pretty_value(x; digits=3)
+    if x isa NamedTuple
+        return pretty_nt(x; digits)  # recursion
+    elseif x isa Real
+        return @sprintf("%.*g", digits, float(x))
+    else
+        return string(x)
+    end
+end
+
+function stats(collection) = 
+    return (
+        max = maximum(collection),
+        rms = sqrt(mean(abs2, collection)),
+        mean = mean(collection),
+        median = median(collection),
+        q95 = quantile(collection, 0.95),
+    )
+end
+
+
+@info "Derivative error summary" (
+    control = typeof(control),
+    order   = deriv_order,
+    real    = real_stats,
+    imag    = imag_stats
+)
+
+fmt(s) = @sprintf("max=%.2e, rms=%.2e, med=%.2e", s.max, s.rms, s.median)
+
+@info "Derivative error summary" (
+    control = typeof(control),
+    order   = deriv_order,
+    real    = fmt(real_stats),
+    imag    = fmt(imag_stats),
+)
+
+
 
 """
 Approximate the derivative of the function f at point x using the central
@@ -40,24 +97,33 @@ function test_control_derivative_errors(control::AbstractControl,
         x -> eval_p_derivative(control, x, pcof, deriv_order-1), t
     )
 
-
     real_vals = real_deriv_val.(t_grid)
     real_vals_fin_diff = real_deriv_val_fin_diff.(t_grid)
     
     @test all(values_agree.(real_vals, real_vals_fin_diff)) 
-
 
     imag_deriv_val(t) = eval_p_derivative(control, t, pcof, order_n)
     imag_deriv_val_fin_diff(t) = approximate_derivative_using_central_difference(
         x -> eval_q_derivative(control, x, pcof, deriv_order-1), t
     )
 
-
     imag_vals = imag_deriv_val.(t_grid)
     imag_vals_fin_diff = imag_deriv_val_fin_diff.(t_grid)
 
-    real_deriv_errors = abs.(real_deriv_vals - real_deriv_val_fin_diff)
-    imag_deriv_errors = abs.(imag_deriv_vals - imag_deriv_val_fin_diff)
+    @test all(values_agree.(imag_vals, imag_vals_fin_diff)) 
+
+    all_vals = vcat(real_vals, imag_vals)
+    all_vals_fin_diff = vcat(real_vals_fin_diff, imag_vals_fin_diff)
+
+
+    @info "Agreement between derivative values and finite difference approximation" (
+        typeof(control),
+        deriv_order,
+        maximum(real_deriv_errors),
+        mean(real_deriv_errors),
+        maximum(imag_deriv_errors),
+        mean(imag_deriv_errors)
+    )...
 
 
     return real_deriv_errors, imag_deriv_errors

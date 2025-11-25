@@ -28,11 +28,9 @@ function random_problem(complex_system_size::Integer, N_operators::Integer;
                       for i in 1:N_operators]
 
 
-    N_ess_levels = complex_system_size
-
     return SchrodingerProb(
         system_hamiltonian, sym_operators, asym_operators, U0,
-        tf, nsteps, N_ess_levels,
+        tf, nsteps,
         gmres_abstol=gmres_abstol, gmres_reltol=gmres_reltol
     )
 end
