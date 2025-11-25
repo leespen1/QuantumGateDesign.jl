@@ -25,51 +25,32 @@ end
 Return a NamedTuple where each value of `nt` is converted to a pretty
 string. Nested NamedTuples are processed recursively.
 """
-function pretty_nt(nt::NamedTuple; digits=3)
-    pairs = map(pairs(nt)) do (k, v)
-        k => pretty_value(nt, digits=digits)
-    end
-    return NamedTuple(pairs)
+function pretty_named_tuple(nt::NamedTuple; digits=3)
+    return NamedTuple{keys(nt)}(pretty_value.(values(nt)))
 end
 
-# Helper for pretty-printing individual values
+"""
+    pretty_value(x; digits=3)
+    
+Return a string representing `x` in scientific notation.
+"""
 function pretty_value(x; digits=3)
-    if x isa NamedTuple
-        return pretty_nt(x; digits)  # recursion
-    elseif x isa Real
+    if x isa Real
         return @sprintf("%.*g", digits, float(x))
     else
         return string(x)
     end
 end
 
-function stats(collection) = 
+function stats(collection)
     return (
         max = maximum(collection),
-        rms = sqrt(mean(abs2, collection)),
+        root_mean_square = sqrt(mean(abs2, collection)),
         mean = mean(collection),
         median = median(collection),
         q95 = quantile(collection, 0.95),
     )
 end
-
-
-@info "Derivative error summary" (
-    control = typeof(control),
-    order   = deriv_order,
-    real    = real_stats,
-    imag    = imag_stats
-)
-
-fmt(s) = @sprintf("max=%.2e, rms=%.2e, med=%.2e", s.max, s.rms, s.median)
-
-@info "Derivative error summary" (
-    control = typeof(control),
-    order   = deriv_order,
-    real    = fmt(real_stats),
-    imag    = fmt(imag_stats),
-)
-
 
 
 """
@@ -86,69 +67,111 @@ function approximate_derivative_using_central_difference(f, x, h=eps()^(1/3))
 end
 
 
-function test_control_derivative_errors(control::AbstractControl,
-    pcof::AbstractVector{<: Real}, deriv_order::Integer, t_grid
+"""
+Test that the given control has accurate derivatives of order `deriv_order`, as
+compared to their finite difference approximation using the values of the order
+`deriv_order-1` derivatives of the control.
+"""
+function test_control_derivative_accuracy(control::AbstractControl,
+    pcof::AbstractVector{<: Real}, t_grid, deriv_order::Integer, h::Real
 )
 
-    values_agree(x,y) = isapprox(x,y, atol=1e-12, rtol=1e-7)
 
     real_deriv_val(t) = eval_p_derivative(control, t, pcof, deriv_order)
     real_deriv_val_fin_diff(t) = approximate_derivative_using_central_difference(
-        x -> eval_p_derivative(control, x, pcof, deriv_order-1), t
+        x -> eval_p_derivative(control, x, pcof, deriv_order-1), t, h
     )
 
     real_vals = real_deriv_val.(t_grid)
     real_vals_fin_diff = real_deriv_val_fin_diff.(t_grid)
     
-    @test all(values_agree.(real_vals, real_vals_fin_diff)) 
+    @test all(isapprox.(real_vals, real_vals_fin_diff, atol=1e-10, rtol=1e-7)) 
 
-    imag_deriv_val(t) = eval_p_derivative(control, t, pcof, order_n)
+    imag_deriv_val(t) = eval_q_derivative(control, t, pcof, deriv_order)
     imag_deriv_val_fin_diff(t) = approximate_derivative_using_central_difference(
-        x -> eval_q_derivative(control, x, pcof, deriv_order-1), t
+        x -> eval_q_derivative(control, x, pcof, deriv_order-1), t, h
     )
 
     imag_vals = imag_deriv_val.(t_grid)
     imag_vals_fin_diff = imag_deriv_val_fin_diff.(t_grid)
 
-    @test all(values_agree.(imag_vals, imag_vals_fin_diff)) 
+
+    @test all(isapprox.(imag_vals, imag_vals_fin_diff, atol=1e-10, rtol=1e-7)) 
 
     all_vals = vcat(real_vals, imag_vals)
     all_vals_fin_diff = vcat(real_vals_fin_diff, imag_vals_fin_diff)
+    if !all(isapprox.(all_vals, all_vals_fin_diff, atol=1e-10, rtol=1e-7))
+        max_sre, max_sre_i = findmax(scaled_relative_error.(all_vals,all_vals_fin_diff))
+        deriv_val = all_vals[max_sre_i]
+        fin_diff_val = all_vals_fin_diff[max_sre_i]
+        @warn "Test did not pass. Data for worst error:" (
+            control_type=typeof(control),
+            derivative_order=deriv_order,
+            max_scaled_relative_error=max_sre,
+            time=t_grid[max_sre_i],
+            derivative_value=deriv_val,
+            finite_difference_value=fin_diff_val,
+            absolute_error=abs(deriv_val-fin_diff_val),
+            relative_error=abs(deriv_val-fin_diff_val) / max(abs(deriv_val), abs(fin_diff_val)),
+        )...
 
+    end
 
-    @info "Agreement between derivative values and finite difference approximation" (
-        typeof(control),
-        deriv_order,
-        maximum(real_deriv_errors),
-        mean(real_deriv_errors),
-        maximum(imag_deriv_errors),
-        mean(imag_deriv_errors)
-    )...
-
-
-    return real_deriv_errors, imag_deriv_errors
+    return all_vals, all_vals_fin_diff
 end
-
-
-
 
 @testset "B-Spline Controls (Hard-Coded degree 2)" begin
     tf = 10.0
     N_basis_functions = 10
-    control = QGD.BSpline2Control(N_basis_functions, tf)
+
+    control = Degree2BSplineControl(N_basis_functions, tf)
     pcof = rand(MersenneTwister(0), control.N_coeff)
+
     h = eps()^(1/3)
     N_points = 1_000
     t_grid = LinRange(2h, tf-2h, N_points)
-    real_errors, imag_errors = test_control_derivative_errors(
-        control, pcof, deriv_order=1
-    )
-    @info "Degree 2 B-Spline Derivative Errors" maximum(real_errors) mean(real_errors) maximum(imag_errors) mean(imag_errors) 
+
+
+    @testset "Derivative Order 1" begin
+        deriv_order=1
+        test_control_derivative_accuracy(
+            control, pcof, t_grid, deriv_order, h
+        )
+    end
 end
 
+@testset "PPPACK B-Spline Control" begin
+    tf = 10.0
+    N_basis_functions = 10
+
+    control = Degree2BSplineControl(N_basis_functions, tf)
+    pcof = rand(MersenneTwister(0), control.N_coeff)
+
+    h = eps()^(1/3)
+    N_points = 1_000
+    t_grid = LinRange(2h, tf-2h, N_points)
+
+    for degree in (2, 4, 8, 16)
+        @testset "Degree $degree" begin
+        control = FortranBSplineControl(degree, N_basis_functions, tf)
+            for deriv_order in 1:degree-1
+                @testset "Derivative Order $deriv_order" begin
+                    test_control_derivative_accuracy(
+                        control, pcof, t_grid, deriv_order, h
+                    )
+                end
+            end
+        end
+    end
+end
+
+
+
 #=
+
 @testset "B-Spline Controls (PPPACK Implementation)" begin
 end
+
 
 
 
@@ -167,21 +190,6 @@ end
     end
 
     @testset "Hard-Coded degree 2 B-Spline Control" begin
-    end
-
-    @testset "PPPACK B-Spline Control" begin
-        tf = 5.0
-        N_basis_functions = 10
-
-        for degree = (2,4,6, 8)
-          @testset "degree $degree" begin
-            control = QGD.FortranBSplineControl(degree, N_basis_functions, tf)
-            pcof = rand(MersenneTwister(0), control.N_coeff)
-
-            println("="^40, "\nFortranBSplineControl, degree $degree\n", "="^40, "\n")
-            test_control_derivatives(control, pcof, upto_order=4)
-          end
-        end
     end
 
     @testset "PPPACK B-Spline Control with Carrier" begin
