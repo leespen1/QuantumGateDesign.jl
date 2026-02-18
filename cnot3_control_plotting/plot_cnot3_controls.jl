@@ -7,7 +7,7 @@ CairoMakie.set_theme!(CairoMakie.theme_latexfonts())
 degree = 14
 D1 = 15
 
-cnot3ret = setup_cnot3(seed=0, atol=NaN, rtol=NaN, D1=D1)
+cnot3ret = setup_cnot3(seed=0, atol=NaN, rtol=NaN, D1=D1, N_osc_levels=10)
 controls = get_controls(degree, D1, cnot3ret.juqbox_params.Cfreq, cnot3ret.tf)
 
 N_coeff = QuantumGateDesign.get_number_of_control_parameters(controls)
