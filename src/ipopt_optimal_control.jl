@@ -398,3 +398,247 @@ function optimize_prob(
     return ipopt_prob
 end
 
+
+
+
+
+
+# Multiple-problem / Risk-Neutral Version
+function optimize_prob(
+        schro_probs::Vector{<: SchrodingerProb},
+        controls::ControlsType,
+        pcof_init::AbstractVector{Float64}, target_complex::AbstractVecOrMat{<: Number};
+        order::Integer=4,
+        pcof_lbound::Union{Real, AbstractVector{<: Real}}=-Inf,
+        pcof_ubound::Union{Real, AbstractVector{<: Real}}=Inf,
+        ridge_penalty_strength::Real=1e-2,
+        savename::Union{Missing, String}=missing,
+        ipopt_options=missing,
+        cost_type=:Infidelity,
+    )
+
+
+    # Check correct control vector length
+    N_coeff = get_number_of_control_parameters(controls)
+    if length(pcof_init) != N_coeff
+        throw(ArgumentError("Length $(length(pcof_init)) of initial control vector does not match expected length based on the control functions ($N_coeff"))
+    end
+
+    if isa(pcof_lbound, Real)
+        pcof_lbound_array = ones(N_coeff)*pcof_lbound
+    else
+        pcof_lbound_array = pcof_lbound
+    end
+
+    if isa(pcof_ubound, Real)
+        pcof_ubound_array = ones(N_coeff)*pcof_ubound
+    else
+        pcof_ubound_array = pcof_ubound
+    end
+
+
+    N_constraints = 0
+    g_L = Float64[]
+    g_U = Float64[]
+
+    nele_jacobian = 0
+    nele_hessian = 0
+
+    # Other variables needed to interface with my code, also store information my way
+    N_derivatives = div(order, 2)
+    target_real_valued = vcat(real(target_complex), imag(target_complex))
+    optimization_trackers = [OptimizationTracker(N_coeff) for _ in schro_probs]
+    initial_time = NaN # Will overwrite this just before starting the actual optimization
+
+    
+    # Pre-allocate arrays 
+    state_histories = [allocate_history(schro_prob, order) for schro_prob in schro_probs]
+    lambda_histories = [allocate_history(schro_prob, order) for schro_prob in schro_probs]
+    adjoint_forcings = [allocate_forcing(schro_prob, order) for schro_prob in schro_probs]
+
+    header = ["objective" "main_objective" "grad_norm" "infidelity" "generalized_infidelity" "tracking_objective" "norm_objective" "guard_penalty" "ridge_penalty" "avg_state_length" "elapsed_time" "alg_mod" "iter_count" "obj_value" "inf_pr" "inf_du" "mu" "d_norm" "regularization_size" "alpha_du" "alpha_pr" "ls_trials"]
+    if !ismissing(savename)
+        open(savename * ".csv", "w") do io
+            DelimitedFiles.writedlm(io, header, ',')
+        end
+    end
+
+    #==========================================================================
+    # Define objective and gradient calculation, plus custom iteration callback
+    ==========================================================================#
+    
+    function eval_f(pcof::Vector{Float64})
+
+        ## Check if control vector differs from old one before performing computation (maybe use relative error here?)
+        ## My assumption is that we may compute the objective function many times without computing the gradient,
+        ## and that whenever we compute the gradient we will also want the objective function
+
+        #pcof_difference = LinearAlgebra.norm(pcof - optimization_tracker.last_pcof)
+        #if (pcof_difference > 1e-15) || !isfinite(pcof_difference)
+
+        # If pcof has changed, need to recalculate objective function
+        # (if it stayed the same but eval_grad_f! was called before eval_f,
+        # don't need to do anything since eval_grad_f! also computes the
+        # objective function)
+        if (pcof != optimization_trackers[1].last_pcof)
+            for (schro_prob, state_history, optimization_tracker) in zip(schro_probs, state_histories, optimization_trackers)
+                eval_forward!(state_history, schro_prob, controls, pcof, order=order)
+                update!(optimization_tracker, schro_prob, state_history, pcof, 
+                        target_complex, cost_type, ridge_penalty_strength)
+                optimization_tracker.last_forward_evolution_pcof .= pcof
+            end
+        end
+
+        return sum(optimization_tracker.last_objective for optimization_tracker in optimization_trackers)
+    end
+
+    
+    function eval_grad_f!(pcof::Vector{Float64}, grad_f::Vector{Float64})
+        
+        ## Should I check equality or just for small differences?
+        #pcof_difference = LinearAlgebra.norm(pcof - optimization_tracker.last_pcof)
+        #if (pcof_difference > 1e-15) || !isfinite(pcof_difference)  || !optimization_tracker.adjoint_calculated
+
+        ## Cover case where pcof changes and we immediate eval_grad_f!, and case
+        ## where we run eval_f, don't change pcof, and then run eval_grad_f!
+        grad_f .= 0
+
+        if (pcof != optimization_trackers[1].last_discrete_adjoint_pcof)
+            for (schro_prob, state_history, lambda_history, adjoint_forcing, optimization_tracker)  in zip(schro_probs, state_histories, lambda_histories, adjoint_forcings, optimization_trackers)
+                # If we already ran the objective evaluation, then we can reuse the state history from the forward evolution 
+                # (but we may also have run eval_grad_f! for a brand new pcof, so I am being careful of that)
+                history_precomputed = (pcof == optimization_trackers[1].last_forward_evolution_pcof)
+                #println("history_precomputed = ", history_precomputed)
+
+                discrete_adjoint!(
+                    optimization_tracker.last_grad_pcof, state_history,
+                    lambda_history, adjoint_forcing, schro_prob, controls, pcof,
+                    target_complex, order=order, history_precomputed=history_precomputed,
+                    cost_type=cost_type,
+                )
+                # Ridge Regression Penalty (not included in main discrete adjoint, not necessary since nothing depends on the states)
+                N_coeff = length(pcof)
+                @. optimization_tracker.last_grad_pcof += 2.0*ridge_penalty_strength*pcof / N_coeff
+                update!(optimization_tracker, schro_prob, state_history, pcof, 
+                        target_complex, cost_type, ridge_penalty_strength)
+                optimization_tracker.last_discrete_adjoint_pcof .= pcof
+
+                grad_f .+= optimization_tracker.last_grad_pcof
+            end
+        end
+
+        return nothing
+    end
+
+    function my_callback(
+        alg_mod, # algorithm mode
+        iter_count,
+        obj_value,
+        inf_pr,
+        inf_du,
+        mu,
+        d_norm,
+        regularization_size,
+        alpha_du,
+        alpha_pr,
+        ls_trials
+    )
+        elapsed_time = time() - initial_time
+        grad_norm = sum(norm(optimization_tracker.last_grad_pcof) for optimization_tracker in optimization_trackers)
+        data_row = hcat(
+            sum(optimization_tracker.last_objective for optimization_tracker in optimization_trackers),
+            sum(optimization_tracker.last_main_objective for optimization_tracker in optimization_trackers),
+            grad_norm,
+            sum(optimization_tracker.last_infidelity for optimization_tracker in optimization_trackers),
+            sum(optimization_tracker.last_generalized_infidelity for optimization_tracker in optimization_trackers),
+            sum(optimization_tracker.last_tracking_obj for optimization_tracker in optimization_trackers),
+            sum(optimization_tracker.last_norm_obj for optimization_tracker in optimization_trackers),
+            sum(optimization_tracker.last_guard_penalty for optimization_tracker in optimization_trackers),
+            sum(optimization_tracker.last_ridge_penalty for optimization_tracker in optimization_trackers),
+            sum(optimization_tracker.last_avg_state_length for optimization_tracker in optimization_trackers),
+            elapsed_time,
+            alg_mod,
+            iter_count,
+            obj_value,
+            inf_pr,
+            inf_du,
+            mu,
+            d_norm,
+            regularization_size,
+            alpha_du,
+            alpha_pr,
+            ls_trials
+        )
+        if !ismissing(savename)
+            open(savename * ".csv", "a+") do io
+                DelimitedFiles.writedlm(io, data_row, ',')
+            end
+
+            open(savename * "_pcof.csv", "a+") do io
+                DelimitedFiles.writedlm(io, reshape(optimization_tracker.last_pcof, 1, :), ',')
+            end
+            open(savename * "_gradPcof.csv", "a+") do io
+                DelimitedFiles.writedlm(io, reshape(optimization_tracker.last_grad_pcof, 1, :), ',')
+            end
+        end
+
+        # Could put a stopping condition here if I want to
+
+        return true # continue the optimization
+    end
+
+    ipopt_prob = Ipopt.CreateIpoptProblem(
+        N_coeff,
+        pcof_lbound_array,
+        pcof_ubound_array,
+        N_constraints,
+        g_L,
+        g_U,
+        nele_jacobian,
+        nele_hessian,
+        eval_f,
+        dummy_eval_g!,
+        eval_grad_f!,
+        dummy_eval_jacobian_g!,
+        dummy_eval_hessian!,
+    )
+
+    Ipopt.SetIntermediateCallback(ipopt_prob, my_callback)
+    
+
+    # Set default ipopt options and add them to the Ipopt problem
+    # Description of options: https://coin-or.github.io/Ipopt/OPTIONS.html
+    default_ipopt_options = (
+        "hessian_approximation" => "limited-memory",
+        "limited_memory_max_history" => 40,
+        "max_iter" => 50,
+        "acceptable_iter" => 15, # Number of "acceptable" iterations before calling it quits
+        "tol" => 1e-5,
+        "print_level" => 5, # Default is 5, goes from 0 to 12
+        "derivative_test" => "none", # Change t "first-order" to do finite-difference check of derivatives
+        "jacobian_approximation" => "exact", # I don't think this matters, since we don't compute the jacobian
+        "max_cpu_time" => 60.0*60*24, # Default to 24 hours
+    )
+
+    for (keyword, value) in default_ipopt_options
+        AddIpoptOption(ipopt_prob, keyword, value)
+    end
+
+    # Add user ipopt options, overriding defaults
+    if !ismissing(ipopt_options)
+        for (keyword, value) in ipopt_options
+            AddIpoptOption(ipopt_prob, keyword, value)
+        end
+    end
+
+    # Initialize
+    ipopt_prob.x .= pcof_init
+    initial_time = time()
+
+    # Perform the optimization
+    solvestat = Ipopt.IpoptSolve(ipopt_prob)
+
+    return ipopt_prob
+end
+
+
