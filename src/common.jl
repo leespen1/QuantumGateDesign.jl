@@ -46,6 +46,23 @@ parameters and order of the method change.
 """
 abstract type AbstractQGDPreconditioner end
 
+"""
+WORK IN PROGRESS
+
+Abstract type for objective functions.
+The following operations must be defined
+- `value(obj, state::AbstractMatrix{<: Real}, p=nothing)`
+- `state_gradient!(grad::AbstractMatrix{<: Real}, obj, state::AbstractMatrix{<: Real}, p=nothing)`
+"""
+abstract type AbstractObjective end
+
+"""
+Currently unused. Idea is to allow distributed computing when the all-time
+objectives don't require knowing the states from the other initial/terminal
+conditions. Guard penalty should be this type.
+"""
+abstract type AbstractLocalObjective <: AbstractObjective end
+
 
 multiples_type(a_type) = Union{a_type, Tuple{Vararg{<: a_type}}, Vector{<: a_type}}
 const IntegersType = multiples_type(Integer)

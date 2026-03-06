@@ -129,4 +129,7 @@ export get_histories
 
 export FortranBSplineControl
 
+include("objective_functions.jl")
+export state_gradient!, value, Infidelity, GeneralizedInfidelity
+
 end # module QuantumGateDesign
