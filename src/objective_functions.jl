@@ -16,7 +16,12 @@ barriers, maybe, so that apart from the main entry point, internally we are alwa
 - Could have have "vector/local" and "matrix/global" objectives.
 - For an optimization, I think passing something like final_objective=[obj1,
 obj2] and always_on_objective=[obj1, obj2] is good.
+- `TimeScaledObj" objective which multiples everything by t/tf, for things like
+a ramping up over time objective.
+- `SumObj` for adding objective functions together (can use + operator to build them)
 """
+
+
 
 # TODO Make this type stable
 """
@@ -27,7 +32,6 @@ struct Infidelity{T <: AbstractMatrix{<: Real}} <: AbstractObjective
     R::T
     T::T
 end
-
 
 # TODO Right now R and T are always matirces.
 # what is the easiest way to make this use only vectors when the target is a vector?
@@ -60,6 +64,8 @@ function value(obj::Infidelity, state::AbstractMatrix{<: Real}, p=nothing)
     return 1 - ((dot(state, obj.R)^2 + dot(state, obj.T)^2) / (size(obj.target, 2)^2))
 end
 
+
+
 struct GeneralizedInfidelity{T <: AbstractMatrix{<: Real}} <: AbstractObjective
     infidelity_obj::Infidelity{T}
 end
@@ -79,4 +85,3 @@ function value(obj::GeneralizedInfidelity, state::AbstractMatrix{<: Real}, p=not
     return infidelity - 1 + (1/size(state,2)) * norm(state_complex)^2
     # FIXME Is this correct when state is real instead of complex?
 end
-
