@@ -32,11 +32,12 @@ i_target_vec = Int[]
 i_order_vec = Int[]
 
 
-recollect = false
+recollect = true
 if recollect
     min_objective = Inf
     min_obj_pcof = missing
     min_obj_file = missing
+    min_obj_i = 0
     # Get the best control vector
     for file in readdir(directory)
         if occursin(csv_file_pattern, file)
@@ -59,21 +60,22 @@ if recollect
             end
 
 
-            this_min_obj, min_obj_i = findmin(objective_vec)
+            this_min_obj, this_min_obj_i = findmin(objective_vec)
             if this_min_obj < min_objective
                 global min_objective = this_min_obj
                 global min_obj_file = file
+                global min_obj_i = this_min_obj_i
 
                 pcof_file = replace(file, ".csv" => "_pcof.csv")
                 pcofs = readdlm(directory * "/" * pcof_file, ',', Float64)
-                pcof = pcofs[min_obj_i,:]
+                pcof = pcofs[this_min_obj_i,:]
 
                 global min_obj_pcof = pcof
             end
         end
     end
 
-    println("Best optimization result: ", min_obj_file)
+    println("[Best optimization result] file: ", min_obj_file, ", line ", min_obj_i)
 
     min_obj_rgx = match(csv_file_pattern, min_obj_file)
 
