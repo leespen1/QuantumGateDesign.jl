@@ -192,6 +192,8 @@ end
 
 
 """
+    guard_projector_op(subsystem_sizes, essential_subsystem_sizes)
+
 Given the size of each subsystem and the number of essential levels in each
 subsystem, return a matrix which projects the (real-valued) state vector onto
 the guarded subspace.
@@ -203,30 +205,28 @@ E.g.
 
 ``|n_0 n_1 n_2 \\rangle = |n_0\\rangle \\otimes |n_1\\rangle \\otimes |n_2\\rangle``
 
-Examples
-≡≡≡≡≡≡≡≡
-
-```
+# Examples
+```jldoctest
 julia> guard_projector_op([3], [2])
-6×6 SparseMatrixCSC{Int64, Int64} with 6 stored entries:
- 0  ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  0  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  1  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  0  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  0  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅  1
+6×6 SparseArrays.SparseMatrixCSC{Float64, Int64} with 2 stored entries:
+  ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
+  ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
+  ⋅    ⋅   1.0   ⋅    ⋅    ⋅ 
+  ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
+  ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
+  ⋅    ⋅    ⋅    ⋅    ⋅   1.0
 
 julia> guard_projector_op([2,2], [2,1])
-8×8 SparseMatrixCSC{Int64, Int64} with 8 stored entries:
- 0  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  0  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  1  ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  1  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  0  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅  0  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  1  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  ⋅  1
- ```
+8×8 SparseArrays.SparseMatrixCSC{Float64, Int64} with 4 stored entries:
+  ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
+  ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
+  ⋅    ⋅   1.0   ⋅    ⋅    ⋅    ⋅    ⋅ 
+  ⋅    ⋅    ⋅   1.0   ⋅    ⋅    ⋅    ⋅ 
+  ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
+  ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
+  ⋅    ⋅    ⋅    ⋅    ⋅    ⋅   1.0   ⋅ 
+  ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅   1.0
+```
 """
 function guard_projector_op(subsystem_sizes::IntegersType,
         essential_subsystem_sizes::IntegersType

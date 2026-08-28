@@ -10,5 +10,5 @@ SchrodingerProb
 ```
 
 ```@docs
-QuantumGateDesign.guard_projector
+QuantumGateDesign.guard_projector_op
 ```
