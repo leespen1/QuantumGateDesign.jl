@@ -1,0 +1,15 @@
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+QuantumGateDesign = "f716b271-9d99-4329-8adc-fa1e42d5b881"
+QuantumOptics = "6e0679c1-51ea-5a7c-ac74-d61b76210b0c"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+[sources]
+QuantumGateDesign = {path = "../.."}
+
+[compat]
+PythonCall = "0.9"
+QuantumOptics = "1.2"
+julia = "1.11"
